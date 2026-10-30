@@ -14,3 +14,10 @@ public.backup/
 *.before-*
 *.signature-backup
 public.backup/
+
+# Android build files
+android/.gradle/
+android/**/build/
+android/local.properties
+android/captures/
+.idea/

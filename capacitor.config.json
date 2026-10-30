@@ -1,0 +1,9 @@
+{
+  "appId": "com.talkchat.app",
+  "appName": "TalkChat",
+  "webDir": "public",
+  "server": {
+    "url": "https://talkchat-9b98.onrender.com",
+    "cleartext": false
+  }
+}
