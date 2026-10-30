@@ -59,6 +59,14 @@ const conversations = () => readJSON("conversations.json");
 const saveConversations = value => saveJSON("conversations.json", value);
 const messages = () => readJSON("messages.json");
 const saveMessages = value => saveJSON("messages.json", value);
+const friendRequests = () => readJSON("friendRequests.json");
+const saveFriendRequests = value => saveJSON("friendRequests.json", value);
+const stories = () => readJSON("stories.json");
+const saveStories = value => saveJSON("stories.json", value);
+const messageRequests = () => readJSON("messageRequests.json");
+const saveMessageRequests = value => saveJSON("messageRequests.json", value);
+
+
 
 app.use(helmet({
     crossOriginResourcePolicy: { policy: "same-site" }
@@ -91,7 +99,7 @@ io.on("connection", socket => {
 
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 10,
+    limit: 30,
     standardHeaders: "draft-7",
     legacyHeaders: false,
     message: { error: "Çox sayda cəhd edildi. Bir az sonra yenidən yoxla." }
@@ -270,6 +278,120 @@ app.delete("/api/follow/:username", requireAuth, (req, res) => {
     res.json({ following: false });
 });
 
+
+const friendRequestLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 10,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { error: "Çox sorğu göndərdin. Bir az gözlə." }
+});
+
+app.get("/api/friends", requireAuth, (req, res) => {
+    const self = users().find(u => u.username === currentUser(req));
+    if (!self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    const names = self.friends || [];
+    res.json(users().filter(u => names.includes(u.username)).map(publicUser));
+});
+
+app.get("/api/friend-requests", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const allUsers = users();
+    const list = friendRequests();
+    const incoming = list.filter(r => r.to === me).map(r => {
+        const u = allUsers.find(x => x.username === r.from);
+        return u ? publicUser(u) : null;
+    }).filter(Boolean);
+    const outgoing = list.filter(r => r.from === me).map(r => {
+        const u = allUsers.find(x => x.username === r.to);
+        return u ? publicUser(u) : null;
+    }).filter(Boolean);
+    res.json({ incoming, outgoing });
+});
+
+app.post("/api/friends/request/:username", requireAuth, friendRequestLimiter, (req, res) => {
+    const me = currentUser(req);
+    const name = String(req.params.username || "").replace(/^@/, "");
+    const allUsers = users();
+    const self = allUsers.find(u => u.username === me);
+    const target = allUsers.find(u => u.username.toLowerCase() === name.toLowerCase());
+
+    if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (target.username === me) return res.status(400).json({ error: "Özünə sorğu göndərə bilməzsən." });
+
+    self.friends ||= [];
+    target.friends ||= [];
+    if (self.friends.includes(target.username))
+        return res.status(409).json({ error: "Artıq dostsunuz." });
+
+    const list = friendRequests();
+    if (list.some(r =>
+        (r.from === me && r.to === target.username) ||
+        (r.from === target.username && r.to === me)
+    )) return res.status(409).json({ error: "Bu şəxslə artıq gözləyən dostluq sorğusu var." });
+
+    list.push({
+        id: crypto.randomUUID(),
+        from: me,
+        to: target.username,
+        createdAt: new Date().toISOString()
+    });
+    saveFriendRequests(list);
+    addNotification(target.username, me, "friend_request");
+    res.json({ sent: true });
+});
+
+app.post("/api/friends/accept/:username", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const name = String(req.params.username || "").replace(/^@/, "");
+    const allUsers = users();
+    const self = allUsers.find(u => u.username === me);
+    const target = allUsers.find(u => u.username.toLowerCase() === name.toLowerCase());
+    if (!target || !self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+
+    const list = friendRequests();
+    const request = list.find(r => r.from === target.username && r.to === me);
+    if (!request) return res.status(404).json({ error: "Dostluq sorğusu tapılmadı." });
+
+    self.friends ||= [];
+    target.friends ||= [];
+    if (!self.friends.includes(target.username)) self.friends.push(target.username);
+    if (!target.friends.includes(me)) target.friends.push(me);
+
+    saveUsers(allUsers);
+    saveFriendRequests(list.filter(r =>
+        !((r.from === me && r.to === target.username) ||
+          (r.from === target.username && r.to === me))
+    ));
+    addNotification(target.username, me, "friend_accept");
+    res.json({ accepted: true });
+});
+
+app.post("/api/friends/reject/:username", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const name = String(req.params.username || "").replace(/^@/, "");
+    const list = friendRequests();
+    const updated = list.filter(r => !(r.from.toLowerCase() === name.toLowerCase() && r.to === me));
+    if (updated.length === list.length)
+        return res.status(404).json({ error: "Dostluq sorğusu tapılmadı." });
+    saveFriendRequests(updated);
+    res.json({ rejected: true });
+});
+
+app.delete("/api/friends/:username", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const name = String(req.params.username || "").replace(/^@/, "");
+    const allUsers = users();
+    const self = allUsers.find(u => u.username === me);
+    const target = allUsers.find(u => u.username.toLowerCase() === name.toLowerCase());
+    if (!self || !target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+
+    self.friends = (self.friends || []).filter(x => x !== target.username);
+    target.friends = (target.friends || []).filter(x => x !== me);
+    saveUsers(allUsers);
+    res.json({ removed: true });
+});
+
 app.get("/api/feed", requireAuth, (req, res) => {
     const scope = req.query.scope === "following" ? "following" : "all";
     const self = users().find(u => u.username === currentUser(req));
@@ -380,6 +502,125 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
         addNotification(to, currentUser(req), "message");
     });
     res.json(message);
+});
+
+
+// TALKCHAT_STORIES_V1
+app.get("/api/stories", requireAuth, (req, res) => {
+    const now = Date.now();
+    const list = stories().filter(x => new Date(x.expiresAt).getTime() > now);
+    saveStories(list);
+    const me = currentUser(req);
+    const result = list.map(x => {
+        if (!x.views.includes(me) && x.username !== me) {
+            x.views.push(me);
+        }
+        return {
+            id: x.id, username: x.username, media: x.media,
+            mediaType: x.mediaType, text: x.text,
+            createdAt: x.createdAt, expiresAt: x.expiresAt,
+            viewsCount: x.views.length, mine: x.username === me
+        };
+    });
+    saveStories(list);
+    res.json(result);
+});
+
+app.post("/api/stories", requireAuth, upload.single("media"), (req, res) => {
+    if (!req.file) return res.status(400).json({error:"Şəkil və ya video seç."});
+    if (!req.file.mimetype.startsWith("image/") && !req.file.mimetype.startsWith("video/")) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(400).json({error:"Yalnız şəkil və video paylaşmaq olar."});
+    }
+    const now = new Date();
+    const item = {
+        id: crypto.randomUUID(),
+        username: currentUser(req),
+        media: "/uploads/" + req.file.filename,
+        mediaType: req.file.mimetype.startsWith("video/") ? "video" : "image",
+        text: String(req.body.text || "").trim().slice(0, 250),
+        createdAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+        views: []
+    };
+    const list = stories().filter(x => new Date(x.expiresAt).getTime() > now.getTime());
+    list.push(item);
+    saveStories(list);
+    res.json({ok:true, story:{...item, views:undefined}});
+});
+
+app.delete("/api/stories/:id", requireAuth, (req, res) => {
+    const list = stories();
+    const item = list.find(x => x.id === req.params.id);
+    if (!item) return res.status(404).json({error:"Story tapılmadı."});
+    if (item.username !== currentUser(req)) return res.status(403).json({error:"Bu Story sənə aid deyil."});
+    saveStories(list.filter(x => x.id !== item.id));
+    res.json({ok:true});
+});
+
+// Message requests
+app.get("/api/message-requests", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const list = messageRequests().filter(x => x.status === "pending");
+    res.json({
+        incoming: list.filter(x => x.to === me),
+        outgoing: list.filter(x => x.from === me)
+    });
+});
+
+app.post("/api/message-requests", requireAuth, (req, res) => {
+    const from = currentUser(req);
+    const to = String((req.body || {}).username || "").trim().replace(/^@/, "");
+    const target = users().find(u => u.username.toLowerCase() === to.toLowerCase());
+    if (!target || target.username === from)
+        return res.status(400).json({error:"İstifadəçi tapılmadı."});
+    const existing = conversations().find(x => x.type === "direct" &&
+        x.participants.includes(from) && x.participants.includes(target.username));
+    if (existing) return res.status(409).json({error:"Bu şəxslə artıq söhbətin var."});
+    const list = messageRequests();
+    if (list.some(x => x.from === from && x.to === target.username && x.status === "pending"))
+        return res.status(409).json({error:"Sorğu artıq göndərilib."});
+    list.push({
+        id: crypto.randomUUID(), from, to: target.username,
+        status:"pending", createdAt:new Date().toISOString()
+    });
+    saveMessageRequests(list);
+    addNotification(target.username, from, "message_request");
+    res.json({ok:true});
+});
+
+app.post("/api/message-requests/:id/accept", requireAuth, (req, res) => {
+    const list = messageRequests();
+    const request = list.find(x => x.id === req.params.id && x.to === currentUser(req) && x.status === "pending");
+    if (!request) return res.status(404).json({error:"Mesaj sorğusu tapılmadı."});
+    const convos = conversations();
+    let convo = convos.find(x => x.type === "direct" &&
+        x.participants.includes(request.from) && x.participants.includes(request.to));
+    if (!convo) {
+        convo = {
+            id:crypto.randomUUID(), type:"direct",
+            participants:[request.from, request.to],
+            createdAt:new Date().toISOString()
+        };
+        convos.push(convo);
+        saveConversations(convos);
+    }
+    request.status = "accepted";
+    request.conversationId = convo.id;
+    request.acceptedAt = new Date().toISOString();
+    saveMessageRequests(list);
+    res.json({ok:true, conversation:convo});
+});
+
+app.delete("/api/message-requests/:id", requireAuth, (req, res) => {
+    const list = messageRequests();
+    const item = list.find(x => x.id === req.params.id && x.status === "pending" &&
+        (x.to === currentUser(req) || x.from === currentUser(req)));
+    if (!item) return res.status(404).json({error:"Sorğu tapılmadı."});
+    item.status = "rejected";
+    item.rejectedAt = new Date().toISOString();
+    saveMessageRequests(list);
+    res.json({ok:true});
 });
 
 app.use((err, req, res, next) => {

@@ -53,33 +53,68 @@
         <h1>Kəşf et</h1><p class="muted">İstifadəçi adı ilə axtar: @aqil</p>
         <input id="searchInput" placeholder="İstifadəçi axtar..." autocomplete="off">
         <div id="searchResults" class="stack"></div>
+        <div id="friendCenter" class="stack"></div>
       </section>
 
-      <section id="messagesPage" class="page" hidden>
-        <h1>Mesajlar</h1>
-        <div class="message-start">
-          <input id="dmUsername" placeholder="İstifadəçi adı: aqil">
-          <button id="startDM" class="primary">Söhbət aç</button>
-        </div>
-        <div class="message-layout">
-          <div id="conversationList" class="conversation-list"></div>
-          <div class="chat-panel">
-            <div id="chatTitle" class="chat-title">Söhbət seç</div>
-            <div id="chatMessages" class="chat-messages"></div>
-            <form id="dmForm" class="dm-form">
-              <input id="dmText" placeholder="Mesaj yaz..." maxlength="2000">
-              <label class="attach-button">📎<input id="dmFile" type="file" hidden></label>
-              <button class="primary">➤</button>
-            </form>
-          </div>
-        </div>
-        <details class="group-create">
-          <summary>＋ Qrup yarat</summary>
-          <input id="groupName" placeholder="Qrupun adı">
-          <input id="groupMembers" placeholder="İstifadəçi adları (vergüllə)">
-          <button id="createGroup" class="primary">Qrup yarat</button>
-        </details>
-      </section>
+      <section id="messagesPage" class="page talk-direct" hidden>
+  <div class="direct-topbar">
+    <div>
+      <h1>Mesajlar</h1>
+      <p>TalkChat Direct</p>
+    </div>
+    <select id="talkLanguage" aria-label="Language">
+      <option value="tr">Türkçe</option>
+      <option value="az">Azərbaycan dili</option>
+      <option value="en">English</option>
+    </select>
+  </div>
+
+  <div class="direct-search">
+    <span>⌕</span>
+    <input id="dmSearch" placeholder="Mesajlarda və insanlarda axtar...">
+  </div>
+  <div id="dmSearchResults" class="direct-search-results stack"></div>
+
+  <div class="direct-section-title">
+    <b>Hekayələr və dostlar</b>
+    <span>Dostların</span>
+  </div>
+  <div id="directStoryRail" class="direct-story-rail">
+    <div class="direct-story-loading">Dostlar yüklənir...</div>
+  </div>
+
+  <div class="direct-section-title direct-message-title">
+    <b>Mesajlar</b>
+    <span>Şəxsi söhbətlərin</span>
+  </div>
+
+  <div class="message-layout direct-layout">
+    <div id="conversationList" class="conversation-list direct-conversation-list"></div>
+    <div class="chat-panel direct-chat-panel">
+      <div class="chat-title direct-chat-title">
+        <span id="chatTitle">Söhbət seç</span>
+      </div>
+      <div id="chatMessages" class="chat-messages"></div>
+      <form id="dmForm" class="dm-form">
+        <input id="dmText" placeholder="Mesaj yaz..." maxlength="2000">
+        <label class="attach-button">📎<input id="dmFile" type="file" hidden></label>
+        <button class="primary" aria-label="Göndər">➤</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="direct-new-message">
+    <input id="dmUsername" placeholder="İstifadəçi adı">
+    <button id="startDM" class="primary">＋ Yeni söhbət</button>
+  </div>
+
+  <details class="group-create">
+    <summary>＋ Qrup yarat</summary>
+    <input id="groupName" placeholder="Qrupun adı">
+    <input id="groupMembers" placeholder="İstifadəçi adları (vergüllə)">
+    <button id="createGroup" class="primary">Qrup yarat</button>
+  </details>
+</section>
 
       <section id="notificationsPage" class="page" hidden>
         <h1>Bildirişlər</h1><div id="notificationList" class="stack"></div>

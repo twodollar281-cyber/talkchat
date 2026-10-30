@@ -29,7 +29,9 @@ function showPage(name) {
   if (name === "profile") loadMyProfile();
   if (name === "notifications") loadNotifications();
   if (name === "messages") loadConversations();
-  if (name === "discover") $("searchInput").focus();
+  if (name === "discover") { $("searchInput").focus(); loadFriendCenter(); }
+  if (name === "messages") loadDirectStoryRail();
+  if (name === "messages") loadTalkChatExtras();
 }
 document.querySelectorAll("[data-page]").forEach(b => b.addEventListener("click", () => showPage(b.dataset.page)));
 $("loginTab").onclick = () => setAuthMode("login");
@@ -151,8 +153,25 @@ $("avatarFile").onchange=async()=>{
 async function openPublicProfile(name){
   try{
     const u=await api("/api/users/"+encodeURIComponent(name));
+    const [friendList, friendRequests] = await Promise.all([
+      api("/api/friends"),
+      api("/api/friend-requests")
+    ]);
+    const isFriend = friendList.some(x => x.username === u.username);
+    const incoming = friendRequests.incoming.some(x => x.username === u.username);
+    const outgoing = friendRequests.outgoing.some(x => x.username === u.username);
     $("homePage").hidden=true;$("discoverPage").hidden=true;$("messagesPage").hidden=true;$("notificationsPage").hidden=true;$("profilePage").hidden=true;$("publicProfilePage").hidden=false;
-    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>@${esc(u.username)}</h2><p>${esc(u.bio||"")}</p><div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>`;
+    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>@${esc(u.username)}</h2><p>${esc(u.bio||"")}</p><div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button>`}`;
+    $("friendButton")?.addEventListener("click", async()=>{
+      try {
+        if(incoming) {
+          await api("/api/friends/accept/"+encodeURIComponent(u.username),{method:"POST"});
+        } else {
+          await api("/api/friends/request/"+encodeURIComponent(u.username),{method:"POST"});
+        }
+        openPublicProfile(u.username);
+      } catch(e) { alert(e.message); }
+    });
     $("followButton").onclick=async()=>{
       try{await api("/api/follow/"+encodeURIComponent(name),{method:u.isFollowing?"DELETE":"POST"});openPublicProfile(name);}
       catch(e){alert(e.message);}
@@ -168,6 +187,140 @@ async function loadNotifications(){
     $("notificationList").innerHTML=list.map(n=>`<div class="notification">@${esc(n.from)} ${n.type==="follow"?"səni izləməyə başladı.":n.type==="like"?"paylaşımını bəyəndi.":n.type==="comment"?"paylaşımına şərh yazdı.":"sənə mesaj göndərdi."}</div>`).join("")||"<p class='muted'>Hələ bildiriş yoxdur.</p>";
   }catch(e){$("notificationList").textContent=e.message;}
 }
+
+// TALKCHAT_STORIES_V1 UI
+async function loadTalkChatExtras() {
+  const page = $("messagesPage");
+  if (!page) return;
+  let root = $("talkChatExtras");
+  if (!root) {
+    root = document.createElement("section");
+    root.id = "talkChatExtras";
+    root.className = "tc-extras";
+    root.innerHTML = `
+      <div class="tc-extra-card">
+        <h3>📸 Story paylaş</h3>
+        <form id="tcStoryForm">
+          <input id="tcStoryFile" type="file" accept="image/*,video/mp4,video/webm" required>
+          <input id="tcStoryText" maxlength="250" placeholder="Story haqqında yaz...">
+          <button class="primary" type="submit">Paylaş</button>
+        </form>
+        <div id="tcStories" class="tc-stories"></div>
+      </div>
+      <div class="tc-extra-card">
+        <h3>✉️ Mesaj sorğuları</h3>
+        <form id="tcRequestForm">
+          <input id="tcRequestUser" placeholder="İstifadəçi adı" required>
+          <button class="primary" type="submit">Sorğu göndər</button>
+        </form>
+        <div id="tcRequests"></div>
+      </div>`;
+    page.prepend(root);
+
+    $("tcStoryForm").onsubmit = async e => {
+      e.preventDefault();
+      const file = $("tcStoryFile").files[0];
+      if (!file) return alert("Şəkil və ya video seç.");
+      const fd = new FormData();
+      fd.append("media", file);
+      fd.append("text", $("tcStoryText").value);
+      try {
+        await api("/api/stories", {method:"POST", body:fd});
+        $("tcStoryForm").reset();
+        await loadTalkChatExtras();
+        alert("Story paylaşıldı! 24 saat sonra silinəcək.");
+      } catch(err) { alert(err.message); }
+    };
+
+    $("tcRequestForm").onsubmit = async e => {
+      e.preventDefault();
+      try {
+        await api("/api/message-requests", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({username:$("tcRequestUser").value})
+        });
+        $("tcRequestForm").reset();
+        alert("Mesaj sorğusu göndərildi.");
+        await loadTalkChatExtras();
+      } catch(err) { alert(err.message); }
+    };
+
+    root.onclick = async e => {
+      const accept = e.target.closest("[data-tc-accept]");
+      const reject = e.target.closest("[data-tc-reject]");
+      const del = e.target.closest("[data-tc-story-delete]");
+      const view = e.target.closest("[data-tc-story-view]");
+      try {
+        if (accept) {
+          const result = await api("/api/message-requests/" + accept.dataset.tcAccept + "/accept", {method:"POST"});
+          await loadConversations();
+          if (result.conversation) openConversation(result.conversation.id);
+          await loadTalkChatExtras();
+        }
+        if (reject) {
+          await api("/api/message-requests/" + reject.dataset.tcReject, {method:"DELETE"});
+          await loadTalkChatExtras();
+        }
+        if (del) {
+          await api("/api/stories/" + del.dataset.tcStoryDelete, {method:"DELETE"});
+          await loadTalkChatExtras();
+        }
+        if (view) {
+          const item = JSON.parse(decodeURIComponent(view.dataset.tcStoryView));
+          let dlg = $("tcStoryDialog");
+          if (!dlg) {
+            dlg = document.createElement("dialog");
+            dlg.id = "tcStoryDialog";
+            dlg.className = "tc-story-dialog";
+            document.body.appendChild(dlg);
+          }
+          dlg.innerHTML = `<button class="tc-dialog-close" type="button">✕</button>
+            <h3>@${esc(item.username)}</h3>
+            ${item.mediaType === "video"
+              ? `<video src="${esc(item.media)}" controls autoplay playsinline></video>`
+              : `<img src="${esc(item.media)}" alt="Story">`}
+            <p>${esc(item.text || "")}</p>
+            <small>${item.viewsCount || 0} baxış · 24 saatlıq Story</small>`;
+          dlg.querySelector("button").onclick = () => dlg.close();
+          dlg.showModal();
+        }
+      } catch(err) { alert(err.message); }
+    };
+  }
+
+  try {
+    const list = await api("/api/stories");
+    $("tcStories").innerHTML = list.map(x => `
+      <div class="tc-story">
+        <button type="button" class="tc-story-open" data-tc-story-view="${encodeURIComponent(JSON.stringify(x))}">
+          <span class="tc-story-ring">${x.mediaType === "video" ? "▶" : "●"}</span>
+          <b>@${esc(x.username)}</b>
+        </button>
+        ${x.mine ? `<button type="button" class="tc-delete-story" data-tc-story-delete="${esc(x.id)}">Sil</button>` : ""}
+      </div>`).join("") || "<p class='muted'>Hələ aktiv Story yoxdur.</p>";
+  } catch(err) {
+    $("tcStories").textContent = err.message;
+  }
+
+  try {
+    const req = await api("/api/message-requests");
+    const incoming = req.incoming.map(x => `
+      <div class="tc-request">
+        <span>@${esc(x.from)}</span>
+        <button type="button" data-tc-accept="${esc(x.id)}">Qəbul et</button>
+        <button type="button" data-tc-reject="${esc(x.id)}">Rədd et</button>
+      </div>`).join("");
+    const outgoing = req.outgoing.map(x => `
+      <div class="tc-request"><span>@${esc(x.to)} — gözləyir</span>
+        <button type="button" data-tc-reject="${esc(x.id)}">Ləğv et</button>
+      </div>`).join("");
+    $("tcRequests").innerHTML = incoming + outgoing || "<p class='muted'>Mesaj sorğusu yoxdur.</p>";
+  } catch(err) {
+    $("tcRequests").textContent = err.message;
+  }
+}
+
 async function loadConversations(){
   try{
     conversationsCache=await api("/api/conversations");
@@ -191,6 +344,244 @@ function messageHTML(m){
   const attachment=m.attachment?`<p><a href="${esc(m.attachment)}" target="_blank" rel="noopener">📎 ${esc(m.attachmentName||"Faylı aç")}</a></p>`:"";
   return `<div class="chat-bubble ${m.from===me?"mine":""}"><b>@${esc(m.from)}</b><div>${esc(m.text||"")}</div>${attachment}<small>${new Date(m.createdAt).toLocaleTimeString("az-AZ")}</small></div>`;
 }
+
+// TALKCHAT_DIRECT_LANGUAGE_V3
+const directSearch = $("dmSearch");
+const directResults = $("dmSearchResults");
+
+if (directSearch && directResults) {
+  directSearch.addEventListener("input", async () => {
+    const q = directSearch.value.trim();
+    if (q.length < 1) {
+      directResults.innerHTML = "";
+      return;
+    }
+    try {
+      const found = await api("/api/search?q=" + encodeURIComponent(q));
+      directResults.innerHTML = found
+        .filter(u => u.username !== me)
+        .map(u => `
+          <div class="user-row">
+            ${avatarHTML(u)}
+            <div class="user-info"><b>@${esc(u.username)}</b></div>
+            <button class="primary" data-direct-user="${esc(u.username)}">Mesaj yaz</button>
+          </div>`).join("") || '<p class="muted">İstifadəçi tapılmadı.</p>';
+    } catch (e) {
+      directResults.textContent = e.message;
+    }
+  });
+
+  directResults.addEventListener("click", async e => {
+    const btn = e.target.closest("[data-direct-user]");
+    if (!btn) return;
+    try {
+      const c = await api("/api/conversations/direct", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({username: btn.dataset.directUser})
+      });
+      directSearch.value = "";
+      directResults.innerHTML = "";
+      await loadConversations();
+      openConversation(c.id);
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+}
+
+const languageSelect = $("talkLanguage");
+const originalText = new WeakMap();
+const translations = {
+  tr: {
+    "Ana səhifə":"Ana Sayfa", "Nələr baş verir?":"Neler oluyor?",
+    "Kəşf et":"Keşfet", "İzlədiklərim":"Takip ettiklerim",
+    "Nə paylaşmaq istəyirsən?":"Ne paylaşmak istiyorsun?",
+    "Şəkil / Video":"Fotoğraf / Video", "Paylaş":"Paylaş",
+    "İstifadəçi adı ilə axtar: @aqil":"Kullanıcı adıyla ara: @aqil",
+    "İstifadəçi axtar...":"Kullanıcı ara...",
+    "İstifadəçi tapılmadı.":"Kullanıcı bulunamadı.",
+    "Mesajlar":"Mesajlar", "TalkChat Direct":"TalkChat Direct",
+    "Mesajlarda və insanlarda axtar...":"Mesajlarda ve kişilerde ara...",
+    "Hekayələr və dostlar":"Hikayeler ve arkadaşlar",
+    "Dostların":"Arkadaşların", "Dostlar yüklənir...":"Arkadaşlar yükleniyor...",
+    "Şəxsi söhbətlərin":"Özel sohbetlerin",
+    "Söhbət seç":"Sohbet seç", "Mesaj yaz...":"Mesaj yaz...",
+    "Göndər":"Gönder", "İstifadəçi adı":"Kullanıcı adı",
+    "Yeni söhbət":"Yeni sohbet", "Qrup yarat":"Grup oluştur",
+    "Qrupun adı":"Grup adı",
+    "İstifadəçi adları (vergüllə)":"Kullanıcı adları (virgülle)",
+    "Bildirişlər":"Bildirimler", "Mənim profilim":"Profilim",
+    "Profil şəklini dəyiş":"Profil fotoğrafını değiştir",
+    "Özün haqqında yaz...":"Kendinden bahset...",
+    "Profili yadda saxla":"Profili kaydet", "Çıxış":"Çıkış",
+    "Giriş":"Giriş", "Qeydiyyat":"Kayıt ol",
+    "Daxil ol":"Giriş yap", "Hesab yarat":"Hesap oluştur",
+    "İstifadəçi adı (@ olmadan)":"Kullanıcı adı (@ olmadan)",
+    "Şifrə (ən azı 8 simvol)":"Şifre (en az 8 karakter)",
+    "Şərh yaz...":"Yorum yaz...", "Şərh":"Yorum",
+    "İzlə":"Takip et", "İzləmədən çıx":"Takibi bırak",
+    "Dostluq əlavə et":"Arkadaş ekle", "Dostsunuz":"Arkadaşsınız",
+    "Dostluq sorğusu göndərdi":"Arkadaşlık isteği gönderdi",
+    "Qəbul et":"Kabul et", "Rədd et":"Reddet",
+    "Sorğun gözləyir":"İsteğin bekliyor", "Dostun":"Arkadaşın",
+    "Sil":"Sil", "Dostluq sorğuları":"Arkadaşlık istekleri",
+    "Gələn sorğu yoxdur.":"Gelen istek yok.",
+    "Göndərdiyim sorğular":"Gönderdiğim istekler",
+    "Gözləyən sorğun yoxdur.":"Bekleyen isteğin yok.",
+    "Dostlarım":"Arkadaşlarım", "Hələ dostun yoxdur.":"Henüz arkadaşın yok.",
+    "Hələ paylaşım yoxdur. İlk paylaşımı sən et! 💜":"Henüz gönderi yok. İlk gönderiyi sen paylaş! 💜",
+    "Hələ paylaşım yoxdur.":"Henüz gönderi yok.",
+    "Paylaşıldı! 💜":"Paylaşıldı! 💜",
+    "Profil yadda saxlanıldı!":"Profil kaydedildi!",
+    "Profil şəkli yeniləndi!":"Profil fotoğrafı güncellendi!",
+    "Axtarış":"Ara", "Bildiriş":"Bildirim",
+    "Hələ bildiriş yoxdur.":"Henüz bildirim yok.",
+    "Hələ söhbət yoxdur.":"Henüz sohbet yok.",
+    "Story paylaş":"Hikaye paylaş", "Story haqqında yaz...":"Hikaye hakkında yaz...",
+    "Şəkil və ya video seç.":"Fotoğraf veya video seç.",
+    "Story paylaşıldı! 24 saat sonra silinəcək.":"Hikaye paylaşıldı! 24 saat sonra silinecek.",
+    "Mesaj sorğuları":"Mesaj istekleri", "Sorğu göndər":"İstek gönder",
+    "Mesaj sorğusu göndərildi.":"Mesaj isteği gönderildi.",
+    "Mesaj sorğusu yoxdur.":"Mesaj isteği yok.",
+    "Rədd et":"Reddet", "Ləğv et":"İptal et",
+    "Hələ dostun yoxdur. Dost əlavə etdikcə burada görünəcəklər.":"Henüz arkadaşın yok. Arkadaş ekledikçe burada görünecekler.",
+    "baxış · 24 saatlıq Story":"görüntüleme · 24 saatlik hikaye",
+    "səni izləməyə başladı.":"seni takip etmeye başladı.",
+    "paylaşımını bəyəndi.":"gönderini beğendi.",
+    "paylaşımına şərh yazdı.":"gönderine yorum yaptı.",
+    "sənə mesaj göndərdi.":"sana mesaj gönderdi.",
+    "Əvvəlcə söhbət seç.":"Önce bir sohbet seç.",
+    "Kimi axtarırsan?":"Kimi arıyorsun?",
+    "Mesaj yaz":"Mesaj gönder", "Geri":"Geri"
+  },
+  en: {
+    "Ana səhifə":"Home", "Nələr baş verir?":"What's happening?",
+    "Kəşf et":"Discover", "İzlədiklərim":"Following",
+    "Nə paylaşmaq istəyirsən?":"What would you like to share?",
+    "Şəkil / Video":"Photo / Video", "Paylaş":"Share",
+    "İstifadəçi adı ilə axtar: @aqil":"Search by username: @aqil",
+    "İstifadəçi axtar...":"Search users...",
+    "İstifadəçi tapılmadı.":"User not found.",
+    "Mesajlar":"Messages", "TalkChat Direct":"TalkChat Direct",
+    "Mesajlarda və insanlarda axtar...":"Search messages and people...",
+    "Hekayələr və dostlar":"Stories and friends",
+    "Dostların":"Your friends", "Dostlar yüklənir...":"Loading friends...",
+    "Şəxsi söhbətlərin":"Your private chats",
+    "Söhbət seç":"Select a chat", "Mesaj yaz...":"Write a message...",
+    "Göndər":"Send", "İstifadəçi adı":"Username",
+    "Yeni söhbət":"New chat", "Qrup yarat":"Create group",
+    "Qrupun adı":"Group name",
+    "İstifadəçi adları (vergüllə)":"Usernames (comma-separated)",
+    "Bildirişlər":"Notifications", "Mənim profilim":"My profile",
+    "Profil şəklini dəyiş":"Change profile picture",
+    "Özün haqqında yaz...":"Write about yourself...",
+    "Profili yadda saxla":"Save profile", "Çıxış":"Log out",
+    "Giriş":"Login", "Qeydiyyat":"Register",
+    "Daxil ol":"Log in", "Hesab yarat":"Create account",
+    "İstifadəçi adı (@ olmadan)":"Username (without @)",
+    "Şifrə (ən azı 8 simvol)":"Password (at least 8 characters)",
+    "Şərh yaz...":"Write a comment...", "Şərh":"Comment",
+    "İzlə":"Follow", "İzləmədən çıx":"Unfollow",
+    "Dostluq əlavə et":"Add friend", "Dostsunuz":"Friends",
+    "Dostluq sorğusu göndərdi":"Sent a friend request",
+    "Qəbul et":"Accept", "Rədd et":"Reject",
+    "Sorğun gözləyir":"Request pending", "Dostun":"Your friend",
+    "Sil":"Remove", "Dostluq sorğuları":"Friend requests",
+    "Gələn sorğu yoxdur.":"No incoming requests.",
+    "Göndərdiyim sorğular":"Sent requests",
+    "Gözləyən sorğun yoxdur.":"No pending requests.",
+    "Dostlarım":"My friends", "Hələ dostun yoxdur.":"You have no friends yet.",
+    "Hələ paylaşım yoxdur. İlk paylaşımı sən et! 💜":"No posts yet. Be the first to share! 💜",
+    "Hələ paylaşım yoxdur.":"No posts yet.",
+    "Paylaşıldı! 💜":"Posted! 💜",
+    "Profil yadda saxlanıldı!":"Profile saved!",
+    "Profil şəkli yeniləndi!":"Profile picture updated!",
+    "Axtarış":"Search", "Bildiriş":"Notifications",
+    "Hələ bildiriş yoxdur.":"No notifications yet.",
+    "Hələ söhbət yoxdur.":"No conversations yet.",
+    "Story paylaş":"Share a story", "Story haqqında yaz...":"Write about your story...",
+    "Şəkil və ya video seç.":"Choose a photo or video.",
+    "Story paylaşıldı! 24 saat sonra silinəcək.":"Story posted! It will disappear after 24 hours.",
+    "Mesaj sorğuları":"Message requests", "Sorğu göndər":"Send request",
+    "Mesaj sorğusu göndərildi.":"Message request sent.",
+    "Mesaj sorğusu yoxdur.":"No message requests.",
+    "Ləğv et":"Cancel",
+    "Hələ dostun yoxdur. Dost əlavə etdikcə burada görünəcəklər.":"No friends yet. Friends will appear here when you add them.",
+    "baxış · 24 saatlıq Story":"views · 24-hour story",
+    "səni izləməyə başladı.":"started following you.",
+    "paylaşımını bəyəndi.":"liked your post.",
+    "paylaşımına şərh yazdı.":"commented on your post.",
+    "sənə mesaj göndərdi.":"sent you a message.",
+    "Əvvəlcə söhbət seç.":"Select a chat first.",
+    "Kimi axtarırsan?":"Who are you looking for?",
+    "Mesaj yaz":"Send message", "Geri":"Back"
+  },
+  az: {}
+};
+
+function translateElement(root, lang) {
+  const dict = translations[lang] || translations.tr;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node;
+
+  while ((node = walker.nextNode())) {
+    if (!originalText.has(node)) originalText.set(node, node.nodeValue);
+    const original = originalText.get(node);
+    const trimmed = original.trim();
+    if (dict[trimmed] !== undefined) {
+      node.nodeValue = original.replace(trimmed, dict[trimmed]);
+    } else {
+      node.nodeValue = original;
+    }
+  }
+
+  const attrs = ["placeholder", "aria-label", "title"];
+  root.querySelectorAll?.("*").forEach(el => {
+    for (const attr of attrs) {
+      if (!el.hasAttribute(attr)) continue;
+      const key = "talkOriginal" + attr;
+      if (!el.dataset[key]) el.dataset[key] = el.getAttribute(attr);
+      const original = el.dataset[key];
+      el.setAttribute(attr, dict[original] ?? original);
+    }
+  });
+}
+
+function applyTalkLanguage(lang) {
+  if (!translations[lang]) lang = "tr";
+  translateElement(document.body, lang);
+  document.documentElement.lang = lang;
+  localStorage.setItem("talkchat-language", lang);
+  if (languageSelect) languageSelect.value = lang;
+}
+
+if (languageSelect) {
+  const savedLanguage = localStorage.getItem("talkchat-language") || "tr";
+  languageSelect.value = savedLanguage;
+  languageSelect.addEventListener("change", () => applyTalkLanguage(languageSelect.value));
+  applyTalkLanguage(savedLanguage);
+}
+
+// Yeni yaradılan mesaj, bildiriş, Story və digər elementləri də tərcümə et.
+const talkLanguageObserver = new MutationObserver(records => {
+  const lang = localStorage.getItem("talkchat-language") || "tr";
+  for (const record of records) {
+    for (const added of record.addedNodes) {
+      if (added.nodeType === Node.ELEMENT_NODE) {
+        translateElement(added, lang);
+      } else if (added.nodeType === Node.TEXT_NODE) {
+        const dict = translations[lang] || translations.tr;
+        const original = added.nodeValue.trim();
+        if (dict[original] !== undefined) {
+          added.nodeValue = added.nodeValue.replace(original, dict[original]);
+        }
+      }
+    }
+  }
+});
+talkLanguageObserver.observe(document.body, {childList:true, subtree:true});
+
 $("startDM").onclick=async()=>{
   try{const c=await api("/api/conversations/direct",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:$("dmUsername").value})});await loadConversations();openConversation(c.id);}
   catch(e){alert(e.message);}
@@ -214,4 +605,96 @@ socket.on("newMessage",data=>{
   if(activeConversation===data.conversationId)openConversation(activeConversation);
   if(!$("messagesPage").hidden)loadConversations();
 });
+
+async function loadFriendCenter() {
+  const box = $("friendCenter");
+  if (!box) return;
+
+  try {
+    const [friends, requests] = await Promise.all([
+      api("/api/friends"),
+      api("/api/friend-requests")
+    ]);
+
+    const incoming = requests.incoming.map(u => `
+      <div class="user-row">
+        ${avatarHTML(u)}
+        <div class="user-info"><b>@${esc(u.username)}</b><small>Dostluq sorğusu göndərdi</small></div>
+        <button class="primary" data-friend-accept="${esc(u.username)}">Qəbul et</button>
+        <button class="secondary" data-friend-reject="${esc(u.username)}">Rədd et</button>
+      </div>`).join("");
+
+    const outgoing = requests.outgoing.map(u => `
+      <div class="user-row">
+        ${avatarHTML(u)}
+        <div class="user-info"><b>@${esc(u.username)}</b><small>Sorğun gözləyir</small></div>
+      </div>`).join("");
+
+    const friendRows = friends.map(u => `
+      <div class="user-row">
+        ${avatarHTML(u)}
+        <div class="user-info"><b>@${esc(u.username)}</b><small>Dostun</small></div>
+        <button class="secondary" data-friend-remove="${esc(u.username)}">Sil</button>
+      </div>`).join("");
+
+    box.innerHTML = `
+      <h2>Dostluq sorğuları</h2>
+      ${incoming || '<p class="muted">Gələn sorğu yoxdur.</p>'}
+      <h2>Göndərdiyim sorğular</h2>
+      ${outgoing || '<p class="muted">Gözləyən sorğun yoxdur.</p>'}
+      <h2>Dostlarım (${friends.length})</h2>
+      ${friendRows || '<p class="muted">Hələ dostun yoxdur.</p>'}`;
+  } catch (e) {
+    box.textContent = e.message;
+  }
+}
+
+$("friendCenter").addEventListener("click", async e => {
+  const accept = e.target.closest("[data-friend-accept]");
+  const reject = e.target.closest("[data-friend-reject]");
+  const remove = e.target.closest("[data-friend-remove]");
+  const button = accept || reject || remove;
+  if (!button) return;
+
+  const name = button.dataset.friendAccept ||
+               button.dataset.friendReject ||
+               button.dataset.friendRemove;
+
+  try {
+    if (accept) {
+      await api("/api/friends/accept/" + encodeURIComponent(name), {method:"POST"});
+    } else if (reject) {
+      await api("/api/friends/reject/" + encodeURIComponent(name), {method:"POST"});
+    } else {
+      if (!confirm("@" + name + " dostluqdan silinsin?")) return;
+      await api("/api/friends/" + encodeURIComponent(name), {method:"DELETE"});
+    }
+    await loadFriendCenter();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+
+async function loadDirectStoryRail() {
+  const rail = $("directStoryRail");
+  if (!rail) return;
+  try {
+    const friends = await api("/api/friends");
+    rail.innerHTML = friends.length ? friends.map(u => `
+      <button class="direct-story-item" data-story-user="${esc(u.username)}">
+        <span class="direct-story-ring">${u.avatar ? `<img src="${esc(u.avatar)}" alt="">` : `<span class="avatar">${esc((u.username||"?")[0].toUpperCase())}</span>`}</span>
+        <small>@${esc(u.username)}</small>
+      </button>`).join("") :
+      '<div class="direct-story-loading">Hələ dostun yoxdur. Dost əlavə etdikcə burada görünəcəklər.</div>';
+  } catch (e) {
+    rail.textContent = e.message;
+  }
+}
+
+document.getElementById("directStoryRail")?.addEventListener("click", e => {
+  const item = e.target.closest("[data-story-user]");
+  if (item) openPublicProfile(item.dataset.storyUser);
+});
+
 checkSession();
