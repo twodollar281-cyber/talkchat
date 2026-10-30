@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+node_modules/
+data/
+public/uploads/
+cookies.txt
+users.json
+*.backup
+*.v*backup
+*.zip
+public.backup/
+*.stories-backup
+*.before-*
+*.signature-backup
+public.backup/

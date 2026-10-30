@@ -72,15 +72,21 @@ app.use(helmet({
     crossOriginResourcePolicy: { policy: "same-site" }
 }));
 app.use(express.json({ limit: "1mb" }));
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+    throw new Error("SESSION_SECRET Render Environment-də təyin edilməlidir.");
+}
 
+if (process.env.NODE_ENV === "production") {
+    app.set("trust proxy", 1);
+}
 const sessionMiddleware = session({
-    secret: process.env.SESSION_SECRET || "CHANGE-THIS-SESSION-SECRET-BEFORE-PUBLIC-DEPLOYMENT",
+    secret: process.env.SESSION_SECRET || "talkchat-local-development-secret-change-me",
     resave: false,
     saveUninitialized: false,
     cookie: {
         httpOnly: true,
         sameSite: "lax",
-        secure: false,
+        secure: process.env.NODE_ENV === "production",
         maxAge: 24 * 60 * 60 * 1000
     }
 });
