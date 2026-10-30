@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#171322">
+  <title>TalkChat</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <section id="authPage" class="auth-page">
+    <div class="auth-card">
+      <div class="brand">Talk<span>Chat</span></div>
+      <p class="muted">Connect. Chat. Share.</p>
+      <div class="auth-switch">
+        <button id="loginTab" class="active" type="button">Giriş</button>
+        <button id="registerTab" type="button">Qeydiyyat</button>
+      </div>
+      <form id="authForm">
+        <input id="authUsername" placeholder="İstifadəçi adı (@ olmadan)" maxlength="20" required autocomplete="username">
+        <input id="authPassword" type="password" placeholder="Şifrə (ən azı 8 simvol)" required autocomplete="current-password">
+        <button class="primary full" id="authSubmit">Daxil ol</button>
+      </form>
+      <p id="authStatus" class="status"></p>
+    </div>
+  </section>
+
+  <div id="app" class="app-shell" hidden>
+    <header class="topbar">
+      <div class="brand small">Talk<span>Chat</span></div>
+      <button class="icon-button" data-page="discover" aria-label="Axtarış">⌕</button>
+    </header>
+
+    <main>
+      <section id="homePage" class="page">
+        <div class="page-heading"><div><h1>Ana səhifə</h1><p class="muted">Nələr baş verir?</p></div></div>
+        <div class="tabs">
+          <button class="feed-tab active" data-scope="all">Kəşf et</button>
+          <button class="feed-tab" data-scope="following">İzlədiklərim</button>
+        </div>
+        <form id="postForm" class="composer">
+          <textarea id="postText" maxlength="1000" placeholder="Nə paylaşmaq istəyirsən?"></textarea>
+          <div class="composer-bottom">
+            <label class="file-label">＋ Şəkil / Video<input id="postMedia" type="file" accept="image/*,video/mp4,video/webm"></label>
+            <button class="primary" type="submit">Paylaş</button>
+          </div>
+          <p id="postStatus" class="status"></p>
+        </form>
+        <div id="feed" class="feed"></div>
+      </section>
+
+      <section id="discoverPage" class="page" hidden>
+        <h1>Kəşf et</h1><p class="muted">İstifadəçi adı ilə axtar: @aqil</p>
+        <input id="searchInput" placeholder="İstifadəçi axtar..." autocomplete="off">
+        <div id="searchResults" class="stack"></div>
+      </section>
+
+      <section id="messagesPage" class="page" hidden>
+        <h1>Mesajlar</h1>
+        <div class="message-start">
+          <input id="dmUsername" placeholder="İstifadəçi adı: aqil">
+          <button id="startDM" class="primary">Söhbət aç</button>
+        </div>
+        <div class="message-layout">
+          <div id="conversationList" class="conversation-list"></div>
+          <div class="chat-panel">
+            <div id="chatTitle" class="chat-title">Söhbət seç</div>
+            <div id="chatMessages" class="chat-messages"></div>
+            <form id="dmForm" class="dm-form">
+              <input id="dmText" placeholder="Mesaj yaz..." maxlength="2000">
+              <label class="attach-button">📎<input id="dmFile" type="file" hidden></label>
+              <button class="primary">➤</button>
+            </form>
+          </div>
+        </div>
+        <details class="group-create">
+          <summary>＋ Qrup yarat</summary>
+          <input id="groupName" placeholder="Qrupun adı">
+          <input id="groupMembers" placeholder="İstifadəçi adları (vergüllə)">
+          <button id="createGroup" class="primary">Qrup yarat</button>
+        </details>
+      </section>
+
+      <section id="notificationsPage" class="page" hidden>
+        <h1>Bildirişlər</h1><div id="notificationList" class="stack"></div>
+      </section>
+
+      <section id="profilePage" class="page" hidden>
+        <h1>Mənim profilim</h1>
+        <div class="profile-card">
+          <div class="avatar-wrap"><img id="myAvatar" alt="Profil şəkli"><span id="avatarFallback">?</span></div>
+          <label class="file-label">Profil şəklini dəyiş<input id="avatarFile" type="file" accept="image/*"></label>
+          <h2 id="myUsername">@username</h2>
+          <div id="myStats" class="stats"></div>
+          <textarea id="myBio" maxlength="160" placeholder="Özün haqqında yaz..."></textarea>
+          <button id="saveBio" class="primary full">Profili yadda saxla</button>
+          <p id="profileStatus" class="status"></p>
+          <button id="logoutButton" class="secondary full">Çıxış</button>
+        </div>
+      </section>
+
+      <section id="publicProfilePage" class="page" hidden>
+        <button id="backFromPublic" class="text-button">← Geri</button>
+        <div id="publicProfile" class="profile-card"></div>
+        <div id="publicPosts" class="feed"></div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button data-page="home" class="nav-item active"><span>⌂</span>Ana səhifə</button>
+      <button data-page="discover" class="nav-item"><span>⌕</span>Axtarış</button>
+      <button data-page="messages" class="nav-item"><span>✉</span>Mesajlar</button>
+      <button data-page="notifications" class="nav-item"><span>♡</span>Bildiriş</button>
+      <button data-page="profile" class="nav-item"><span>◉</span>Profil</button>
+    </nav>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
