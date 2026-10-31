@@ -136,7 +136,7 @@ const authLimiter = rateLimit({
 app.use("/api/register", authLimiter);
 app.use("/api/login", authLimiter);
 
-function currentUser(req) { return req.session.username || null; }
+function currentUser(req) { return req.session?.username || null; }
 function requireAuth(req, res, next) {
     if (!currentUser(req)) return res.status(401).json({ error: "Əvvəlcə giriş et." });
     next();
