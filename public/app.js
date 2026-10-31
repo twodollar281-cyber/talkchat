@@ -64,8 +64,16 @@ function enterApp() {
   socket.connect(); showPage("home");
 }
 async function checkSession() {
-  try { const d = await api("/api/me"); me=d.username; enterApp(); }
-  catch { $("authPage").hidden=false; $("app").hidden=true; }
+  try {
+    const d = await api("/api/me");
+    me = d.username;
+    enterApp();
+  } catch (err) {
+    console.error("SESSION CHECK ERROR:", err);
+    $("authPage").hidden = false;
+    $("app").hidden = true;
+    $("authStatus").textContent = "Sessiya yoxlanmadı: " + err.message;
+  }
 }
 $("logoutButton").onclick = async () => {
   try { await api("/api/logout",{method:"POST"}); } catch {}
