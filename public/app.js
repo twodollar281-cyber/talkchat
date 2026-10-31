@@ -9,7 +9,7 @@ function esc(value="") {
   return String(value).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
 async function api(url, options={}) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, { credentials: "same-origin", ...options });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "Xəta baş verdi.");
   return data;
@@ -407,7 +407,7 @@ if (directSearch && directResults) {
           <div class="user-row">
             ${avatarHTML(u)}
             <div class="user-info"><b>@${esc(u.username)}</b></div>
-            <button class="primary" data-direct-user="${esc(u.username)}">Mesaj yaz</button>
+            <button type="button" class="primary" data-direct-user="${esc(u.username)}">Mesaj yaz</button>
           </div>`).join("") || '<p class="muted">İstifadəçi tapılmadı.</p>';
     } catch (e) {
       directResults.textContent = e.message;
@@ -417,12 +417,17 @@ if (directSearch && directResults) {
   directResults.addEventListener("click", async e => {
     const btn = e.target.closest("[data-direct-user]");
     if (!btn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
     try {
       const c = await api("/api/conversations/direct", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
         body: JSON.stringify({username: btn.dataset.directUser})
       });
+
       directSearch.value = "";
       directResults.innerHTML = "";
       await loadConversations();
@@ -747,3 +752,128 @@ document.getElementById("directStoryRail")?.addEventListener("click", e => {
 });
 
 checkSession();
+
+
+// TALKCHAT ROOMS FRONTEND
+(() => {
+  const $r = id => document.getElementById(id);
+  let activeTalkRoom = null;
+
+  async function refreshTalkRooms() {
+    const list = $r("talkRoomList");
+    if (!list) return;
+    try {
+      const rooms = await api("/api/rooms/discover");
+      list.innerHTML = rooms.length ? rooms.map(r => `
+        <div class="talk-room-entry">
+          <span><b>${esc(r.name)}</b> · ${r.memberCount} üzv</span>
+          <button type="button" data-room-open="${esc(r.id)}">${r.joined ? "Aç" : "Qoşul"}</button>
+        </div>`).join("") : "<p>Hələ otaq yoxdur. İlk otağı sən yarat!</p>";
+    } catch (e) {
+      list.textContent = e.message;
+    }
+  }
+
+  async function openTalkRoom(id) {
+    try {
+      const rooms = await api("/api/rooms/discover");
+      const room = rooms.find(r => r.id === id);
+      if (!room) throw new Error("Otaq tapılmadı.");
+      if (!room.joined) await api("/api/rooms/" + encodeURIComponent(id) + "/join", {method:"POST"});
+      if (activeTalkRoom) socket.emit("leaveTalkRoom", activeTalkRoom);
+      activeTalkRoom = id;
+      socket.emit("joinTalkRoom", id);
+      $r("talkRoomActive").hidden = false;
+      $r("talkRoomTitle").textContent = room.name;
+      await loadTalkRoomMessages();
+      await refreshTalkRooms();
+    } catch (e) { alert(e.message); }
+  }
+
+  async function loadTalkRoomMessages() {
+    if (!activeTalkRoom) return;
+    try {
+      const messages = await api("/api/rooms/" + encodeURIComponent(activeTalkRoom) + "/messages");
+      const box = $r("talkRoomMessages");
+      box.innerHTML = messages.map(m => {
+        const reactions = m.reactions || {};
+        return `<div class="talk-room-message">
+          <b>${esc(m.username)}</b>
+          <p>${esc(m.text)}</p>
+          <small>${new Date(m.createdAt).toLocaleString()}</small>
+          <div class="talk-room-reactions">
+            ${["❤️","😂","👍","🔥"].map(e => `<button type="button" data-room-react="${e}" data-message-id="${esc(m.id)}">${e} ${Array.isArray(reactions[e]) ? reactions[e].length : 0}</button>`).join("")}
+          </div>
+        </div>`;
+      }).join("") || "<p>İlk mesajı sən yaz!</p>";
+      box.scrollTop = box.scrollHeight;
+    } catch (e) { console.error(e); }
+  }
+
+  $r("talkRoomCreate")?.addEventListener("click", async () => {
+    const input = $r("talkRoomName");
+    try {
+      const room = await api("/api/rooms", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({name:input.value})
+      });
+      input.value = "";
+      await refreshTalkRooms();
+      await openTalkRoom(room.id);
+    } catch (e) { alert(e.message); }
+  });
+
+  $r("talkRoomList")?.addEventListener("click", e => {
+    const btn = e.target.closest("[data-room-open]");
+    if (btn) openTalkRoom(btn.dataset.roomOpen);
+  });
+
+  $r("talkRoomForm")?.addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!activeTalkRoom) return;
+    const input = $r("talkRoomText");
+    const text = input.value.trim();
+    if (!text) return;
+    try {
+      await api("/api/rooms/" + encodeURIComponent(activeTalkRoom) + "/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({text})
+      });
+      input.value = "";
+      await loadTalkRoomMessages();
+    } catch (err) { alert(err.message); }
+  });
+
+  $r("talkRoomMessages")?.addEventListener("click", async e => {
+    const btn = e.target.closest("[data-room-react]");
+    if (!btn || !activeTalkRoom) return;
+    try {
+      await api("/api/rooms/" + encodeURIComponent(activeTalkRoom) + "/messages/" +
+        encodeURIComponent(btn.dataset.messageId) + "/react", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({emoji:btn.dataset.roomReact})
+        });
+      await loadTalkRoomMessages();
+    } catch (err) { alert(err.message); }
+  });
+
+  $r("talkRoomMembers")?.addEventListener("click", async () => {
+    if (!activeTalkRoom) return;
+    try {
+      const data = await api("/api/rooms/" + encodeURIComponent(activeTalkRoom) + "/members");
+      alert("Otağın üzvləri:\\n" + data.members.join("\\n"));
+    } catch (e) { alert(e.message); }
+  });
+
+  socket.on("roomMessage", message => {
+    if (activeTalkRoom === message.roomId) loadTalkRoomMessages();
+  });
+  socket.on("roomReaction", message => {
+    if (activeTalkRoom === message.roomId) loadTalkRoomMessages();
+  });
+
+  refreshTalkRooms();
+})();
