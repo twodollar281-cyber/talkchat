@@ -515,7 +515,13 @@ const translations = {
     "sənə mesaj göndərdi.":"sent you a message.",
     "Əvvəlcə söhbət seç.":"Select a chat first.",
     "Kimi axtarırsan?":"Who are you looking for?",
-    "Mesaj yaz":"Send message", "Geri":"Back"
+    "Mesaj yaz":"Send message", "Geri":"Back",
+    "Story haqqında yazı":"Story caption",
+    "Hələ aktiv story yoxdur.":"No active stories yet.",
+    "Dosya seç":"Choose file",
+    "Fayl seç":"Choose file",
+    "Hələ paylaşım yoxdur. İlk paylaşımı sən et!💜":"No posts yet. Be the first to share! 💜",
+    "Hələ paylaşım yoxdur. İlk paylaşımı sən et! 💜":"No posts yet. Be the first to share! 💜"
   },
   az: {}
 };
