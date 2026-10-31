@@ -79,16 +79,13 @@ if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
 if (process.env.NODE_ENV === "production") {
     app.set("trust proxy", 1);
 }
-const sessionMiddleware = session({
-    secret: process.env.SESSION_SECRET || "talkchat-local-development-secret-change-me",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 24 * 60 * 60 * 1000
-    }
+const sessionMiddleware = require("cookie-session")({
+    name: "talkchat_session",
+    keys: [process.env.SESSION_SECRET || "talkchat-local-development-secret-change-me"],
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production"
 });
 app.use(sessionMiddleware);
 app.use(express.static(path.join(__dirname, "public")));
@@ -207,11 +204,8 @@ app.post("/api/register", async (req, res) => {
         };
         list.push(user);
         saveUsers(list);
-        req.session.username = name;
-        req.session.save(err => {
-            if (err) return res.status(500).json({ error: "Sessiya xətası." });
-            res.json({ username: name });
-        });
+        req.session = { username: name };
+        res.json({ username: name });
     } catch (e) { res.status(500).json({ error: "Server xətası." }); }
 });
 
@@ -223,11 +217,8 @@ app.post("/api/login", async (req, res) => {
         const user = users().find(u => u.username.toLowerCase() === username.trim().replace(/^@/, "").toLowerCase());
         if (!user || !(await bcrypt.compare(password, user.password)))
             return res.status(401).json({ error: "İstifadəçi adı və ya şifrə yanlışdır." });
-        req.session.username = user.username;
-        req.session.save(err => {
-            if (err) return res.status(500).json({ error: "Sessiya xətası." });
-            res.json({ username: user.username });
-        });
+        req.session = { username: user.username };
+        res.json({ username: user.username });
     } catch { res.status(500).json({ error: "Server xətası." }); }
 });
 
@@ -236,7 +227,8 @@ app.get("/api/me", (req, res) => {
     res.json({ username: currentUser(req) });
 });
 app.post("/api/logout", (req, res) => {
-    req.session.destroy(() => res.json({ message: "Çıxış edildi." }));
+    req.session = null;
+    res.json({ message: "Çıxış edildi." });
 });
 
 app.get("/api/profile", requireAuth, (req, res) => {
