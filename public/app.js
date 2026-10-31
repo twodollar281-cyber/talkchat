@@ -393,7 +393,6 @@ function messageHTML(m){
 document.addEventListener("click", async function(e) {
   const btn = e.target.closest("button[data-direct-user]");
   if (!btn) return;
-  alert("CLICK TEST: işləyir");
   e.preventDefault();
   e.stopPropagation();
   if (btn.dataset.busy === "1") return;
@@ -414,6 +413,54 @@ document.addEventListener("click", async function(e) {
     alert(err.message);
   } finally {
     btn.dataset.busy = "0";
+  }
+}, true);
+
+
+// TALKCHAT_DM_SUBMIT_CAPTURE_V1
+document.addEventListener("submit", async function(e) {
+  const form = e.target;
+  if (!form || form.id !== "dmForm") return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+
+  if (form.dataset.sending === "1") return;
+
+  const conversationId = activeConversation;
+  if (!conversationId) {
+    alert("Əvvəlcə söhbət seç.");
+    return;
+  }
+
+  const text = $("dmText").value;
+  const file = $("dmFile").files[0];
+
+  if (!text.trim() && !file) return;
+
+  form.dataset.sending = "1";
+  const button = form.querySelector('button[type="submit"]');
+  if (button) button.disabled = true;
+
+  try {
+    const fd = new FormData();
+    fd.append("text", text);
+    if (file) fd.append("file", file);
+
+    await api("/api/conversations/" + conversationId + "/messages", {
+      method: "POST",
+      body: fd
+    });
+
+    $("dmText").value = "";
+    $("dmFile").value = "";
+    await openConversation(conversationId);
+  } catch (err) {
+    alert(err.message || "Mesaj göndərilmədi.");
+  } finally {
+    form.dataset.sending = "0";
+    if (button) button.disabled = false;
   }
 }, true);
 
