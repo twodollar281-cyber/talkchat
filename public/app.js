@@ -67,6 +67,7 @@ async function checkSession() {
   try {
     const d = await api("/api/me");
     me = d.username;
+    $("authStatus").textContent = "Sessiya aktivdir: " + me;
     enterApp();
   } catch (err) {
     console.error("SESSION CHECK ERROR:", err);
