@@ -683,9 +683,9 @@ function translateElement(root, lang) {
   root.querySelectorAll?.("*").forEach(el => {
     for (const attr of attrs) {
       if (!el.hasAttribute(attr)) continue;
-      const key = "talkOriginal" + attr;
-      if (!el.dataset[key]) el.dataset[key] = el.getAttribute(attr);
-      const original = el.dataset[key];
+      const key = "data-talk-original-" + attr;
+      if (!el.hasAttribute(key)) el.setAttribute(key, el.getAttribute(attr));
+      const original = el.getAttribute(key);
       el.setAttribute(attr, dict[original] ?? original);
     }
   });
