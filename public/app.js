@@ -388,6 +388,35 @@ function messageHTML(m){
   return `<div class="chat-bubble ${m.from===me?"mine":""}"><b>@${esc(m.from)}</b><div>${esc(m.text||"")}</div>${attachment}<small>${new Date(m.createdAt).toLocaleTimeString("az-AZ")}</small></div>`;
 }
 
+
+// TALKCHAT_DIRECT_CLICK_FIX
+document.addEventListener("click", async function(e) {
+  const btn = e.target.closest("button[data-direct-user]");
+  if (!btn) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  if (btn.dataset.busy === "1") return;
+  btn.dataset.busy = "1";
+
+  try {
+    const c = await api("/api/conversations/direct", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username: btn.dataset.directUser})
+    });
+    if (!c || !c.id) throw new Error("Söhbət yaradıla bilmədi.");
+    directSearch.value = "";
+    directResults.innerHTML = "";
+    await loadConversations();
+    await openConversation(c.id);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.dataset.busy = "0";
+  }
+}, true);
+
 // TALKCHAT_DIRECT_LANGUAGE_V3
 const directSearch = $("dmSearch");
 const directResults = $("dmSearchResults");
