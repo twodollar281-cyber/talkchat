@@ -1,3 +1,7 @@
+window.addEventListener("error", e => {
+  const status = document.getElementById("authStatus");
+  if (status) status.textContent = "JAVASCRIPT XƏTASI: " + e.message + " | Sətir: " + e.lineno;
+});
 const $ = id => document.getElementById(id);
 const socket = io();
 let me = "";
