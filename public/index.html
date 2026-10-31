@@ -56,64 +56,98 @@
         <div id="friendCenter" class="stack"></div>
       </section>
 
-      <section id="messagesPage" class="page talk-direct" hidden>
-  <div class="direct-topbar">
-    <div>
-      <h1>Mesajlar</h1>
-      <p>TalkChat Direct</p>
-    </div>
-    <select id="talkLanguage" aria-label="Language">
-      <option value="tr">Türkçe</option>
-      <option value="az">Azərbaycan dili</option>
-      <option value="en">English</option>
-    </select>
-  </div>
-
-  <div class="direct-search">
-    <span>⌕</span>
-    <input id="dmSearch" placeholder="Mesajlarda və insanlarda axtar...">
-  </div>
-  <div id="dmSearchResults" class="direct-search-results stack"></div>
-
-  <div class="direct-section-title">
-    <b>Hekayələr və dostlar</b>
-    <span>Dostların</span>
-  </div>
-  <div id="directStoryRail" class="direct-story-rail">
-    <div class="direct-story-loading">Dostlar yüklənir...</div>
-  </div>
-
-  <div class="direct-section-title direct-message-title">
-    <b>Mesajlar</b>
-    <span>Şəxsi söhbətlərin</span>
-  </div>
-
-  <div class="message-layout direct-layout">
-    <div id="conversationList" class="conversation-list direct-conversation-list"></div>
-    <div class="chat-panel direct-chat-panel">
-      <div class="chat-title direct-chat-title">
-        <span id="chatTitle">Söhbət seç</span>
+      <section id="messagesPage" class="page talk-direct tc-instagram" hidden>
+  <header class="tc-ig-topbar">
+    <div class="tc-ig-brand">
+      <span class="tc-ig-logo">T</span>
+      <div>
+        <h1>TalkChat</h1>
+        <small>Messages</small>
       </div>
-      <div id="chatMessages" class="chat-messages"></div>
-      <form id="dmForm" class="dm-form">
-        <input id="dmText" placeholder="Mesaj yaz..." maxlength="2000">
-        <label class="attach-button">📎<input id="dmFile" type="file" hidden></label>
-        <button class="primary" aria-label="Göndər">➤</button>
-      </form>
     </div>
-  </div>
+    <div class="tc-ig-top-actions">
+      <select id="talkLanguage" aria-label="Language">
+        <option value="tr">Türkçe</option>
+        <option value="az">Azərbaycan dili</option>
+        <option value="en">English</option>
+      </select>
+      <button type="button" class="tc-ig-icon-button" onclick="document.getElementById('dmUsername')?.focus()" aria-label="Yeni mesaj">✎</button>
+    </div>
+  </header>
 
-  <div class="direct-new-message">
-    <input id="dmUsername" placeholder="İstifadəçi adı">
-    <button id="startDM" class="primary">＋ Yeni söhbət</button>
-  </div>
+  <div class="tc-ig-workspace">
+    <aside class="tc-ig-sidebar">
+      <div class="tc-ig-sidebar-heading">
+        <h2>Mesajlar</h2>
+        <button type="button" class="tc-ig-icon-button" onclick="document.getElementById('dmUsername')?.focus()" aria-label="Yeni söhbət">＋</button>
+      </div>
 
-  <details class="group-create">
-    <summary>＋ Qrup yarat</summary>
-    <input id="groupName" placeholder="Qrupun adı">
-    <input id="groupMembers" placeholder="İstifadəçi adları (vergüllə)">
-    <button id="createGroup" class="primary">Qrup yarat</button>
-  </details>
+      <label class="tc-ig-search">
+        <span>⌕</span>
+        <input id="dmSearch" placeholder="Axtar..." autocomplete="off">
+      </label>
+      <div id="dmSearchResults" class="direct-search-results stack tc-ig-search-results"></div>
+
+      <div class="tc-ig-stories-heading">
+        <b>İnsanlar</b>
+        <span>TalkChat</span>
+      </div>
+      <div id="directStoryRail" class="direct-story-rail tc-ig-story-rail">
+        <div class="direct-story-loading">İnsanlar yüklənir...</div>
+      </div>
+
+      <div class="tc-ig-inbox-heading">
+        <b>Mesajlar</b>
+        <span>Hamısı</span>
+      </div>
+      <div id="conversationList" class="conversation-list direct-conversation-list tc-ig-conversations"></div>
+
+      <div class="tc-ig-new-chat">
+        <input id="dmUsername" placeholder="İstifadəçi adı">
+        <button id="startDM" type="button">Yeni söhbət</button>
+      </div>
+
+      <details class="group-create tc-ig-group">
+        <summary>＋ Qrup yarat</summary>
+        <input id="groupName" placeholder="Qrupun adı">
+        <input id="groupMembers" placeholder="İstifadəçi adları (vergüllə)">
+        <button id="createGroup" class="primary" type="button">Qrup yarat</button>
+      </details>
+    </aside>
+
+    <main class="chat-panel direct-chat-panel tc-ig-chat">
+      <div class="tc-ig-empty">
+        <div class="tc-ig-empty-icon">✉</div>
+        <h2>Söhbətlərin</h2>
+        <p>Mesaj göndərmək üçün söhbət seç.</p>
+        <button type="button" onclick="document.getElementById('dmUsername')?.focus()">Yeni mesaj yaz</button>
+      </div>
+
+      <div class="tc-ig-chat-content">
+        <header class="chat-title direct-chat-title tc-ig-chat-header">
+          <div class="tc-ig-chat-avatar">T</div>
+          <div class="tc-ig-chat-person">
+            <strong id="chatTitle">Söhbət seç</strong>
+            <small>TalkChat Direct</small>
+          </div>
+          <div class="tc-ig-chat-actions">
+            <button type="button" aria-label="Səsli zəng">⌕</button>
+            <button type="button" aria-label="Məlumat">ⓘ</button>
+          </div>
+        </header>
+
+        <div id="chatMessages" class="chat-messages tc-ig-messages"></div>
+
+        <form id="dmForm" class="dm-form tc-ig-compose">
+          <label class="tc-ig-attach" aria-label="Fayl əlavə et">＋
+            <input id="dmFile" type="file" hidden>
+          </label>
+          <input id="dmText" placeholder="Mesaj yaz..." maxlength="2000" autocomplete="off">
+          <button type="submit" aria-label="Göndər">➤</button>
+        </form>
+      </div>
+    </main>
+  </div>
 </section>
 
       <section id="notificationsPage" class="page" hidden>

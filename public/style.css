@@ -2614,3 +2614,273 @@ a { color: #c3a8ff; }
     font-size: 25px;
   }
 }
+
+
+/* =====================================================
+   TALKCHAT - INSTAGRAM DIRECT INSPIRED FULL REDESIGN
+   ===================================================== */
+
+.talk-direct.tc-instagram {
+  --ig-bg: #08080d;
+  --ig-panel: #101016;
+  --ig-border: rgba(255,255,255,.11);
+  --ig-muted: #92919c;
+  --ig-purple: #a855f7;
+  --ig-text: #f7f5fb;
+  width: 100%;
+  color: var(--ig-text);
+  background: var(--ig-bg) !important;
+  border: 1px solid var(--ig-border);
+  border-radius: 17px;
+  overflow: hidden;
+}
+
+.tc-instagram * { box-sizing: border-box; }
+
+.tc-instagram .tc-ig-topbar {
+  height: 70px;
+  padding: 0 25px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #0b0b11;
+  border-bottom: 1px solid var(--ig-border);
+}
+
+.tc-ig-brand { display:flex; align-items:center; gap:12px; }
+.tc-ig-logo {
+  width:38px;height:38px;border-radius:13px;
+  display:grid;place-items:center;
+  background:linear-gradient(135deg,#bd75ff,#6d35d1);
+  font-size:21px;font-weight:900;color:white;
+}
+.tc-ig-brand h1 { margin:0;color:white;font-size:19px;font-weight:800; }
+.tc-ig-brand small { color:var(--ig-muted);font-size:11px; }
+.tc-ig-top-actions { display:flex;align-items:center;gap:12px; }
+.tc-ig-top-actions select {
+  background:#17151e;color:white;border:1px solid var(--ig-border);
+  border-radius:9px;padding:8px;
+}
+.tc-ig-icon-button {
+  width:39px;height:39px;border:0;border-radius:50%;
+  background:rgba(168,85,247,.13);color:#d9b6ff;
+  font-size:23px;cursor:pointer;
+}
+
+.tc-ig-workspace {
+  display:grid;
+  grid-template-columns:minmax(290px,370px) minmax(0,1fr);
+  min-height:690px;
+  background:var(--ig-bg);
+}
+
+.tc-ig-sidebar {
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  padding:21px 0 15px;
+  background:#0e0e14;
+  border-right:1px solid var(--ig-border);
+}
+
+.tc-ig-sidebar-heading {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px 17px;
+}
+.tc-ig-sidebar-heading h2 { margin:0;font-size:23px;font-weight:800; }
+.tc-ig-search {
+  height:43px;margin:0 17px 18px;padding:0 13px;
+  display:flex;align-items:center;gap:10px;
+  border-radius:11px;background:#1b1a23;color:#aaa;
+}
+.tc-ig-search span { font-size:24px; }
+.tc-ig-search input {
+  min-width:0;width:100%;border:0;outline:0;
+  background:transparent;color:white;font-size:14px;
+}
+.tc-ig-search-results { padding:0 15px; }
+
+.tc-ig-stories-heading,.tc-ig-inbox-heading {
+  display:flex;justify-content:space-between;align-items:center;
+  padding:0 20px 10px;
+}
+.tc-ig-stories-heading b,.tc-ig-inbox-heading b { font-size:14px; }
+.tc-ig-stories-heading span,.tc-ig-inbox-heading span {
+  color:var(--ig-muted);font-size:11px;
+}
+.tc-instagram .tc-ig-story-rail {
+  display:flex;gap:15px;min-height:100px;
+  padding:7px 16px 15px;overflow-x:auto;
+  border-bottom:1px solid var(--ig-border);
+}
+.tc-instagram .tc-ig-story-rail .direct-story-item { flex:0 0 62px; }
+
+.tc-ig-inbox-heading { padding-top:17px; }
+.tc-instagram .tc-ig-conversations {
+  display:flex;flex-direction:column;gap:0;
+  padding:0 7px;overflow-y:auto;max-height:380px;
+}
+.tc-instagram .tc-ig-conversations .tc-conversation-item {
+  display:flex;align-items:center;gap:13px;
+  width:100%;min-height:76px;padding:10px 12px;
+  border:0;border-radius:10px;
+  border-bottom:1px solid rgba(255,255,255,.035);
+  background:transparent;text-align:left;
+}
+.tc-instagram .tc-ig-conversations .tc-conversation-item:hover,
+.tc-instagram .tc-ig-conversations .tc-conversation-item.active {
+  background:#21192d;
+}
+.tc-instagram .tc-conversation-avatar,
+.tc-instagram .tc-avatar-fallback {
+  width:51px;height:51px;min-width:51px;
+  border-radius:50%;object-fit:cover;
+}
+.tc-instagram .tc-avatar-fallback {
+  display:grid;place-items:center;
+  color:white;background:linear-gradient(135deg,#b66bff,#6533bd);
+  font-weight:800;font-size:19px;
+}
+.tc-instagram .tc-conversation-info {
+  min-width:0;display:flex;flex-direction:column;gap:6px;
+}
+.tc-instagram .tc-conversation-name {
+  color:#f5f2fa;font-size:13px;font-weight:700;
+}
+.tc-instagram .tc-conversation-preview {
+  color:#9995a2;font-size:12px;
+}
+
+.tc-ig-new-chat {
+  display:flex;gap:7px;padding:13px 14px 7px;
+}
+.tc-ig-new-chat input,.tc-ig-group input {
+  min-width:0;width:100%;padding:10px 12px;
+  border:1px solid var(--ig-border);border-radius:9px;
+  background:#191821;color:white;
+}
+.tc-ig-new-chat button,.tc-ig-group button {
+  border:0;border-radius:9px;padding:9px 12px;
+  color:white;background:#813bd1;font-weight:700;
+}
+.tc-instagram .tc-ig-group { margin:7px 14px; }
+.tc-instagram .tc-ig-group summary {
+  padding:10px;color:#c9a3fa;cursor:pointer;
+}
+.tc-instagram .tc-ig-group input { margin:5px 0; }
+
+.tc-ig-chat {
+  min-width:0;min-height:690px;
+  display:flex;flex-direction:column;
+  background:#09090f;
+  border:0!important;border-radius:0!important;
+}
+.tc-ig-empty {
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:30px;text-align:center;
+}
+.tc-ig-empty-icon {
+  width:92px;height:92px;border:2px solid #b16aff;
+  border-radius:50%;display:grid;place-items:center;
+  font-size:43px;color:#d2a6ff;margin-bottom:20px;
+}
+.tc-ig-empty h2 { margin:0 0 8px;font-size:22px; }
+.tc-ig-empty p { color:var(--ig-muted);font-size:13px; }
+.tc-ig-empty button {
+  border:0;border-radius:9px;padding:11px 17px;
+  background:#813bd1;color:white;font-weight:700;
+}
+.tc-instagram .tc-ig-chat-content {
+  display:none;flex:1;min-height:690px;flex-direction:column;
+}
+.tc-instagram .tc-ig-chat-header {
+  min-height:75px;padding:0 20px;
+  display:flex;align-items:center;gap:13px;
+  background:#0d0d14;border-bottom:1px solid var(--ig-border);
+}
+.tc-ig-chat-avatar {
+  width:43px;height:43px;border-radius:50%;
+  display:grid;place-items:center;
+  background:linear-gradient(135deg,#b66bff,#6533bd);
+  color:white;font-weight:800;
+}
+.tc-ig-chat-person { min-width:0;display:flex;flex-direction:column;gap:5px; }
+.tc-ig-chat-person strong { color:white;font-size:14px; }
+.tc-ig-chat-person small { color:#92909d;font-size:11px; }
+.tc-ig-chat-actions { margin-left:auto;display:flex;gap:9px; }
+.tc-ig-chat-actions button {
+  width:36px;height:36px;border:0;border-radius:50%;
+  background:#1b1922;color:#d8b5ff;font-size:18px;
+}
+
+.tc-instagram .tc-ig-messages {
+  flex:1;min-height:470px;padding:24px;
+  display:flex;flex-direction:column;gap:12px;
+  overflow-y:auto;background:#09090f;
+}
+.tc-instagram .chat-bubble {
+  width:fit-content;max-width:min(72%,440px);
+  padding:12px 16px;border:1px solid #292631;
+  border-radius:20px 20px 20px 5px;
+  background:#22212a;color:#f8f6fb;
+  overflow-wrap:anywhere;
+}
+.tc-instagram .chat-bubble.mine {
+  align-self:flex-end;border:0;
+  border-radius:20px 20px 5px 20px;
+  background:linear-gradient(135deg,#a94ff1,#7337c9);
+}
+.tc-instagram .chat-bubble b {
+  display:block;margin-bottom:5px;color:#dfbdff;font-size:11px;
+}
+.tc-instagram .chat-bubble small {
+  display:block;margin-top:7px;text-align:right;
+  color:rgba(255,255,255,.65);font-size:10px;
+}
+.tc-instagram .tc-ig-compose {
+  min-height:55px;margin:12px 17px 17px;padding:5px 8px 5px 14px;
+  display:flex;align-items:center;gap:10px;
+  border:1px solid #393342;border-radius:30px;
+  background:#17151e;
+}
+.tc-instagram .tc-ig-compose input {
+  flex:1;min-width:0;border:0;outline:0;
+  background:transparent;color:white;font-size:14px;
+}
+.tc-instagram .tc-ig-compose input::placeholder { color:#96919e; }
+.tc-instagram .tc-ig-compose button {
+  width:39px;height:39px;flex:0 0 39px;
+  border:0;border-radius:50%;
+  color:white;background:linear-gradient(135deg,#b35cff,#7134c8);
+  font-size:19px;
+}
+.tc-ig-attach {
+  width:35px;height:35px;display:grid;place-items:center;
+  border-radius:50%;background:#292333;color:#d8b4ff;
+  font-size:24px;cursor:pointer;
+}
+.tc-instagram.tc-chat-open .tc-ig-empty { display:none; }
+.tc-instagram.tc-chat-open .tc-ig-chat-content { display:flex; }
+
+@media(max-width:760px) {
+  .talk-direct.tc-instagram { border-radius:0;border-left:0;border-right:0; }
+  .tc-instagram .tc-ig-topbar { height:60px;padding:0 13px; }
+  .tc-ig-brand h1 { font-size:17px; }
+  .tc-instagram .tc-ig-workspace { display:block;min-height:75vh; }
+  .tc-instagram .tc-ig-sidebar { min-height:75vh;border:0;padding-top:15px; }
+  .tc-instagram .tc-ig-sidebar-heading h2 { font-size:21px; }
+  .tc-instagram .tc-ig-conversations { max-height:none; }
+  .tc-instagram .tc-ig-chat { display:none;min-height:78vh; }
+  .tc-instagram.tc-chat-open .tc-ig-sidebar { display:none; }
+  .tc-instagram.tc-chat-open .tc-ig-chat { display:flex; }
+  .tc-instagram.tc-chat-open .tc-ig-empty { display:none; }
+  .tc-instagram.tc-chat-open .tc-ig-chat-content { display:flex;min-height:78vh; }
+  .tc-instagram .tc-ig-messages { min-height:55vh;padding:14px 10px; }
+  .tc-instagram .chat-bubble { max-width:85%; }
+  .tc-instagram .tc-ig-compose { margin:9px;padding:5px 7px 5px 12px; }
+  .tc-instagram .tc-ig-sidebar-heading { padding-left:15px;padding-right:15px; }
+  .tc-instagram .tc-ig-chat-header { padding:0 12px; }
+  .tc-instagram .tc-mobile-back { display:inline-grid!important; }
+}
+
