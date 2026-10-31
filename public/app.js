@@ -393,7 +393,7 @@ function messageHTML(m){
 document.addEventListener("click", async function(e) {
   const btn = e.target.closest("button[data-direct-user]");
   if (!btn) return;
-
+  alert("CLICK TEST: işləyir");
   e.preventDefault();
   e.stopPropagation();
   if (btn.dataset.busy === "1") return;
