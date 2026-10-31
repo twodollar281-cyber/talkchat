@@ -112,7 +112,23 @@
         <input id="groupName" placeholder="Qrupun adı">
         <input id="groupMembers" placeholder="İstifadəçi adları (vergüllə)">
         <button id="createGroup" class="primary" type="button">Qrup yarat</button>
+      </details>\n
+      <details class="group-create tc-ig-group" id="talkRoomsPanel">
+        <summary>🌐 Otaqlar</summary>
+        <input id="talkRoomName" maxlength="40" placeholder="Yeni otağın adı">
+        <button id="talkRoomCreate" type="button">＋ Otaq yarat</button>
+        <div id="talkRoomList">Otaqlar yüklənir...</div>
+        <div id="talkRoomActive" hidden>
+          <b id="talkRoomTitle"></b>
+          <button id="talkRoomMembers" type="button">Üzvlər</button>
+          <div id="talkRoomMessages"></div>
+          <form id="talkRoomForm">
+            <input id="talkRoomText" maxlength="2000" placeholder="Mesaj yaz...">
+            <button type="submit">Göndər</button>
+          </form>
+        </div>
       </details>
+
     </aside>
 
     <main class="chat-panel direct-chat-panel tc-ig-chat">
@@ -184,6 +200,6 @@
     </nav>
   </div>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=20261031"></script>
 </body>
 </html>
