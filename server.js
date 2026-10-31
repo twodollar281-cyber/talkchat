@@ -262,7 +262,7 @@ app.get("/api/users/:username", requireAuth, (req, res) => {
     const user = users().find(u => u.username.toLowerCase() === name.toLowerCase());
     if (!user) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     const result = publicUser(user);
-    result.isFollowing = (users().find(u => u.username === currentUser(req)).following || []).includes(user.username);
+    result.isFollowing = (users().find(u => u.username === currentUser(req))?.following || []).includes(user.username);
     res.json(result);
 });
 app.get("/api/search", requireAuth, (req, res) => {
@@ -271,7 +271,7 @@ app.get("/api/search", requireAuth, (req, res) => {
     res.json(users().filter(u => u.username.toLowerCase().includes(q))
         .slice(0, 30).map(u => {
             const result = publicUser(u);
-            result.isFollowing = (users().find(x => x.username === currentUser(req)).following || []).includes(u.username);
+            result.isFollowing = (users().find(x => x.username === currentUser(req))?.following || []).includes(u.username);
             return result;
         }));
 });
