@@ -953,3 +953,25 @@ checkSession();
 
   refreshTalkRooms();
 })();
+
+
+/* TALKCHAT_PRESENCE_CLIENT_V1 */
+const talkchatPresence = new Map();
+
+socket.on("presenceUpdate", data => {
+  if (!data || !data.username) return;
+  talkchatPresence.set(data.username, data);
+  document.querySelectorAll("[data-presence-user]").forEach(el => {
+    if (el.dataset.presenceUser === data.username) {
+      el.textContent = data.online ? "● Onlayn" : "○ Oflayn";
+      el.classList.toggle("online", !!data.online);
+    }
+  });
+});
+
+socket.on("newMessage", data => {
+  if (activeConversation === data.conversationId) {
+    openConversation(activeConversation);
+  }
+  if (!$("messagesPage").hidden) loadConversations();
+});

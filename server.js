@@ -98,9 +98,35 @@ io.use((socket, next) => {
     if (!socket.request.session.username) return next(new Error("Giriş tələb olunur"));
     next();
 });
+// TALKCHAT_PRESENCE_READ_V1
+const onlineUsers = new Map();
+
 io.on("connection", socket => {
     const name = socket.request.session.username;
     socket.join(`user:${name}`);
+
+    onlineUsers.set(name, (onlineUsers.get(name) || 0) + 1);
+    io.emit("presenceUpdate", { username: name, online: true });
+
+    socket.on("joinTalkRoom", roomId => {
+      const room = getRooms().find(r => r.id === roomId);
+      if (room && roomMember(room, name)) socket.join("talk-room:" + roomId);
+    });
+    socket.on("leaveTalkRoom", roomId => socket.leave("talk-room:" + roomId));
+
+    socket.on("disconnect", () => {
+        const count = Math.max(0, (onlineUsers.get(name) || 1) - 1);
+        if (count === 0) {
+            onlineUsers.delete(name);
+            io.emit("presenceUpdate", {
+                username: name,
+                online: false,
+                lastSeen: new Date().toISOString()
+            });
+        } else {
+            onlineUsers.set(name, count);
+        }
+    });
 });
 
 const authLimiter = rateLimit({
@@ -633,6 +659,104 @@ app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) return res.status(400).json({ error: "Fayl çox böyükdür və ya yükləmə xətası baş verdi (maksimum 30 MB)." });
     if (err) return res.status(400).json({ error: err.message || "Xəta baş verdi." });
     next();
+});
+
+
+// TALKCHAT ROOMS API
+const roomFile = path.join(DATA, "rooms.json");
+const roomMessageFile = path.join(DATA, "roomMessages.json");
+
+function getRooms() {
+  if (!fs.existsSync(roomFile)) fs.writeFileSync(roomFile, "[]");
+  try { return JSON.parse(fs.readFileSync(roomFile, "utf8")); } catch { return []; }
+}
+function saveRooms(v) { fs.writeFileSync(roomFile, JSON.stringify(v, null, 2)); }
+function getRoomMessages() {
+  if (!fs.existsSync(roomMessageFile)) fs.writeFileSync(roomMessageFile, "[]");
+  try { return JSON.parse(fs.readFileSync(roomMessageFile, "utf8")); } catch { return []; }
+}
+function saveRoomMessages(v) { fs.writeFileSync(roomMessageFile, JSON.stringify(v, null, 2)); }
+const roomReactions = ["❤️", "😂", "👍", "🔥"];
+function roomMember(room, username) {
+  return Array.isArray(room.members) && room.members.includes(username);
+}
+
+app.get("/api/rooms/discover", requireAuth, (req, res) => {
+  const username = currentUser(req);
+  res.json(getRooms().map(r => ({
+    id: r.id, name: r.name, owner: r.owner,
+    memberCount: r.members.length,
+    joined: roomMember(r, username)
+  })));
+});
+
+app.get("/api/rooms", requireAuth, (req, res) => {
+  res.json(getRooms().filter(r => roomMember(r, currentUser(req))));
+});
+
+app.post("/api/rooms", requireAuth, (req, res) => {
+  const name = String(req.body.name || "").trim().slice(0, 40);
+  if (name.length < 2) return res.status(400).json({error:"Otaq adı ən azı 2 simvol olmalıdır."});
+  const username = currentUser(req);
+  const rooms = getRooms();
+  const room = {id:crypto.randomUUID(), name, owner:username, members:[username], createdAt:new Date().toISOString()};
+  rooms.push(room);
+  saveRooms(rooms);
+  res.json(room);
+});
+
+app.post("/api/rooms/:id/join", requireAuth, (req, res) => {
+  const rooms = getRooms();
+  const room = rooms.find(r => r.id === req.params.id);
+  if (!room) return res.status(404).json({error:"Otaq tapılmadı."});
+  const username = currentUser(req);
+  if (!roomMember(room, username)) room.members.push(username);
+  saveRooms(rooms);
+  res.json(room);
+});
+
+app.get("/api/rooms/:id/members", requireAuth, (req, res) => {
+  const room = getRooms().find(r => r.id === req.params.id);
+  if (!room || !roomMember(room, currentUser(req))) return res.status(403).json({error:"Giriş icazən yoxdur."});
+  res.json({members:room.members});
+});
+
+app.get("/api/rooms/:id/messages", requireAuth, (req, res) => {
+  const room = getRooms().find(r => r.id === req.params.id);
+  if (!room || !roomMember(room, currentUser(req))) return res.status(403).json({error:"Giriş icazən yoxdur."});
+  res.json(getRoomMessages().filter(m => m.roomId === room.id));
+});
+
+app.post("/api/rooms/:id/messages", requireAuth, (req, res) => {
+  const room = getRooms().find(r => r.id === req.params.id);
+  if (!room || !roomMember(room, currentUser(req))) return res.status(403).json({error:"Giriş icazən yoxdur."});
+  const text = String(req.body.text || "").trim();
+  if (!text || text.length > 2000) return res.status(400).json({error:"Mesaj 1–2000 simvol olmalıdır."});
+  const message = {id:crypto.randomUUID(), roomId:room.id, username:currentUser(req), text, reactions:{}, createdAt:new Date().toISOString()};
+  const list = getRoomMessages();
+  list.push(message);
+  saveRoomMessages(list);
+  io.to("talk-room:" + room.id).emit("roomMessage", message);
+  res.json(message);
+});
+
+app.post("/api/rooms/:id/messages/:messageId/react", requireAuth, (req, res) => {
+  const room = getRooms().find(r => r.id === req.params.id);
+  if (!room || !roomMember(room, currentUser(req))) return res.status(403).json({error:"Giriş icazən yoxdur."});
+  const emoji = String(req.body.emoji || "");
+  if (!roomReactions.includes(emoji)) return res.status(400).json({error:"Reaksiya icazəli deyil."});
+  const list = getRoomMessages();
+  const message = list.find(m => m.id === req.params.messageId && m.roomId === room.id);
+  if (!message) return res.status(404).json({error:"Mesaj tapılmadı."});
+  if (!message.reactions) message.reactions = {};
+  if (!Array.isArray(message.reactions[emoji])) message.reactions[emoji] = [];
+  const users = message.reactions[emoji];
+  const username = currentUser(req);
+  const i = users.indexOf(username);
+  if (i >= 0) users.splice(i, 1); else users.push(username);
+  saveRoomMessages(list);
+  io.to("talk-room:" + room.id).emit("roomReaction", message);
+  res.json(message);
 });
 
 const PORT = process.env.PORT || 3000;
