@@ -364,6 +364,18 @@ $("conversationList").onclick=e=>{
 async function openConversation(id){
   activeConversation=id;const c=conversationsCache.find(x=>x.id===id);
   $("chatTitle").textContent=c?.name||"Söhbət";
+  $("messagesPage").classList.add("tc-chat-open");
+  const chatHeader = $("chatTitle").parentElement;
+  if (chatHeader && !document.getElementById("tcMobileBack")) {
+    const back = document.createElement("button");
+    back.id = "tcMobileBack";
+    back.className = "tc-mobile-back";
+    back.type = "button";
+    back.textContent = "‹";
+    back.setAttribute("aria-label", "Söhbətlərə qayıt");
+    back.onclick = () => $("messagesPage").classList.remove("tc-chat-open");
+    chatHeader.prepend(back);
+  }
   try{
     const list=await api("/api/conversations/"+id+"/messages");
     $("chatMessages").innerHTML=list.map(messageHTML).join("");

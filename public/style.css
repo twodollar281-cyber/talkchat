@@ -2419,3 +2419,198 @@ a { color: #c3a8ff; }
   font-size: 12px;
 }
 
+
+
+/* TALKCHAT DIRECT - COMPLETE MOBILE AND DESKTOP POLISH */
+.talk-direct .direct-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.5fr);
+  gap: 0;
+  min-height: 570px;
+  overflow: hidden;
+  border: 1px solid rgba(190,150,255,.16);
+  border-radius: 20px;
+  background: rgba(22,16,35,.82);
+}
+
+.talk-direct .direct-conversation-list {
+  min-width: 0;
+  padding: 8px;
+  border-right: 1px solid rgba(255,255,255,.09);
+  overflow-y: auto;
+}
+
+.talk-direct .direct-chat-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 570px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.talk-direct .direct-chat-title {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+  font-weight: 700;
+}
+
+.talk-direct .chat-messages {
+  flex: 1;
+  min-height: 350px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.talk-direct .chat-bubble {
+  max-width: min(78%, 430px);
+  width: fit-content;
+  padding: 11px 15px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 18px 18px 18px 5px;
+  background: rgba(255,255,255,.09);
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+
+.talk-direct .chat-bubble.mine {
+  align-self: flex-end;
+  border-color: transparent;
+  border-radius: 18px 18px 5px 18px;
+  background: linear-gradient(135deg,#9b5cf6,#6735c7);
+}
+
+.talk-direct .chat-bubble b {
+  display: block;
+  margin-bottom: 5px;
+  color: #d8baff;
+  font-size: 12px;
+}
+
+.talk-direct .chat-bubble small {
+  display: block;
+  margin-top: 7px;
+  color: rgba(255,255,255,.62);
+  font-size: 10px;
+  text-align: right;
+}
+
+.talk-direct .dm-form {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(190,150,255,.25);
+  border-radius: 28px;
+  background: rgba(255,255,255,.06);
+}
+
+.talk-direct .dm-form input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: white;
+}
+
+.talk-direct .dm-form button {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg,#a855f7,#6938c5);
+}
+
+.talk-direct .attach-button {
+  cursor: pointer;
+  padding: 8px;
+}
+
+.tc-mobile-back {
+  display: none;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(168,85,247,.17);
+  color: white;
+  font-size: 29px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.talk-direct .direct-search {
+  border: 1px solid rgba(190,150,255,.2);
+  border-radius: 15px;
+  background: rgba(255,255,255,.06);
+}
+
+.talk-direct .direct-search input {
+  color: white;
+}
+
+.talk-direct .direct-story-rail {
+  gap: 15px;
+  padding: 12px 4px 18px;
+  overflow-x: auto;
+}
+
+.talk-direct .direct-new-message {
+  margin-top: 18px;
+}
+
+@media (max-width: 700px) {
+  .talk-direct .direct-layout {
+    display: block;
+    min-height: 65vh;
+    border-radius: 16px;
+  }
+
+  .talk-direct .direct-conversation-list {
+    display: block;
+    width: 100%;
+    border-right: 0;
+  }
+
+  .talk-direct .direct-chat-panel {
+    display: none;
+    min-height: 65vh;
+  }
+
+  .talk-direct.tc-chat-open .direct-conversation-list {
+    display: none;
+  }
+
+  .talk-direct.tc-chat-open .direct-chat-panel {
+    display: flex;
+  }
+
+  .talk-direct.tc-chat-open .tc-mobile-back {
+    display: inline-grid;
+    place-items: center;
+  }
+
+  .talk-direct .chat-messages {
+    min-height: 45vh;
+    padding: 14px 10px;
+  }
+
+  .talk-direct .chat-bubble {
+    max-width: 86%;
+  }
+
+  .talk-direct .direct-topbar h1 {
+    font-size: 25px;
+  }
+}
