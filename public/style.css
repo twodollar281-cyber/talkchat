@@ -2360,3 +2360,62 @@ a { color: #c3a8ff; }
   #dmText { flex-basis: 100%; }
 }
 
+
+/* INSTAGRAM DIRECT CONVERSATION LIST */
+.talk-direct .tc-conversation-item {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  min-height: 76px;
+  padding: 12px 15px;
+  border: 0;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background .2s ease;
+}
+
+.talk-direct .tc-conversation-item:hover,
+.talk-direct .tc-conversation-item.active {
+  background: rgba(160,100,255,.13);
+}
+
+.tc-conversation-avatar,
+.tc-avatar-fallback {
+  width: 53px;
+  height: 53px;
+  min-width: 53px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.tc-avatar-fallback {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg,#a855f7,#5930bd);
+  color: white;
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.tc-conversation-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tc-conversation-name {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.tc-conversation-preview {
+  color: #aaa1b9;
+  font-size: 12px;
+}
+

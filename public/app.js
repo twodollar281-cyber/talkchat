@@ -323,8 +323,39 @@ async function loadTalkChatExtras() {
 
 async function loadConversations(){
   try{
-    conversationsCache=await api("/api/conversations");
-    $("conversationList").innerHTML=conversationsCache.map(c=>`<button class="conversation-item ${activeConversation===c.id?"active":""}" data-convo="${esc(c.id)}">${esc(c.name||"Qrup")}</button>`).join("")||"<p class='muted'>Hələ söhbət yoxdur.</p>";
+    conversationsCache = await api("/api/conversations");
+
+    const profiles = await Promise.all(conversationsCache.map(async c => {
+      if(c.type === "group") return null;
+      try {
+        return await api("/api/users/" + encodeURIComponent(c.name));
+      } catch {
+        return { username: c.name, avatar: "" };
+      }
+    }));
+
+    $("conversationList").innerHTML = conversationsCache.map((c, i) => {
+      const user = profiles[i];
+      const name = c.type === "group" ? (c.name || "Qrup") : (user?.username || c.name || "İstifadəçi");
+      const avatar = c.type === "group"
+        ? '<div class="tc-avatar-fallback">👥</div>'
+        : user?.avatar
+          ? '<img class="tc-conversation-avatar" src="' + esc(user.avatar) + '" alt="">'
+          : '<div class="tc-avatar-fallback">' + esc(name.charAt(0).toUpperCase()) + '</div>';
+
+      const subtitle = c.type === "group"
+        ? "Qrup söhbəti · " + c.participants.length + " iştirakçı"
+        : "Şəxsi söhbət";
+
+      return '<button class="conversation-item tc-conversation-item ' +
+        (activeConversation === c.id ? "active" : "") +
+        '" data-convo="' + esc(c.id) + '">' +
+        avatar +
+        '<span class="tc-conversation-info">' +
+        '<b class="tc-conversation-name">' + esc(name) + '</b>' +
+        '<small class="tc-conversation-preview">' + esc(subtitle) + '</small>' +
+        '</span></button>';
+    }).join("") || "<p class='muted'>Hələ söhbət yoxdur.</p>";
   }catch(e){$("conversationList").textContent=e.message;}
 }
 $("conversationList").onclick=e=>{
