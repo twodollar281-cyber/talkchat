@@ -168,6 +168,7 @@
     return "";
   };
   const getMic = () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
+  const micErrorText = (e) => `Mikrofon icazəsi alınmadı.\\n\\nXəta: ${e && e.name ? e.name : "UnknownError"}\\n${e && e.message ? e.message : "Əlavə məlumat yoxdur."}`;
 
   async function createPC(c) {
     const pc = new RTCPeerConnection({ iceServers: ICE });
@@ -242,7 +243,7 @@
     if (!socket.connected) return alert(tx("offline"));
     askNotify();
     let local;
-    try { local = await getMic(); } catch { return alert(tx("micDenied")); }
+    try { local = await getMic(); } catch (e) { console.error("TalkChat microphone error:", e); return alert(micErrorText(e)); }
     if (busy()) { local.getTracks().forEach((t) => t.stop()); return; }
     const c = (cur = newCall({ convo: conv.id, peer, role: "caller", local, stage: "calling" }));
     paint();
@@ -274,7 +275,7 @@
     const p = problem();
     if (p) { alert(p); return declineIncoming(); }
     let local;
-    try { local = await getMic(); } catch { alert(tx("micDenied")); return declineIncoming(); }
+    try { local = await getMic(); } catch (e) { console.error("TalkChat microphone error:", e); alert(micErrorText(e)); return declineIncoming(); }
     if (inc !== i) { local.getTracks().forEach((t) => t.stop()); return; } // bu arada arama bitti
     inc = null;
     stopRing();
