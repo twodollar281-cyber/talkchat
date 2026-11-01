@@ -494,6 +494,7 @@ app.delete("/api/friends/:username", requireAuth, (req, res) => {
 app.get("/api/feed", requireAuth, (req, res) => {
     const scope = req.query.scope === "following" ? "following" : "all";
     const self = users().find(u => u.username === currentUser(req));
+    if (!self) return res.status(401).json({ error: "Sessiya bitib. Yenidən daxil olun." });
     const following = self.following || [];
     let list = posts();
     if (scope === "following") list = list.filter(p => p.username === self.username || following.includes(p.username));
