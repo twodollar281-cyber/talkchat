@@ -66,26 +66,29 @@ $("authForm").addEventListener("submit", async e => {
 function enterApp() {
   $("authPage").hidden = true; $("app").hidden = false;
   socket.connect(); showPage("home");
-  registerPush();
+  setTimeout(() => { try { registerPush(); } catch(e) { console.error(e); } }, 4000);
 }
 
-// ---- Push bildirişləri (yalnız Android tətbiqində; brauzerdə heç nə etmir) ----
+// ---- Push bildirişləri (yalnız Android tətbiqində) ----
 window.__pushToken = null;
+let __pushStarted = false;
 async function sendPushToken(token) {
   try {
     await api("/api/push/register", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({token, lang: currentLang()})});
   } catch(e) { console.error("Push token göndərilmədi:", e.message); }
 }
 async function registerPush() {
+  if (__pushStarted) return;
   const cap = window.Capacitor;
   if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return;
   const PN = cap.Plugins && cap.Plugins.PushNotifications;
   if (!PN) return;
+  __pushStarted = true;
   try {
-    const perm = await PN.requestPermissions();
-    if (perm.receive !== "granted") return;
     PN.addListener("registration", t => { window.__pushToken = t.value; sendPushToken(t.value); });
     PN.addListener("registrationError", e => console.error("Push qeydiyyat xətası:", e));
+    const perm = await PN.requestPermissions();
+    if (perm.receive !== "granted") return;
     await PN.register();
   } catch(e) { console.error("Push xətası:", e); }
 }
