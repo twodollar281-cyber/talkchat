@@ -624,6 +624,7 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
     convo.participants.filter(x => x !== currentUser(req)).forEach(to => {
         io.to(`user:${to}`).emit("newMessage", { conversationId: convo.id });
         addNotification(to, currentUser(req), "message");
+        console.log("PUSH msg to", to, "online:", onlineUsers.has(to));
         if (!onlineUsers.has(to)) push.send(to, "message", currentUser(req));
     });
     res.json(message);
@@ -661,6 +662,7 @@ app.delete("/api/conversations/:id/messages/:mid", requireAuth, (req, res) => {
 
 // Push bildiriş tokenini qeyd et (Android tətbiq). Dil bildiriş mətninin dilini təyin edir.
 app.post("/api/push/register", requireAuth, (req, res) => {
+  console.log("PUSH register hit:", currentUser(req), "online:", onlineUsers.size);
     const body = req.body || {};
     const token = String(body.token || "");
     if (!token || token.length > 500) return res.status(400).json({ error: "Token səhvdir." });
