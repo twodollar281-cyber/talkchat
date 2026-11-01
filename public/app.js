@@ -66,7 +66,7 @@ $("authForm").addEventListener("submit", async e => {
 function enterApp() {
   $("authPage").hidden = true; $("app").hidden = false;
   socket.connect(); showPage("home");
-  setTimeout(() => { try { registerPush(); } catch(e) { console.error(e); } }, 4000);
+  setTimeout(() => { try { /* registerPush(); */ } catch(e) { console.error(e); } }, 4000);
 }
 
 // ---- Push bildirişləri (yalnız Android tətbiqində) ----
