@@ -34,6 +34,8 @@ jobs:
         run: |
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+            test -s android/app/google-services.json || { echo "XETA: google-services.json bosdur"; exit 1; }
+            wc -c android/app/google-services.json
           else
             echo "GOOGLE_SERVICES_JSON secret yoxdur, push bildirişləri işləməyəcək."
           fi
