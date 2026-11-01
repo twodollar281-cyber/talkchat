@@ -66,6 +66,28 @@ $("authForm").addEventListener("submit", async e => {
 function enterApp() {
   $("authPage").hidden = true; $("app").hidden = false;
   socket.connect(); showPage("home");
+  registerPush();
+}
+
+// ---- Push bildirişləri (yalnız Android tətbiqində; brauzerdə heç nə etmir) ----
+window.__pushToken = null;
+async function sendPushToken(token) {
+  try {
+    await api("/api/push/register", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({token, lang: currentLang()})});
+  } catch(e) { console.error("Push token göndərilmədi:", e.message); }
+}
+async function registerPush() {
+  const cap = window.Capacitor;
+  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return;
+  const PN = cap.Plugins && cap.Plugins.PushNotifications;
+  if (!PN) return;
+  try {
+    const perm = await PN.requestPermissions();
+    if (perm.receive !== "granted") return;
+    PN.addListener("registration", t => { window.__pushToken = t.value; sendPushToken(t.value); });
+    PN.addListener("registrationError", e => console.error("Push qeydiyyat xətası:", e));
+    await PN.register();
+  } catch(e) { console.error("Push xətası:", e); }
 }
 async function checkSession() {
   try {
@@ -1022,6 +1044,7 @@ function applyTalkLanguage(lang) {
   document.documentElement.lang = lang;
   localStorage.setItem("talkchat-language", lang);
   if (languageSelect) languageSelect.value = lang;
+  if (window.__pushToken) sendPushToken(window.__pushToken);
 }
 
 if (languageSelect) {

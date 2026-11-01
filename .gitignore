@@ -21,3 +21,9 @@ android/**/build/
 android/local.properties
 android/captures/
 .idea/
+
+# Firebase private configuration
+android/app/google-services.json
+service-account*.json
+*firebase-adminsdk*.json
+sa.txt

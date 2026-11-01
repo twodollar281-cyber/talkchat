@@ -65,6 +65,8 @@ const stories = () => readJSON("stories.json");
 const saveStories = value => saveJSON("stories.json", value);
 const messageRequests = () => readJSON("messageRequests.json");
 const saveMessageRequests = value => saveJSON("messageRequests.json", value);
+const { createPush } = require("./push");
+const push = createPush({ readJSON, saveJSON });
 
 
 
@@ -159,6 +161,7 @@ for (const [incoming, outgoing] of Object.entries(callEvents)) {
     if (!data || typeof data.conversationId !== "string") return;
     const target = getCallPeer(data.conversationId);
     if (!target) return;
+    if (incoming === "call:invite" && !onlineUsers.has(target)) push.send(target, "call", name);
 
     io.to(`user:${target}`).emit(outgoing, {
       conversationId: data.conversationId,
@@ -621,6 +624,7 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
     convo.participants.filter(x => x !== currentUser(req)).forEach(to => {
         io.to(`user:${to}`).emit("newMessage", { conversationId: convo.id });
         addNotification(to, currentUser(req), "message");
+        if (!onlineUsers.has(to)) push.send(to, "message", currentUser(req));
     });
     res.json(message);
 });
@@ -652,6 +656,15 @@ app.delete("/api/conversations/:id/messages/:mid", requireAuth, (req, res) => {
     Object.assign(m, { deleted: true, text: "", attachment: "", attachmentName: "", attachmentType: "" });
     saveMessages(list);
     convo.participants.forEach(to => io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
+    res.json({ ok: true });
+});
+
+// Push bildiriş tokenini qeyd et (Android tətbiq). Dil bildiriş mətninin dilini təyin edir.
+app.post("/api/push/register", requireAuth, (req, res) => {
+    const body = req.body || {};
+    const token = String(body.token || "");
+    if (!token || token.length > 500) return res.status(400).json({ error: "Token səhvdir." });
+    push.register(currentUser(req), token, String(body.lang || "tr"));
     res.json({ ok: true });
 });
 

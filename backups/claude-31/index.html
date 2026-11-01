@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#171322">
+  <title>TalkChat</title>
+  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="calls.css?v=1">
+</head>
+<body>
+  <section id="authPage" class="auth-page">
+    <div class="auth-card">
+      <div class="brand">Talk<span>Chat</span></div>
+      <p class="muted">Connect. Chat. Share.</p>
+      <div class="auth-switch">
+        <button id="loginTab" class="active" type="button">Giriş</button>
+        <button id="registerTab" type="button">Qeydiyyat</button>
+      </div>
+      <form id="authForm">
+        <input id="authUsername" placeholder="İstifadəçi adı (@ olmadan)" maxlength="20" required autocomplete="username">
+        <input id="authPassword" type="password" placeholder="Şifrə (ən azı 8 simvol)" required autocomplete="current-password">
+        <button class="primary full" id="authSubmit">Daxil ol</button>
+      </form>
+      <p id="authStatus" class="status"></p>
+    </div>
+  </section>
+
+  <div id="app" class="app-shell" hidden>
+    <header class="topbar">
+      <div class="brand small">Talk<span>Chat</span></div>
+      <button class="icon-button" data-page="discover" aria-label="Axtarış">⌕</button>
+    </header>
+
+    <main>
+      <section id="homePage" class="page">
+        <div class="page-heading"><div><h1>Ana səhifə</h1><p class="muted">Nələr baş verir?</p></div></div>
+        <div class="tabs">
+          <button class="feed-tab active" data-scope="all">Kəşf et</button>
+          <button class="feed-tab" data-scope="following">İzlədiklərim</button>
+        </div>
+        <form id="postForm" class="composer">
+          <textarea id="postText" maxlength="1000" placeholder="Nə paylaşmaq istəyirsən?"></textarea>
+          <div class="composer-bottom">
+            <label class="file-label">＋ Şəkil / Video<input id="postMedia" type="file" accept="image/*,video/mp4,video/webm"></label>
+            <button class="primary" type="submit">Paylaş</button>
+          </div>
+          <p id="postStatus" class="status"></p>
+        </form>
+        <div id="feed" class="feed"></div>
+      </section>
+
+      <section id="discoverPage" class="page" hidden>
+        <h1>Kəşf et</h1><p class="muted">İstifadəçi adı ilə axtar: @aqil</p>
+        <input id="searchInput" placeholder="İstifadəçi axtar..." autocomplete="off">
+        <div id="searchResults" class="stack"></div>
+        <div id="friendCenter" class="stack"></div>
+      </section>
+
+      <section id="messagesPage" class="page ig-dm" hidden>
+        <div class="ig-body">
+          <aside class="ig-side">
+            <header class="ig-side-head">
+              <b id="igMe">@</b>
+              <button type="button" class="ig-hbtn" id="igNewBtn" aria-label="Yeni mesaj">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+              </button>
+            </header>
+            <label class="ig-search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+              <input id="dmSearch" placeholder="Axtar" autocomplete="off">
+            </label>
+            <div id="dmSearchResults" class="ig-results"></div>
+            <div id="igNewChat" class="ig-newchat" hidden>
+              <input id="dmUsername" placeholder="İstifadəçi adı" autocomplete="off">
+              <button id="startDM" type="button">Söhbət aç</button>
+              <details class="ig-group">
+                <summary>Qrup yarat</summary>
+                <input id="groupName" placeholder="Qrupun adı">
+                <input id="groupMembers" placeholder="İstifadəçi adları (vergüllə)">
+                <button id="createGroup" type="button">Qrup yarat</button>
+              </details>
+            </div>
+            <div class="ig-stories">
+              <div id="directStoryRail" class="direct-story-rail">
+                <div class="direct-story-loading">Yüklənir…</div>
+              </div>
+            </div>
+            <details class="ig-extras">
+              <summary>Hekayə və mesaj istəkləri</summary>
+              <div id="tcExtrasSlot"></div>
+            </details>
+            <div class="ig-lbl">Mesajlar</div>
+            <div id="conversationList" class="ig-list"></div>
+          </aside>
+
+          <main class="ig-main">
+            <div class="ig-empty">
+              <div class="ig-empty-ic" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg>
+              </div>
+              <h2>Mesajların</h2>
+              <p>Şəxsi mesajlaşmaq üçün bir söhbət seç və ya yeni söhbət başlat.</p>
+              <button type="button" id="igEmptyNew">Yeni mesaj</button>
+            </div>
+
+            <div class="ig-chat">
+              <header class="ig-head">
+                <button type="button" id="tcMobileBack" class="ig-hbtn ig-back" aria-label="Söhbətlərə qayıt">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+                </button>
+                <button type="button" id="igInfo" class="ig-headinfo" aria-label="Profilə bax">
+                  <span id="chatAv"></span>
+                  <span class="ig-hmid"><strong id="chatTitle"></strong><small id="chatSub"></small></span>
+                </button>
+                <div class="ig-hacts">
+                  <button type="button" id="tcCallBtn" class="ig-hbtn" aria-label="Səsli zəng">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>
+                  </button>
+                </div>
+              </header>
+
+              <div id="chatMessages" class="ig-msgs"></div>
+
+              <div id="igReply" class="ig-reply" hidden>
+                <span id="igReplyText"></span>
+                <button type="button" id="igReplyX" class="ig-hbtn" aria-label="Cavabı ləğv et">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                </button>
+              </div>
+              <div id="igPending" class="ig-pending" hidden></div>
+
+              <form id="dmForm" class="ig-compose">
+                <label class="ig-ibtn" aria-label="Kamera">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h3.5L8.5 4h7l2 3H21v13H3z"/><circle cx="12" cy="13" r="4"/></svg>
+                  <input id="dmCamera" type="file" accept="image/*" capture="environment" hidden>
+                </label>
+                <label class="ig-ibtn" aria-label="Şəkil göndər">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5.5-5.5L7 19"/></svg>
+                  <input id="dmImage" type="file" accept="image/*" hidden>
+                </label>
+                <label class="ig-ibtn" aria-label="Fayl göndər">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1L13.9 4.4a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L16 8.2"/></svg>
+                  <input id="dmFile" type="file" hidden>
+                </label>
+                <input id="dmText" placeholder="Mesaj yaz..." maxlength="2000" autocomplete="off">
+                <button type="submit" id="dmSend">Göndər</button>
+              </form>
+            </div>
+          </main>
+        </div>
+
+        <div id="igSheet" class="ig-sheet" hidden>
+          <div class="ig-sheet-box" id="igSheetBody"></div>
+        </div>
+      </section>
+
+      <section id="notificationsPage" class="page" hidden>
+        <h1>Bildirişlər</h1><div id="notificationList" class="stack"></div>
+      </section>
+
+      <section id="profilePage" class="page" hidden>
+        <h1>Mənim profilim</h1>
+        <div class="profile-card">
+          <div class="avatar-wrap"><img id="myAvatar" alt="Profil şəkli"><span id="avatarFallback">?</span></div>
+          <label class="file-label">Profil şəklini dəyiş<input id="avatarFile" type="file" accept="image/*"></label>
+          <h2 id="myUsername">@username</h2>
+          <div id="myStats" class="stats"></div>
+          <textarea id="myBio" maxlength="160" placeholder="Özün haqqında yaz..."></textarea>
+          <button id="saveBio" class="primary full">Profili yadda saxla</button>
+          <p id="profileStatus" class="status"></p>
+          <button id="logoutButton" class="secondary full">Çıxış</button>
+        </div>
+      </section>
+
+      <section id="publicProfilePage" class="page" hidden>
+        <button id="backFromPublic" class="text-button">← Geri</button>
+        <div id="publicProfile" class="profile-card"></div>
+        <div id="publicPosts" class="feed"></div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button data-page="home" class="nav-item active"><span>⌂</span>Ana səhifə</button>
+      <button data-page="discover" class="nav-item"><span>⌕</span>Axtarış</button>
+      <button data-page="messages" class="nav-item"><span>✉</span>Mesajlar</button>
+      <button data-page="notifications" class="nav-item"><span>♡</span>Bildiriş</button>
+      <button data-page="profile" class="nav-item"><span>◉</span>Profil</button>
+    </nav>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js?v=20261101dm"></script>
+  <script src="calls.js?v=1"></script>
+</body>
+</html>
