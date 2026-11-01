@@ -161,7 +161,7 @@ for (const [incoming, outgoing] of Object.entries(callEvents)) {
     if (!data || typeof data.conversationId !== "string") return;
     const target = getCallPeer(data.conversationId);
     if (!target) return;
-    if (incoming === "call:invite" && !onlineUsers.has(target)) push.send(target, "call", name);
+    if (incoming === "call:invite") push.send(target, "call", name);
 
     io.to(`user:${target}`).emit(outgoing, {
       conversationId: data.conversationId,
@@ -625,7 +625,7 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
         io.to(`user:${to}`).emit("newMessage", { conversationId: convo.id });
         addNotification(to, currentUser(req), "message");
         console.log("PUSH msg to", to, "online:", onlineUsers.has(to));
-        if (!onlineUsers.has(to)) push.send(to, "message", currentUser(req));
+        push.send(to, "message", currentUser(req));
     });
     res.json(message);
 });
