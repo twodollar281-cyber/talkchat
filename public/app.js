@@ -66,7 +66,7 @@ $("authForm").addEventListener("submit", async e => {
 function enterApp() {
   $("authPage").hidden = true; $("app").hidden = false;
   socket.connect(); showPage("home");
-  setTimeout(() => { try { /* registerPush(); */ } catch(e) { console.error(e); } }, 4000);
+  setTimeout(() => { try { registerPush(); } catch(e) { console.error(e); } }, 4000);
 }
 
 // ---- Push bildirişləri (yalnız Android tətbiqində) ----
@@ -89,7 +89,7 @@ async function registerPush() {
     PN.addListener("registrationError", e => console.error("Push qeydiyyat xətası:", e));
     const perm = await PN.requestPermissions();
     if (perm.receive !== "granted") return;
-    await PN.register();
+    /* await PN.register(); */
   } catch(e) { console.error("Push xətası:", e); }
 }
 async function checkSession() {
