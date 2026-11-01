@@ -97,6 +97,34 @@ io.use((socket, next) => {
 });
 // TALKCHAT_PRESENCE_READ_V1
 const onlineUsers = new Map();
+const lastSeenMap = new Map();
+
+// Mesajın önizlemesi (söhbət siyahısında göstərilir)
+function previewOf(m) {
+    if (m.deleted) return "Mesaj silindi";
+    if (m.text) return m.text;
+    if ((m.attachmentType || "").startsWith("image/")) return "📷 Şəkil";
+    return "📎 " + (m.attachmentName || "Fayl");
+}
+
+// İstifadəçi qoşulanda ona gələn, hələ çatdırılmamış mesajları "çatdırıldı" edir
+function deliverPending(name) {
+    const ids = new Set(conversations().filter(c => c.participants.includes(name)).map(c => c.id));
+    const list = messages();
+    const notify = new Map();
+    let changed = false;
+    for (const m of list) {
+        if (!m.deliveredAt && m.from !== name && ids.has(m.conversationId)) {
+            m.deliveredAt = new Date().toISOString();
+            changed = true;
+            notify.set(m.from + "|" + m.conversationId, { to: m.from, conversationId: m.conversationId });
+        }
+    }
+    if (changed) {
+        saveMessages(list);
+        notify.forEach(v => io.to(`user:${v.to}`).emit("messagesChanged", { conversationId: v.conversationId }));
+    }
+}
 
 io.on("connection", socket => {
     const name = socket.request.session.username;
@@ -148,10 +176,20 @@ for (const [incoming, outgoing] of Object.entries(callEvents)) {
     });
     socket.on("leaveTalkRoom", roomId => socket.leave("talk-room:" + roomId));
 
+    deliverPending(name);
+    socket.on("typing", data => {
+        if (!data || typeof data.conversationId !== "string") return;
+        const convo = conversations().find(c => c.id === data.conversationId && c.participants.includes(name));
+        if (!convo) return;
+        convo.participants.filter(p => p !== name).forEach(p =>
+            io.to(`user:${p}`).emit("typing", { conversationId: convo.id, from: name }));
+    });
+
     socket.on("disconnect", () => {
         const count = Math.max(0, (onlineUsers.get(name) || 1) - 1);
         if (count === 0) {
             onlineUsers.delete(name);
+            lastSeenMap.set(name, new Date().toISOString());
             io.emit("presenceUpdate", {
                 username: name,
                 online: false,
@@ -515,13 +553,20 @@ app.get("/api/conversations", requireAuth, (req, res) => {
     const me = currentUser(req);
     const allMessages = messages();
     res.json(conversations().filter(c => c.participants.includes(me)).map(c => {
-        const last = allMessages.filter(m => m.conversationId === c.id).slice(-1)[0] || null;
+        const mine = allMessages.filter(m => m.conversationId === c.id);
+        const last = mine[mine.length - 1] || null;
+        const reads = c.reads || {};
+        const readAt = reads[me] ? new Date(reads[me]).getTime() : 0;
+        const unread = mine.filter(m => m.from !== me && !m.deleted && new Date(m.createdAt).getTime() > readAt).length;
         return {
             id: c.id, type: c.type,
             name: c.type === "group" ? c.name : c.participants.find(x => x !== me),
             participants: c.participants,
-            lastMessage: last ? (last.text || last.attachmentName || "Fayl") : "",
-            lastMessageAt: last ? last.createdAt : ""
+            lastMessage: last ? previewOf(last) : "",
+            lastMessageAt: last ? last.createdAt : "",
+            lastFrom: last ? last.from : "",
+            unread,
+            reads
         };
     }));
 });
@@ -557,11 +602,17 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
     const text = String(req.body.text || "").trim().slice(0, 2000);
     if (!text && !req.file) return res.status(400).json({ error: "Mesaj boş ola bilməz." });
+    const replyId = String(req.body.replyTo || "");
+    const replyTarget = replyId ? messages().find(m => m.id === replyId && m.conversationId === convo.id) : null;
+    const recipients = convo.participants.filter(x => x !== currentUser(req));
     const message = {
         id: crypto.randomUUID(), conversationId: convo.id, from: currentUser(req), text,
         attachment: req.file ? `/uploads/${req.file.filename}` : "",
         attachmentName: req.file ? req.file.originalname.slice(0, 100) : "",
         attachmentType: req.file ? req.file.mimetype : "",
+        replyTo: replyTarget ? replyTarget.id : "",
+        deleted: false,
+        deliveredAt: recipients.some(to => onlineUsers.has(to)) ? new Date().toISOString() : "",
         createdAt: new Date().toISOString()
     };
     const list = messages(); list.push(message); saveMessages(list);
@@ -572,6 +623,40 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
     res.json(message);
 });
 
+
+// Söhbəti oxunmuş et (karşı tərəf "Göründü" görür)
+app.post("/api/conversations/:id/read", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const list = conversations();
+    const convo = list.find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    convo.reads = { ...(convo.reads || {}), [me]: new Date().toISOString() };
+    saveConversations(list);
+    convo.participants.filter(x => x !== me).forEach(to =>
+        io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
+    res.json({ ok: true });
+});
+
+// Öz mesajını sil (mətn və fayl təmizlənir, "Mesaj silindi" qalır)
+app.delete("/api/conversations/:id/messages/:mid", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    const list = messages();
+    const m = list.find(x => x.id === req.params.mid && x.conversationId === convo.id);
+    if (!m) return res.status(404).json({ error: "Mesaj tapılmadı." });
+    if (m.from !== me) return res.status(403).json({ error: "Yalnız öz mesajını silə bilərsən." });
+    if (m.attachment) fs.unlink(path.join(UPLOADS, path.basename(m.attachment)), () => {});
+    Object.assign(m, { deleted: true, text: "", attachment: "", attachmentName: "", attachmentType: "" });
+    saveMessages(list);
+    convo.participants.forEach(to => io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
+    res.json({ ok: true });
+});
+
+// Aktiv istifadəçilər və son görülmə vaxtları
+app.get("/api/presence", requireAuth, (req, res) => {
+    res.json({ online: [...onlineUsers.keys()], lastSeen: Object.fromEntries(lastSeenMap) });
+});
 
 // TALKCHAT_STORIES_V1
 app.get("/api/stories", requireAuth, (req, res) => {

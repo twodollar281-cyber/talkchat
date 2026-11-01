@@ -228,7 +228,7 @@ async function loadTalkChatExtras() {
         </form>
         <div id="tcRequests"></div>
       </div>`;
-    page.prepend(root);
+    (document.getElementById("tcExtrasSlot") || page).prepend(root);
 
     $("tcStoryForm").onsubmit = async e => {
       e.preventDefault();
@@ -332,203 +332,6 @@ async function loadTalkChatExtras() {
   } catch(err) {
     $("tcRequests").textContent = err.message;
   }
-}
-
-async function loadConversations(){
-  try{
-    conversationsCache = await api("/api/conversations");
-
-    const profiles = await Promise.all(conversationsCache.map(async c => {
-      if(c.type === "group") return null;
-      try {
-        return await api("/api/users/" + encodeURIComponent(c.name));
-      } catch {
-        return { username: c.name, avatar: "" };
-      }
-    }));
-
-    $("conversationList").innerHTML = conversationsCache.map((c, i) => {
-      const user = profiles[i];
-      const name = c.type === "group" ? (c.name || "Qrup") : (user?.username || c.name || "İstifadəçi");
-      const avatar = c.type === "group"
-        ? '<div class="tc-avatar-fallback">👥</div>'
-        : user?.avatar
-          ? '<img class="tc-conversation-avatar" src="' + esc(user.avatar) + '" alt="">'
-          : '<div class="tc-avatar-fallback">' + esc(name.charAt(0).toUpperCase()) + '</div>';
-
-      const subtitle = c.lastMessage || (c.type === "group"
-        ? "Qrup söhbəti · " + c.participants.length + " iştirakçı"
-        : "Şəxsi söhbət");
-      const lastTime = c.lastMessageAt
-        ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})
-        : "";
-
-      return '<button class="conversation-item tc-conversation-item ' +
-        (activeConversation === c.id ? "active" : "") +
-        '" data-convo="' + esc(c.id) + '">' +
-        avatar +
-        '<span class="tc-conversation-info">' +
-        '<b class="tc-conversation-name">' + esc(name) + '</b>' +
-        '<small class="tc-conversation-preview">' + esc(subtitle) + '</small>' +
-        '<small class="tc-conversation-time">' + esc(lastTime) + '</small>' +
-        '</span></button>';
-    }).join("") || "<p class='muted'>Hələ söhbət yoxdur.</p>";
-  }catch(e){$("conversationList").textContent=e.message;}
-}
-$("conversationList").onclick=e=>{
-  const b=e.target.closest("[data-convo]");if(b)openConversation(b.dataset.convo);
-};
-async function openConversation(id){
-  activeConversation=id;const c=conversationsCache.find(x=>x.id===id);
-  $("chatTitle").textContent=c?.name||"Söhbət";
-  $("messagesPage").classList.add("tc-chat-open");
-  const chatHeader = $("chatTitle").parentElement;
-  if (chatHeader && !document.getElementById("tcMobileBack")) {
-    const back = document.createElement("button");
-    back.id = "tcMobileBack";
-    back.className = "tc-mobile-back";
-    back.type = "button";
-    back.textContent = "‹";
-    back.setAttribute("aria-label", "Söhbətlərə qayıt");
-    back.onclick = () => $("messagesPage").classList.remove("tc-chat-open");
-    chatHeader.prepend(back);
-  }
-  try{
-    const list=await api("/api/conversations/"+id+"/messages");
-    $("chatMessages").innerHTML=list.map(messageHTML).join("");
-    $("chatMessages").scrollTop=$("chatMessages").scrollHeight;
-    loadConversations();
-  }catch(e){$("chatMessages").textContent=e.message;}
-}
-function messageHTML(m){
-  const attachment=m.attachment?`<p><a href="${esc(m.attachment)}" target="_blank" rel="noopener">📎 ${esc(m.attachmentName||"Faylı aç")}</a></p>`:"";
-  return `<div class="chat-bubble ${m.from===me?"mine":""}"><b>@${esc(m.from)}</b><div>${esc(m.text||"")}</div>${attachment}<small>${new Date(m.createdAt).toLocaleTimeString("az-AZ")}</small></div>`;
-}
-
-
-// TALKCHAT_DIRECT_CLICK_FIX
-document.addEventListener("click", async function(e) {
-  const btn = e.target.closest("button[data-direct-user]");
-  if (!btn) return;
-  e.preventDefault();
-  e.stopPropagation();
-  if (btn.dataset.busy === "1") return;
-  btn.dataset.busy = "1";
-
-  try {
-    const c = await api("/api/conversations/direct", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({username: btn.dataset.directUser})
-    });
-    if (!c || !c.id) throw new Error("Söhbət yaradıla bilmədi.");
-    directSearch.value = "";
-    directResults.innerHTML = "";
-    await loadConversations();
-    await openConversation(c.id);
-  } catch (err) {
-    alert(err.message);
-  } finally {
-    btn.dataset.busy = "0";
-  }
-}, true);
-
-
-// TALKCHAT_DM_SUBMIT_CAPTURE_V1
-document.addEventListener("submit", async function(e) {
-  const form = e.target;
-  if (!form || form.id !== "dmForm") return;
-
-  e.preventDefault();
-  e.stopPropagation();
-  e.stopImmediatePropagation();
-
-  if (form.dataset.sending === "1") return;
-
-  const conversationId = activeConversation;
-  if (!conversationId) {
-    alert("Əvvəlcə söhbət seç.");
-    return;
-  }
-
-  const text = $("dmText").value;
-  const file = $("dmFile").files[0];
-
-  if (!text.trim() && !file) return;
-
-  form.dataset.sending = "1";
-  const button = form.querySelector('button[type="submit"]');
-  if (button) button.disabled = true;
-
-  try {
-    const fd = new FormData();
-    fd.append("text", text);
-    if (file) fd.append("file", file);
-
-    await api("/api/conversations/" + conversationId + "/messages", {
-      method: "POST",
-      body: fd
-    });
-
-    $("dmText").value = "";
-    $("dmFile").value = "";
-    await openConversation(conversationId);
-  } catch (err) {
-    alert(err.message || "Mesaj göndərilmədi.");
-  } finally {
-    form.dataset.sending = "0";
-    if (button) button.disabled = false;
-  }
-}, true);
-
-// TALKCHAT_DIRECT_LANGUAGE_V3
-const directSearch = $("dmSearch");
-const directResults = $("dmSearchResults");
-
-if (directSearch && directResults) {
-  directSearch.addEventListener("input", async () => {
-    const q = directSearch.value.trim();
-    if (q.length < 1) {
-      directResults.innerHTML = "";
-      return;
-    }
-    try {
-      const found = await api("/api/search?q=" + encodeURIComponent(q));
-      directResults.innerHTML = found
-        .filter(u => u.username !== me)
-        .map(u => `
-          <div class="user-row">
-            ${avatarHTML(u)}
-            <div class="user-info"><b>@${esc(u.username)}</b></div>
-            <button type="button" class="primary" data-direct-user="${esc(u.username)}">Mesaj yaz</button>
-          </div>`).join("") || '<p class="muted">İstifadəçi tapılmadı.</p>';
-    } catch (e) {
-      directResults.textContent = e.message;
-    }
-  });
-
-  directResults.addEventListener("click", async e => {
-    const btn = e.target.closest("[data-direct-user]");
-    if (!btn) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    try {
-      const c = await api("/api/conversations/direct", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({username: btn.dataset.directUser})
-      });
-
-      directSearch.value = "";
-      directResults.innerHTML = "";
-      await loadConversations();
-      openConversation(c.id);
-    } catch (e) {
-      alert(e.message);
-    }
-  });
 }
 
 const languageSelect = $("talkLanguage");
@@ -729,30 +532,6 @@ const talkLanguageObserver = new MutationObserver(records => {
 });
 talkLanguageObserver.observe(document.body, {childList:true, subtree:true});
 
-$("startDM").onclick=async()=>{
-  try{const c=await api("/api/conversations/direct",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:$("dmUsername").value})});await loadConversations();openConversation(c.id);}
-  catch(e){alert(e.message);}
-};
-$("dmForm").onsubmit=async e=>{
-  e.preventDefault();if(!activeConversation)return alert("Əvvəlcə söhbət seç.");
-  try{
-    const fd=formDataFile("file",$("dmFile").files[0],{text:$("dmText").value});
-    await api("/api/conversations/"+activeConversation+"/messages",{method:"POST",body:fd});
-    $("dmText").value="";$("dmFile").value="";openConversation(activeConversation);
-  }catch(err){alert(err.message);}
-};
-$("createGroup").onclick=async()=>{
-  try{
-    const usernames=$("groupMembers").value.split(",").map(x=>x.trim()).filter(Boolean);
-    const c=await api("/api/conversations/group",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:$("groupName").value,usernames})});
-    $("groupName").value="";$("groupMembers").value="";await loadConversations();openConversation(c.id);
-  }catch(e){alert(e.message);}
-};
-socket.on("newMessage",data=>{
-  if(activeConversation===data.conversationId)openConversation(activeConversation);
-  if(!$("messagesPage").hidden)loadConversations();
-});
-
 async function loadFriendCenter() {
   const box = $("friendCenter");
   if (!box) return;
@@ -861,10 +640,398 @@ socket.on("presenceUpdate", data => {
   });
 });
 
-socket.on("newMessage", data => {
-  if (activeConversation === data.conversationId) {
-    openConversation(activeConversation);
-  }
-  if (!$("messagesPage").hidden) loadConversations();
-});
+/* =====================================================================
+   TALKCHAT DIRECT — Instagram tipli mesajlaşma
+   Söhbət siyahısı, axtarış, cavab, silmə, oxundu/çatdırıldı, aktivlik,
+   yazır göstəricisi, şəkil/kamera/fayl göndərmə.
+   Socket və səsli zəng (calls.js) ilə uyğun işləyir.
+   ===================================================================== */
+const IG = { profiles: new Map(), online: new Set(), lastSeen: {}, msgs: [], replyTo: null, pendingFile: null, typers: {}, lastTyping: 0 };
+const igEl = id => document.getElementById(id);
+const igSvg = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const IGI = {
+  cam: igSvg('<path d="M3 7h3.5L8.5 4h7l2 3H21v13H3z"/><circle cx="12" cy="13" r="4"/>'),
+  img: igSvg('<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5.5-5.5L7 19"/>'),
+  clip: igSvg('<path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1L13.9 4.4a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L16 8.2"/>'),
+  x: igSvg('<path d="M6 6l12 12M18 6L6 18"/>'),
+};
 
+function igAv(name, avatar, small) {
+  const init = esc(String(name || "?").charAt(0).toUpperCase());
+  return `<span class="ig-av${small ? " sm" : ""}">${avatar ? `<img src="${esc(avatar)}" alt="">` : `<b>${init}</b>`}</span>`;
+}
+function igIsOnline(name) { return IG.online.has(name); }
+function igAgo(ts) {
+  const s = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (s < 60) return "indicə";
+  if (s < 3600) return Math.floor(s / 60) + " dəq əvvəl";
+  if (s < 86400) return Math.floor(s / 3600) + " saat əvvəl";
+  return Math.floor(s / 86400) + " gün əvvəl";
+}
+function igStatus(name) {
+  if (igIsOnline(name)) return "Aktivdir";
+  const t = IG.lastSeen[name];
+  return t ? "Son görülmə: " + igAgo(t) : "";
+}
+async function igProfile(name) {
+  if (!name) return { username: name, avatar: "" };
+  if (IG.profiles.has(name)) return IG.profiles.get(name);
+  let p;
+  try { p = await api("/api/users/" + encodeURIComponent(name)); } catch { p = { username: name, avatar: "" }; }
+  IG.profiles.set(name, p);
+  return p;
+}
+function igConv() { return conversationsCache.find(c => c.id === activeConversation) || null; }
+function igShort(m) {
+  if (!m) return "Mesaj";
+  if (m.deleted) return "Mesaj silindi";
+  if (m.text) return m.text.length > 60 ? m.text.slice(0, 60) + "…" : m.text;
+  if ((m.attachmentType || "").startsWith("image/")) return "📷 Şəkil";
+  return "📎 " + (m.attachmentName || "Fayl");
+}
+function igDayLabel(ts) {
+  const d = new Date(ts), now = new Date(), y = new Date(now);
+  y.setDate(now.getDate() - 1);
+  if (d.toDateString() === now.toDateString()) return "Bu gün";
+  if (d.toDateString() === y.toDateString()) return "Dünən";
+  return d.toLocaleDateString("az-AZ", { day: "numeric", month: "long", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+}
+const igTime = ts => new Date(ts).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" });
+
+/* ---------- söhbət siyahısı ---------- */
+async function loadConversations() {
+  try {
+    conversationsCache = await api("/api/conversations");
+    await Promise.all(conversationsCache.map(c => (c.type === "group" ? null : igProfile(c.name))));
+    const pr = await api("/api/presence");
+    IG.online = new Set(pr.online || []);
+    IG.lastSeen = pr.lastSeen || {};
+    igEl("igMe").textContent = "@" + me;
+    igRenderList();
+    igRenderHead();
+  } catch (e) {
+    igEl("conversationList").textContent = e.message;
+  }
+}
+
+function igRenderList() {
+  const q = (igEl("dmSearch").value || "").trim().toLowerCase();
+  const list = conversationsCache.filter(c => !q || String(c.name || "").toLowerCase().includes(q));
+  igEl("conversationList").innerHTML = list.length
+    ? list.map(c => {
+        const group = c.type === "group";
+        const name = group ? (c.name || "Qrup") : (c.name || "");
+        const p = group ? null : IG.profiles.get(c.name);
+        const on = !group && igIsOnline(c.name);
+        const prev = c.lastMessage ? (c.lastFrom === me ? "Sən: " : "") + c.lastMessage : (group ? "Qrup söhbəti" : "Söhbətə başla");
+        return `<button type="button" class="ig-item${c.unread ? " unread" : ""}${c.id === activeConversation ? " on" : ""}" data-convo="${esc(c.id)}">
+          <span class="ig-avw">${group ? igAv("Q") : igAv(name, p && p.avatar)}${on ? '<i class="ig-dot"></i>' : ""}</span>
+          <span class="ig-mid"><span class="ig-name">${esc(name)}</span><span class="ig-prev">${esc(prev)}</span></span>
+          ${c.unread ? `<span class="ig-badge">${c.unread > 99 ? "99+" : c.unread}</span>` : ""}
+        </button>`;
+      }).join("")
+    : `<p class="ig-none">${q ? "Nəticə tapılmadı" : "Hələ söhbət yoxdur"}</p>`;
+}
+
+/* ---------- söhbət başlığı ---------- */
+function igRenderHead() {
+  const c = igConv();
+  if (!c) return;
+  const group = c.type === "group";
+  const name = group ? (c.name || "Qrup") : c.name;
+  const p = group ? null : IG.profiles.get(c.name);
+  igEl("chatTitle").textContent = name;
+  igEl("chatAv").innerHTML = group ? igAv("Q") : igAv(name, p && p.avatar, true);
+  const typing = IG.typers[c.id] && Date.now() < IG.typers[c.id];
+  const sub = typing ? "yazır…" : group ? c.participants.length + " iştirakçı" : igStatus(c.name);
+  igEl("chatSub").textContent = sub;
+  igEl("chatSub").classList.toggle("on", !typing && !group && igIsOnline(c.name));
+}
+
+/* ---------- mesajlar ---------- */
+async function igLoadMessages(markRead) {
+  const id = activeConversation;
+  if (!id) return;
+  try {
+    const list = await api("/api/conversations/" + id + "/messages");
+    if (id !== activeConversation) return;
+    IG.msgs = list;
+    igRenderMsgs();
+    if (markRead) {
+      await api("/api/conversations/" + id + "/read", { method: "POST" }).catch(() => {});
+      loadConversations();
+    }
+  } catch (e) {
+    igEl("chatMessages").textContent = e.message;
+  }
+}
+
+function igReceipt(m, c) {
+  const seenAt = c.reads && c.reads[c.name];
+  if (seenAt && new Date(seenAt) >= new Date(m.createdAt)) return "Göründü";
+  return m.deliveredAt ? "Çatdırıldı" : "Göndərildi";
+}
+
+function igBubble(m, byId) {
+  if (m.deleted) return '<span class="ig-bub del"><i class="ig-del">Mesaj silindi</i></span>';
+  let quote = "";
+  if (m.replyTo) {
+    const r = byId.get(m.replyTo);
+    quote = `<span class="ig-quote"><b>${esc(r ? (r.from === me ? "Sən" : "@" + r.from) : "Mesaj")}</b>${esc(igShort(r))}</span>`;
+  }
+  const isImg = (m.attachmentType || "").startsWith("image/");
+  let body = "";
+  if (m.attachment) {
+    body += isImg
+      ? `<a href="${esc(m.attachment)}" target="_blank" rel="noopener"><img src="${esc(m.attachment)}" alt="Şəkil" loading="lazy"></a>`
+      : `<a class="ig-file" href="${esc(m.attachment)}" target="_blank" rel="noopener">📎 ${esc(m.attachmentName || "Fayl")}</a>`;
+  }
+  if (m.text) body += `<span class="ig-t">${esc(m.text)}</span>`;
+  const cls = m.attachment && isImg && !m.text ? " img" : "";
+  return `<span class="ig-bub${cls}">${quote}${body}</span>`;
+}
+
+function igRenderMsgs() {
+  const box = igEl("chatMessages");
+  const c = igConv();
+  if (!c) { box.innerHTML = ""; return; }
+  const list = IG.msgs;
+  const byId = new Map(list.map(m => [m.id, m]));
+  const mineList = list.filter(m => m.from === me);
+  const lastMine = mineList[mineList.length - 1];
+  let html = "", lastDay = "", prev = null;
+  for (const m of list) {
+    const day = new Date(m.createdAt).toDateString();
+    if (day !== lastDay) {
+      html += `<div class="ig-day">${igDayLabel(m.createdAt)} · ${igTime(m.createdAt)}</div>`;
+      lastDay = day; prev = null;
+    } else if (prev && new Date(m.createdAt) - new Date(prev.createdAt) > 3600000) {
+      html += `<div class="ig-day">${igTime(m.createdAt)}</div>`;
+      prev = null;
+    }
+    const mineMsg = m.from === me;
+    const cont = prev && prev.from === m.from && new Date(m.createdAt) - new Date(prev.createdAt) < 300000;
+    html += `<div class="ig-row${mineMsg ? " me" : ""}${cont ? " cont" : ""}" data-mid="${esc(m.id)}">${igBubble(m, byId)}</div>`;
+    if (mineMsg && lastMine && m.id === lastMine.id && c.type !== "group") html += `<div class="ig-rcpt">${igReceipt(m, c)}</div>`;
+    prev = m;
+  }
+  box.innerHTML = html || '<p class="ig-none">Hələ mesaj yoxdur. İlk mesajı sən yaz!</p>';
+  box.scrollTop = box.scrollHeight;
+  box.querySelectorAll("img").forEach(img => img.addEventListener("load", () => (box.scrollTop = box.scrollHeight), { once: true }));
+}
+
+async function openConversation(id) {
+  activeConversation = id;
+  IG.replyTo = null;
+  IG.pendingFile = null;
+  igRenderReply();
+  igRenderPending();
+  igEl("messagesPage").classList.add("tc-chat-open");
+  igRenderHead();
+  igRenderList();
+  igEl("chatMessages").innerHTML = '<p class="ig-none">Yüklənir…</p>';
+  await igLoadMessages(true);
+  igRenderList();
+}
+
+function igRenderReply() {
+  const r = IG.replyTo;
+  igEl("igReply").hidden = !r;
+  if (r) igEl("igReplyText").innerHTML = `<b>${esc(r.from === me ? "Özünə" : "@" + r.from)}</b> ${esc(igShort(r))}`;
+}
+function igRenderPending() {
+  const f = IG.pendingFile;
+  igEl("igPending").hidden = !f;
+  if (f) igEl("igPending").innerHTML = `<span>📎 ${esc(f.name)}</span><button type="button" id="igPendingX" class="ig-hbtn" aria-label="Sil">${IGI.x}</button>`;
+}
+
+/* ---------- mesaj menyusu (bubble-a toxunduqda) ---------- */
+function igOpenSheet(mid) {
+  const m = IG.msgs.find(x => x.id === mid);
+  if (!m) return;
+  const acts = [["reply", "Cavab ver"]];
+  if (m.text) acts.push(["copy", "Mətni kopyala"]);
+  if (m.from === me) acts.push(["del", "Mesajı sil", "danger"]);
+  igEl("igSheetBody").innerHTML =
+    acts.map(([a, t, k]) => `<button type="button" class="ig-sheet-btn${k ? " danger" : ""}" data-a="${a}" data-mid="${esc(m.id)}">${t}</button>`).join("") +
+    '<button type="button" class="ig-sheet-btn cancel" data-a="close">Bağla</button>';
+  igEl("igSheet").hidden = false;
+}
+
+/* ---------- göndərmə ---------- */
+async function igSendTo(text) {
+  const fd = new FormData();
+  fd.append("text", text);
+  if (IG.replyTo) fd.append("replyTo", IG.replyTo.id);
+  if (IG.pendingFile) fd.append("file", IG.pendingFile);
+  return api("/api/conversations/" + activeConversation + "/messages", { method: "POST", body: fd });
+}
+
+async function igStartWith(username) {
+  const c = await api("/api/conversations/direct", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username }) });
+  igEl("dmSearch").value = "";
+  igEl("dmSearchResults").innerHTML = "";
+  await loadConversations();
+  await openConversation(c.id);
+}
+
+/* ---------- hadisələr ---------- */
+(function igBind() {
+  igEl("conversationList").addEventListener("click", e => {
+    const b = e.target.closest("[data-convo]");
+    if (b) openConversation(b.dataset.convo);
+  });
+
+  igEl("chatMessages").addEventListener("click", e => {
+    if (e.target.closest("a")) return;
+    const row = e.target.closest("[data-mid]");
+    if (row) igOpenSheet(row.dataset.mid);
+  });
+
+  igEl("igSheet").addEventListener("click", async e => {
+    if (e.target.id === "igSheet") { igEl("igSheet").hidden = true; return; }
+    const b = e.target.closest("[data-a]");
+    if (!b) return;
+    igEl("igSheet").hidden = true;
+    const a = b.dataset.a;
+    if (a === "close") return;
+    const m = IG.msgs.find(x => x.id === b.dataset.mid);
+    if (!m) return;
+    if (a === "reply") { IG.replyTo = m; igRenderReply(); igEl("dmText").focus(); }
+    if (a === "copy") { try { await navigator.clipboard.writeText(m.text); } catch { alert(m.text); } }
+    if (a === "del") {
+      if (!confirm("Mesaj silinsin?")) return;
+      try {
+        await api("/api/conversations/" + activeConversation + "/messages/" + m.id, { method: "DELETE" });
+        await igLoadMessages(false);
+        loadConversations();
+      } catch (err) { alert(err.message); }
+    }
+  });
+
+  igEl("igReplyX").onclick = () => { IG.replyTo = null; igRenderReply(); };
+  igEl("igPending").addEventListener("click", e => {
+    if (e.target.closest("#igPendingX")) { IG.pendingFile = null; igRenderPending(); }
+  });
+  igEl("tcMobileBack").onclick = () => {
+    igEl("messagesPage").classList.remove("tc-chat-open");
+    activeConversation = null;
+    igRenderList();
+  };
+  igEl("igInfo").onclick = () => {
+    const c = igConv();
+    if (c && c.type !== "group") openPublicProfile(c.name);
+  };
+
+  igEl("igNewBtn").onclick = igEl("igEmptyNew").onclick = () => {
+    const p = igEl("igNewChat");
+    p.hidden = !p.hidden;
+    if (!p.hidden) igEl("dmUsername").focus();
+  };
+  igEl("startDM").onclick = async () => {
+    const u = igEl("dmUsername").value.trim().replace(/^@/, "");
+    if (!u) return;
+    try {
+      await igStartWith(u);
+      igEl("dmUsername").value = "";
+      igEl("igNewChat").hidden = true;
+    } catch (e) { alert(e.message); }
+  };
+  igEl("createGroup").onclick = async () => {
+    try {
+      const usernames = igEl("groupMembers").value.split(",").map(x => x.trim()).filter(Boolean);
+      const c = await api("/api/conversations/group", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: igEl("groupName").value, usernames }) });
+      igEl("groupName").value = "";
+      igEl("groupMembers").value = "";
+      igEl("igNewChat").hidden = true;
+      await loadConversations();
+      await openConversation(c.id);
+    } catch (e) { alert(e.message); }
+  };
+
+  let searchT;
+  igEl("dmSearch").addEventListener("input", () => {
+    igRenderList();
+    clearTimeout(searchT);
+    const q = igEl("dmSearch").value.trim();
+    if (!q) { igEl("dmSearchResults").innerHTML = ""; return; }
+    searchT = setTimeout(async () => {
+      try {
+        const found = await api("/api/search?q=" + encodeURIComponent(q));
+        igEl("dmSearchResults").innerHTML = found.filter(u => u.username !== me).map(u =>
+          `<button type="button" class="ig-res" data-start="${esc(u.username)}">${igAv(u.username, u.avatar)}<span class="ig-mid"><span class="ig-name">${esc(u.username)}</span><span class="ig-prev">${esc(u.bio || "TalkChat istifadəçisi")}</span></span></button>`
+        ).join("") || '<p class="ig-none">İstifadəçi tapılmadı</p>';
+      } catch (e) { igEl("dmSearchResults").textContent = e.message; }
+    }, 250);
+  });
+  igEl("dmSearchResults").addEventListener("click", async e => {
+    const b = e.target.closest("[data-start]");
+    if (!b) return;
+    try { await igStartWith(b.dataset.start); } catch (err) { alert(err.message); }
+  });
+
+  igEl("dmForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+    const text = igEl("dmText").value.trim();
+    if (!text && !IG.pendingFile) return;
+    const btn = igEl("dmSend");
+    btn.disabled = true;
+    try {
+      await igSendTo(text);
+      igEl("dmText").value = "";
+      IG.replyTo = null;
+      IG.pendingFile = null;
+      igRenderReply();
+      igRenderPending();
+      await igLoadMessages(false);
+      loadConversations();
+    } catch (err) {
+      alert(err.message || "Mesaj göndərilmədi.");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  igEl("dmText").addEventListener("input", () => {
+    if (!activeConversation || Date.now() - IG.lastTyping < 2000) return;
+    IG.lastTyping = Date.now();
+    socket.emit("typing", { conversationId: activeConversation });
+  });
+
+  ["dmCamera", "dmImage", "dmFile"].forEach(id => igEl(id).addEventListener("change", e => {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+    IG.pendingFile = f;
+    igRenderPending();
+  }));
+
+  // Socket hadisələri
+  socket.on("newMessage", d => {
+    if (!d) return;
+    loadConversations();
+    if (d.conversationId === activeConversation) igLoadMessages(true);
+  });
+  socket.on("messagesChanged", async d => {
+    await loadConversations();
+    if (!d || !d.conversationId || d.conversationId === activeConversation) igLoadMessages(false);
+  });
+  socket.on("typing", d => {
+    if (!d || !d.conversationId) return;
+    IG.typers[d.conversationId] = Date.now() + 2500;
+    igRenderHead();
+    setTimeout(igRenderHead, 2600);
+  });
+  socket.on("presenceUpdate", d => {
+    if (!d || !d.username) return;
+    if (d.online) IG.online.add(d.username);
+    else {
+      IG.online.delete(d.username);
+      if (d.lastSeen) IG.lastSeen[d.username] = d.lastSeen;
+    }
+    igRenderList();
+    igRenderHead();
+  });
+})();
