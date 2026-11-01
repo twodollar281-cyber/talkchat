@@ -1,0 +1,96 @@
+/* TALKCHAT_CALLS_V3 arayüzü */
+#tccBox.tcc {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(134, 77, 225, .34), transparent 55%),
+    radial-gradient(ellipse at 90% 100%, rgba(83, 45, 145, .25), transparent 45%),
+    #0d0a17;
+}
+#tccBox.tcc[hidden] { display: none !important; }
+
+#tccBox .tcc-video {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+  background: #000;
+}
+#tccBox .tcc-video[hidden] { display: none !important; }
+
+#tccBox .tcc-mid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  text-align: center;
+}
+#tccBox .tcc-avatar {
+  width: 112px;
+  height: 112px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 46px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #b18aff, #6036ad);
+  border: 3px solid rgba(197, 163, 255, .55);
+  box-shadow: 0 0 40px rgba(155, 114, 255, .35);
+}
+#tccBox .tcc-name { font-size: 26px; font-weight: 800; letter-spacing: -.4px; }
+#tccBox .tcc-status { color: #c9bfd8; font-size: 16px; font-variant-numeric: tabular-nums; margin: 0; }
+#tccBox .tcc-note { color: #f5c451; font-size: 13px; min-height: 18px; margin: 0; }
+
+/* karşı taraf ekran paylaşırken: video büyük, kişi bilgisi üstte küçük */
+#tccBox.has-video .tcc-mid { order: -1; flex: none; flex-direction: row; justify-content: center; gap: 12px; padding: 8px 16px; }
+#tccBox.has-video .tcc-avatar { width: 36px; height: 36px; font-size: 15px; border-width: 2px; box-shadow: none; }
+#tccBox.has-video .tcc-name { font-size: 16px; }
+
+#tccBox .tcc-bar {
+  display: flex;
+  justify-content: center;
+  gap: 26px;
+  padding: 16px 16px calc(28px + env(safe-area-inset-bottom));
+}
+#tccBox.is-incoming .tcc-bar-call,
+#tccBox:not(.is-incoming) .tcc-bar-in { display: none; }
+
+/* TalkChat'in genel button/hover stillerini ezmek için ayrıntılı seçici */
+#tccBox button.tcc-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 74px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: #fff;
+  font-size: 12px;
+  transform: none;
+}
+#tccBox button.tcc-btn:hover { background: none; transform: none; }
+#tccBox .tcc-ic {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .1);
+  border: 1px solid rgba(190, 150, 255, .28);
+  transition: background .2s, transform .15s;
+}
+#tccBox button.tcc-btn:active .tcc-ic { transform: scale(.92); }
+#tccBox .tcc-ic svg { width: 28px; height: 28px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#tccBox button.tcc-btn.on .tcc-ic { background: #fff; color: #17102a; }
+#tccBox button.tcc-btn.end .tcc-ic { background: #ed4956; border-color: transparent; }
+#tccBox button.tcc-btn.ok .tcc-ic { background: #2ecc71; border-color: transparent; }

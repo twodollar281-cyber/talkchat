@@ -105,6 +105,43 @@ io.on("connection", socket => {
     onlineUsers.set(name, (onlineUsers.get(name) || 0) + 1);
     io.emit("presenceUpdate", { username: name, online: true });
 
+
+    
+const callEvents = {
+  "call:invite": "call:incoming",
+  "call:accept": "call:accepted",
+  "call:reject": "call:rejected",
+  "call:signal": "call:signal",
+  "call:end": "call:ended"
+};
+
+function getCallPeer(conversationId) {
+  const c = conversations().find(x =>
+    x.id === conversationId &&
+    x.type === "direct" &&
+    Array.isArray(x.participants) &&
+    x.participants.includes(name)
+  );
+  if (!c) return null;
+  return c.participants.find(p => p !== name) || null;
+}
+
+for (const [incoming, outgoing] of Object.entries(callEvents)) {
+  socket.on(incoming, data => {
+    if (!data || typeof data.conversationId !== "string") return;
+    const target = getCallPeer(data.conversationId);
+    if (!target) return;
+
+    io.to(`user:${target}`).emit(outgoing, {
+      conversationId: data.conversationId,
+      from: name,
+      to: target,
+      ...(data.signal ? { signal: data.signal } : {})
+    });
+  });
+}
+
+
     socket.on("joinTalkRoom", roomId => {
       const room = getRooms().find(r => r.id === roomId);
       if (room && roomMember(room, name)) socket.join("talk-room:" + roomId);
@@ -476,10 +513,17 @@ app.get("/api/notifications", requireAuth, (req, res) => {
 
 app.get("/api/conversations", requireAuth, (req, res) => {
     const me = currentUser(req);
-    res.json(conversations().filter(c => c.participants.includes(me)).map(c => ({
-        id: c.id, type: c.type, name: c.type === "group" ? c.name : c.participants.find(x => x !== me),
-        participants: c.participants
-    })));
+    const allMessages = messages();
+    res.json(conversations().filter(c => c.participants.includes(me)).map(c => {
+        const last = allMessages.filter(m => m.conversationId === c.id).slice(-1)[0] || null;
+        return {
+            id: c.id, type: c.type,
+            name: c.type === "group" ? c.name : c.participants.find(x => x !== me),
+            participants: c.participants,
+            lastMessage: last ? (last.text || last.attachmentName || "Fayl") : "",
+            lastMessageAt: last ? last.createdAt : ""
+        };
+    }));
 });
 app.post("/api/conversations/direct", requireAuth, (req, res) => {
     const other = String((req.body || {}).username || "").replace(/^@/, "");

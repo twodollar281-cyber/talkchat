@@ -2884,3 +2884,341 @@ a { color: #c3a8ff; }
   .tc-instagram .tc-mobile-back { display:inline-grid!important; }
 }
 
+
+/* TALKCHAT ROOMS */
+#talkRoomsPanel {
+  margin-top: 14px;
+}
+#talkRoomList {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+}
+.talk-room-entry,
+.talk-room-message {
+  padding: 12px;
+  margin: 7px 0;
+  border-radius: 13px;
+  background: rgba(130, 75, 220, .10);
+  border: 1px solid rgba(150, 100, 230, .20);
+}
+.talk-room-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.talk-room-entry button,
+.talk-room-reactions button {
+  border: 0;
+  border-radius: 9px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+#talkRoomActive {
+  margin-top: 14px;
+}
+#talkRoomMessages {
+  max-height: 350px;
+  overflow-y: auto;
+  margin: 12px 0;
+}
+.talk-room-message p {
+  overflow-wrap: anywhere;
+  margin: 7px 0;
+}
+.talk-room-message small {
+  opacity: .65;
+}
+.talk-room-reactions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+#talkRoomForm {
+  display: flex;
+  gap: 7px;
+}
+#talkRoomText {
+  min-width: 0;
+  flex: 1;
+}
+
+#talkRoomsPanel {
+  margin-top: 4px !important;
+}
+.group-create + #talkRoomsPanel {
+  margin-top: 4px !important;
+}
+
+/* TALKCHAT MOBILE FIXED DIRECT LAYOUT */
+@media (max-width: 760px) {
+  #messagesPage.tc-instagram:not([hidden]) {
+    display: flex !important;
+    flex-direction: column;
+    width: 100%;
+    height: calc(100dvh - 70px - env(safe-area-inset-bottom));
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  #messagesPage .tc-ig-topbar {
+    flex: 0 0 60px;
+    min-height: 60px;
+  }
+
+  #messagesPage .tc-ig-workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    height: 0;
+    overflow: hidden;
+  }
+
+  #messagesPage .tc-ig-sidebar {
+    width: 100%;
+    min-height: 0;
+    height: 100%;
+    overflow-y: auto;
+  }
+
+  #messagesPage .tc-ig-chat {
+    display: none;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  #messagesPage.tc-chat-open .tc-ig-sidebar {
+    display: none;
+  }
+
+  #messagesPage.tc-chat-open .tc-ig-chat {
+    display: flex;
+  }
+
+  #messagesPage.tc-chat-open .tc-ig-chat-content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  #messagesPage .tc-ig-chat-header {
+    flex: 0 0 65px;
+  }
+
+  #messagesPage .tc-ig-messages {
+    flex: 1;
+    min-height: 0;
+    height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  #messagesPage .tc-ig-compose {
+    flex: 0 0 auto;
+    margin: 8px 9px;
+    min-height: 55px;
+  }
+
+  .bottom-nav {
+    position: fixed;
+    z-index: 100;
+    bottom: 0;
+  }
+}
+
+/* TALKCHAT DIRECT SIDEBAR SCROLL FIX */
+@media (max-width: 760px) {
+  #messagesPage:not([hidden]) .tc-ig-workspace {
+    display: flex !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  #messagesPage:not([hidden]) .tc-ig-sidebar {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+  }
+
+  #messagesPage:not([hidden]) .tc-ig-conversations {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 0 0 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  #messagesPage:not([hidden]) .tc-ig-conversations .tc-conversation-item {
+    flex: 0 0 76px !important;
+    min-height: 76px !important;
+    touch-action: pan-y;
+  }
+
+  #messagesPage.tc-chat-open .tc-ig-sidebar {
+    display: none !important;
+  }
+}
+
+/* TALKCHAT DIRECT UPDATE */
+.tc-ig-workspace,.tc-ig-sidebar,.tc-ig-chat{min-height:0}
+.tc-ig-sidebar,.tc-ig-conversations{
+ overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch
+}
+.tc-ig-chat-content{min-height:0;display:flex;flex-direction:column}
+.tc-ig-chat-header{flex:0 0 auto;position:sticky;top:0;z-index:5}
+.tc-ig-messages{min-height:0;flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.tc-ig-compose{flex:0 0 auto;position:sticky;bottom:0;z-index:5}
+.tc-conversation-time{margin-left:auto;white-space:nowrap;font-size:11px;opacity:.65}
+.bottom-nav{backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid rgba(255,255,255,.1)}
+.bottom-nav .nav-item{border:0;border-radius:14px;background:transparent}
+.bottom-nav .nav-item.active{background:rgba(145,90,255,.16);color:var(--primary,#a879ff)}
+.bottom-nav .nav-item span{display:block;font-size:21px;line-height:1.2}
+.tc-call-box{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:18px;background:#000b}
+.tc-call-box[hidden]{display:none}
+.tc-call-card{width:min(100%,380px);padding:24px;border-radius:22px;background:var(--card,#211b30);color:var(--text,#fff);text-align:center}
+.tc-call-buttons{display:flex;flex-wrap:wrap;justify-content:center;gap:9px;margin-top:18px}
+.tc-call-buttons button{border:0;border-radius:12px;padding:11px 14px;background:var(--primary,#8054db);color:white}
+
+
+
+/* TALKCHAT DIRECT MOBILE UPDATE */
+.talk-direct.tc-instagram {
+  min-height: 0;
+  overflow: hidden;
+}
+.tc-ig-workspace {
+  min-height: 0;
+  height: min(78vh, 820px);
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  overflow: hidden;
+  border-radius: 18px;
+}
+.tc-ig-sidebar {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.tc-ig-chat {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tc-ig-chat-header {
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+#chatMessages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+#dmForm {
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+}
+.tc-call-box[hidden] { display: none !important; }
+.tc-call-box {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(10,7,20,.8);
+  backdrop-filter: blur(12px);
+}
+.tc-call-card {
+  width: min(100%,390px);
+  padding: 28px 20px;
+  border: 1px solid rgba(180,140,255,.28);
+  border-radius: 24px;
+  text-align: center;
+  color: white;
+  background: linear-gradient(145deg,#211535,#11101b);
+}
+.tc-call-avatar {
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  font-size: 30px;
+  font-weight: 800;
+  background: linear-gradient(135deg,#a855f7,#6d28d9);
+}
+.tc-call-card strong { display: block; font-size: 21px; }
+.tc-call-card p { color: #c9bfd8; }
+.tc-call-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 20px;
+}
+.tc-call-buttons button {
+  border: 0;
+  border-radius: 12px;
+  padding: 11px 14px;
+  color: white;
+  background: #713bd1;
+  font-weight: 700;
+}
+@media (max-width:700px) {
+  .tc-ig-workspace {
+    height: calc(100dvh - 190px);
+    min-height: 360px;
+    display: block;
+    border-radius: 0;
+  }
+  .tc-ig-sidebar {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+  }
+  .tc-ig-chat {
+    display: none;
+    width: 100%;
+    height: 100%;
+  }
+  #messagesPage.tc-chat-open .tc-ig-sidebar { display: none; }
+  #messagesPage.tc-chat-open .tc-ig-chat { display: flex; }
+  .tc-ig-chat-header {
+    padding-top: max(10px,env(safe-area-inset-top));
+  }
+  #dmForm {
+    padding-bottom: max(8px,env(safe-area-inset-bottom));
+  }
+}

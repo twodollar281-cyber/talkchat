@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#171322">
   <title>TalkChat</title>
   <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="calls.css?v=1">
 </head>
 <body>
   <section id="authPage" class="auth-page">
@@ -113,21 +114,7 @@
         <input id="groupMembers" placeholder="İstifadəçi adları (vergüllə)">
         <button id="createGroup" class="primary" type="button">Qrup yarat</button>
       </details>\n
-      <details class="group-create tc-ig-group" id="talkRoomsPanel">
-        <summary>🌐 Otaqlar</summary>
-        <input id="talkRoomName" maxlength="40" placeholder="Yeni otağın adı">
-        <button id="talkRoomCreate" type="button">＋ Otaq yarat</button>
-        <div id="talkRoomList">Otaqlar yüklənir...</div>
-        <div id="talkRoomActive" hidden>
-          <b id="talkRoomTitle"></b>
-          <button id="talkRoomMembers" type="button">Üzvlər</button>
-          <div id="talkRoomMessages"></div>
-          <form id="talkRoomForm">
-            <input id="talkRoomText" maxlength="2000" placeholder="Mesaj yaz...">
-            <button type="submit">Göndər</button>
-          </form>
-        </div>
-      </details>
+      
 
     </aside>
 
@@ -147,7 +134,7 @@
             <small>TalkChat Direct</small>
           </div>
           <div class="tc-ig-chat-actions">
-            <button type="button" aria-label="Səsli zəng">⌕</button>
+            <button type="button" id="tcCallBtn" aria-label="Səsli zəng">☎</button>
             <button type="button" aria-label="Məlumat">ⓘ</button>
           </div>
         </header>
@@ -201,5 +188,6 @@
   </div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js?v=20261031b"></script>
+  <script src="calls.js?v=1"></script>
 </body>
 </html>

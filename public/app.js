@@ -356,9 +356,12 @@ async function loadConversations(){
           ? '<img class="tc-conversation-avatar" src="' + esc(user.avatar) + '" alt="">'
           : '<div class="tc-avatar-fallback">' + esc(name.charAt(0).toUpperCase()) + '</div>';
 
-      const subtitle = c.type === "group"
+      const subtitle = c.lastMessage || (c.type === "group"
         ? "Qrup söhbəti · " + c.participants.length + " iştirakçı"
-        : "Şəxsi söhbət";
+        : "Şəxsi söhbət");
+      const lastTime = c.lastMessageAt
+        ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})
+        : "";
 
       return '<button class="conversation-item tc-conversation-item ' +
         (activeConversation === c.id ? "active" : "") +
@@ -367,6 +370,7 @@ async function loadConversations(){
         '<span class="tc-conversation-info">' +
         '<b class="tc-conversation-name">' + esc(name) + '</b>' +
         '<small class="tc-conversation-preview">' + esc(subtitle) + '</small>' +
+        '<small class="tc-conversation-time">' + esc(lastTime) + '</small>' +
         '</span></button>';
     }).join("") || "<p class='muted'>Hələ söhbət yoxdur.</p>";
   }catch(e){$("conversationList").textContent=e.message;}
@@ -843,131 +847,6 @@ document.getElementById("directStoryRail")?.addEventListener("click", e => {
 checkSession();
 
 
-// TALKCHAT ROOMS FRONTEND
-(() => {
-  const $r = id => document.getElementById(id);
-  let activeTalkRoom = null;
-
-  async function refreshTalkRooms() {
-    const list = $r("talkRoomList");
-    if (!list) return;
-    try {
-      const rooms = await api("/api/rooms/discover");
-      list.innerHTML = rooms.length ? rooms.map(r => `
-        <div class="talk-room-entry">
-          <span><b>${esc(r.name)}</b> · ${r.memberCount} üzv</span>
-          <button type="button" data-room-open="${esc(r.id)}">${r.joined ? "Aç" : "Qoşul"}</button>
-        </div>`).join("") : "<p>Hələ otaq yoxdur. İlk otağı sən yarat!</p>";
-    } catch (e) {
-      list.textContent = e.message;
-    }
-  }
-
-  async function openTalkRoom(id) {
-    try {
-      const rooms = await api("/api/rooms/discover");
-      const room = rooms.find(r => r.id === id);
-      if (!room) throw new Error("Otaq tapılmadı.");
-      if (!room.joined) await api("/api/rooms/" + encodeURIComponent(id) + "/join", {method:"POST"});
-      if (activeTalkRoom) socket.emit("leaveTalkRoom", activeTalkRoom);
-      activeTalkRoom = id;
-      socket.emit("joinTalkRoom", id);
-      $r("talkRoomActive").hidden = false;
-      $r("talkRoomTitle").textContent = room.name;
-      await loadTalkRoomMessages();
-      await refreshTalkRooms();
-    } catch (e) { alert(e.message); }
-  }
-
-  async function loadTalkRoomMessages() {
-    if (!activeTalkRoom) return;
-    try {
-      const messages = await api("/api/rooms/" + encodeURIComponent(activeTalkRoom) + "/messages");
-      const box = $r("talkRoomMessages");
-      box.innerHTML = messages.map(m => {
-        const reactions = m.reactions || {};
-        return `<div class="talk-room-message">
-          <b>${esc(m.username)}</b>
-          <p>${esc(m.text)}</p>
-          <small>${new Date(m.createdAt).toLocaleString()}</small>
-          <div class="talk-room-reactions">
-            ${["❤️","😂","👍","🔥"].map(e => `<button type="button" data-room-react="${e}" data-message-id="${esc(m.id)}">${e} ${Array.isArray(reactions[e]) ? reactions[e].length : 0}</button>`).join("")}
-          </div>
-        </div>`;
-      }).join("") || "<p>İlk mesajı sən yaz!</p>";
-      box.scrollTop = box.scrollHeight;
-    } catch (e) { console.error(e); }
-  }
-
-  $r("talkRoomCreate")?.addEventListener("click", async () => {
-    const input = $r("talkRoomName");
-    try {
-      const room = await api("/api/rooms", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({name:input.value})
-      });
-      input.value = "";
-      await refreshTalkRooms();
-      await openTalkRoom(room.id);
-    } catch (e) { alert(e.message); }
-  });
-
-  $r("talkRoomList")?.addEventListener("click", e => {
-    const btn = e.target.closest("[data-room-open]");
-    if (btn) openTalkRoom(btn.dataset.roomOpen);
-  });
-
-  $r("talkRoomForm")?.addEventListener("submit", async e => {
-    e.preventDefault();
-    if (!activeTalkRoom) return;
-    const input = $r("talkRoomText");
-    const text = input.value.trim();
-    if (!text) return;
-    try {
-      await api("/api/rooms/" + encodeURIComponent(activeTalkRoom) + "/messages", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({text})
-      });
-      input.value = "";
-      await loadTalkRoomMessages();
-    } catch (err) { alert(err.message); }
-  });
-
-  $r("talkRoomMessages")?.addEventListener("click", async e => {
-    const btn = e.target.closest("[data-room-react]");
-    if (!btn || !activeTalkRoom) return;
-    try {
-      await api("/api/rooms/" + encodeURIComponent(activeTalkRoom) + "/messages/" +
-        encodeURIComponent(btn.dataset.messageId) + "/react", {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({emoji:btn.dataset.roomReact})
-        });
-      await loadTalkRoomMessages();
-    } catch (err) { alert(err.message); }
-  });
-
-  $r("talkRoomMembers")?.addEventListener("click", async () => {
-    if (!activeTalkRoom) return;
-    try {
-      const data = await api("/api/rooms/" + encodeURIComponent(activeTalkRoom) + "/members");
-      alert("Otağın üzvləri:\\n" + data.members.join("\\n"));
-    } catch (e) { alert(e.message); }
-  });
-
-  socket.on("roomMessage", message => {
-    if (activeTalkRoom === message.roomId) loadTalkRoomMessages();
-  });
-  socket.on("roomReaction", message => {
-    if (activeTalkRoom === message.roomId) loadTalkRoomMessages();
-  });
-
-  refreshTalkRooms();
-})();
-
-
 /* TALKCHAT_PRESENCE_CLIENT_V1 */
 const talkchatPresence = new Map();
 
@@ -988,3 +867,4 @@ socket.on("newMessage", data => {
   }
   if (!$("messagesPage").hidden) loadConversations();
 });
+
