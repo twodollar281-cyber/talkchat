@@ -89,8 +89,8 @@ async function registerPush() {
     PN.addListener("registrationError", e => console.error("Push qeydiyyat xətası:", e));
     const perm = await PN.requestPermissions();
     if (perm.receive !== "granted") return;
-    /* await PN.register(); */
-  } catch(e) { console.error("Push xətası:", e); }
+    await PN.register();
+  } catch(e) { alert("PUSH: " + (e && e.message ? e.message : JSON.stringify(e))); }
 }
 async function checkSession() {
   try {
