@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#171322">
   <title>TalkChat</title>
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
   <link rel="stylesheet" href="calls.css?v=1">
 </head>
 <body>
@@ -166,6 +166,14 @@
           <label class="file-label">Profil şəklini dəyiş<input id="avatarFile" type="file" accept="image/*"></label>
           <h2 id="myUsername">@username</h2>
           <div id="myStats" class="stats"></div>
+          <label class="lang-picker">Dil
+            <select id="talkLanguage">
+              <option value="tr">Türkiye (Recommended)</option>
+              <option value="az">Azərbaycan</option>
+              <option value="en">English</option>
+              <option value="ru">Русский</option>
+            </select>
+          </label>
           <textarea id="myBio" maxlength="160" placeholder="Özün haqqında yaz..."></textarea>
           <button id="saveBio" class="primary full">Profili yadda saxla</button>
           <p id="profileStatus" class="status"></p>
@@ -189,7 +197,7 @@
     </nav>
   </div>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="app.js?v=20261101dm"></script>
-  <script src="calls.js?v=1"></script>
+  <script src="app.js?v=20261101lang"></script>
+  <script src="calls.js?v=2"></script>
 </body>
 </html>

@@ -17,39 +17,39 @@
   /* ---------- metinler (tr / az / en) ---------- */
   const LANG = () => { try { return localStorage.getItem("talkchat-language") || "tr"; } catch { return "tr"; } };
   const S = {
-    calling:    { tr: "Aranıyor…", az: "Zəng edilir…", en: "Calling…" },
-    connecting: { tr: "Bağlanıyor…", az: "Qoşulur…", en: "Connecting…" },
-    incoming:   { tr: "Sesli arama", az: "Səsli zəng", en: "Voice call" },
-    accept:     { tr: "Cevapla", az: "Qəbul et", en: "Answer" },
-    decline:    { tr: "Reddet", az: "Rədd et", en: "Decline" },
-    mute:       { tr: "Sessize al", az: "Səssiz", en: "Mute" },
-    unmute:     { tr: "Sesi aç", az: "Səsi aç", en: "Unmute" },
-    share:      { tr: "Ekran paylaş", az: "Ekranı paylaş", en: "Share screen" },
-    stopShare:  { tr: "Paylaşımı durdur", az: "Paylaşımı dayandır", en: "Stop sharing" },
-    hangup:     { tr: "Bitir", az: "Bitir", en: "End" },
-    remoteMuted:{ tr: "Karşı taraf mikrofonu kapattı", az: "Qarşı tərəf mikrofonu bağladı", en: "They muted their microphone" },
-    youShare:   { tr: "Ekranını paylaşıyorsun", az: "Ekranını paylaşırsan", en: "You are sharing your screen" },
-    ended:      { tr: "Arama bitti", az: "Zəng bitdi", en: "Call ended" },
-    noAnswer:   { tr: "Yanıt vermedi", az: "Cavab vermədi", en: "No answer" },
-    declined:   { tr: "Arama reddedildi", az: "Zəng rədd edildi", en: "Call declined" },
-    dropped:    { tr: "Bağlantı koptu", az: "Bağlantı kəsildi", en: "Connection lost" },
-    weak:       { tr: "Bağlantı zayıf…", az: "Bağlantı zəifdir…", en: "Weak connection…" },
-    failed:     { tr: "Bağlantı kurulamadı", az: "Bağlantı qurulmadı", en: "Could not connect" },
+    calling:    { tr: "Aranıyor…", az: "Zəng edilir…", en: "Calling…", ru: "Вызов…" },
+    connecting: { tr: "Bağlanıyor…", az: "Qoşulur…", en: "Connecting…", ru: "Подключение…" },
+    incoming:   { tr: "Sesli arama", az: "Səsli zəng", en: "Voice call", ru: "Голосовой звонок" },
+    accept:     { tr: "Cevapla", az: "Qəbul et", en: "Answer", ru: "Ответить" },
+    decline:    { tr: "Reddet", az: "Rədd et", en: "Decline", ru: "Отклонить" },
+    mute:       { tr: "Sessize al", az: "Səssiz", en: "Mute", ru: "Без звука" },
+    unmute:     { tr: "Sesi aç", az: "Səsi aç", en: "Unmute", ru: "Включить звук" },
+    share:      { tr: "Ekran paylaş", az: "Ekranı paylaş", en: "Share screen", ru: "Поделиться экраном" },
+    stopShare:  { tr: "Paylaşımı durdur", az: "Paylaşımı dayandır", en: "Stop sharing", ru: "Остановить показ" },
+    hangup:     { tr: "Bitir", az: "Bitir", en: "End", ru: "Завершить" },
+    remoteMuted:{ tr: "Karşı taraf mikrofonu kapattı", az: "Qarşı tərəf mikrofonu bağladı", en: "They muted their microphone", ru: "Собеседник выключил микрофон" },
+    youShare:   { tr: "Ekranını paylaşıyorsun", az: "Ekranını paylaşırsan", en: "You are sharing your screen", ru: "Вы показываете экран" },
+    ended:      { tr: "Arama bitti", az: "Zəng bitdi", en: "Call ended", ru: "Звонок завершён" },
+    noAnswer:   { tr: "Yanıt vermedi", az: "Cavab vermədi", en: "No answer", ru: "Нет ответа" },
+    declined:   { tr: "Arama reddedildi", az: "Zəng rədd edildi", en: "Call declined", ru: "Звонок отклонён" },
+    dropped:    { tr: "Bağlantı koptu", az: "Bağlantı kəsildi", en: "Connection lost", ru: "Соединение прервано" },
+    weak:       { tr: "Bağlantı zayıf…", az: "Bağlantı zəifdir…", en: "Weak connection…", ru: "Слабое соединение…" },
+    failed:     { tr: "Bağlantı kurulamadı", az: "Bağlantı qurulmadı", en: "Could not connect", ru: "Не удалось соединиться" },
     micDenied:  { tr: "Mikrofon izni verilmedi. Tarayıcı ayarlarından mikrofona izin ver.",
                   az: "Mikrofon icazəsi verilmədi. Brauzer ayarlarından mikrofona icazə ver.",
-                  en: "Microphone permission was denied. Allow the microphone in your browser settings." },
+                  en: "Microphone permission was denied. Allow the microphone in your browser settings.", ru: "Нет доступа к микрофону. Разрешите его в настройках браузера." },
     needHttps:  { tr: "Sesli arama için güvenli bağlantı (HTTPS) gerekli.\n\nAynı cihazdaysan http://localhost kullan. Başka cihazdan bağlanıyorsan sunucuyu HTTPS ile aç.",
                   az: "Səsli zəng üçün təhlükəsiz bağlantı (HTTPS) lazımdır.\n\nEyni cihazdasansa http://localhost istifadə et. Başqa cihazdan qoşulursansa serveri HTTPS ilə aç.",
-                  en: "Voice calls need a secure connection (HTTPS).\n\nOn the same device use http://localhost. From another device, run the server over HTTPS." },
-    noRtc:      { tr: "Bu tarayıcı sesli aramayı desteklemiyor.", az: "Bu brauzer səsli zəngi dəstəkləmir.", en: "This browser does not support voice calls." },
+                  en: "Voice calls need a secure connection (HTTPS).\n\nOn the same device use http://localhost. From another device, run the server over HTTPS.", ru: "Для голосового звонка нужно защищённое соединение (HTTPS).\n\nНа этом же устройстве используйте http://localhost. С другого устройства откройте сервер по HTTPS." },
+    noRtc:      { tr: "Bu tarayıcı sesli aramayı desteklemiyor.", az: "Bu brauzer səsli zəngi dəstəkləmir.", en: "This browser does not support voice calls.", ru: "Этот браузер не поддерживает голосовые звонки." },
     noScreen:   { tr: "Bu tarayıcı ekran paylaşımını desteklemiyor.\n\nGenelde bilgisayardaki Chrome, Edge, Firefox ve Safari destekler; telefon tarayıcılarının çoğu desteklemez. Karşı tarafın paylaştığı ekranı ise yine de görebilirsin.",
                   az: "Bu brauzer ekran paylaşımını dəstəkləmir.\n\nÇox vaxt kompüterdəki Chrome, Edge, Firefox və Safari dəstəkləyir; telefon brauzerlərinin çoxu dəstəkləmir. Qarşı tərəfin paylaşdığı ekranı isə görə bilərsən.",
-                  en: "This browser does not support screen sharing.\n\nDesktop Chrome, Edge, Firefox and Safari usually do; most phone browsers do not. You can still see a screen the other person shares." },
-    group:      { tr: "Arama sadece birebir sohbetlerde yapılabilir.", az: "Zəng yalnız şəxsi söhbətdə mümkündür.", en: "Calls are only available in one-to-one chats." },
-    already:    { tr: "Zaten bir aramadasın.", az: "Artıq zəngdəsən.", en: "You are already in a call." },
-    noPeer:     { tr: "Önce bir sohbet seç.", az: "Əvvəlcə söhbət seç.", en: "Select a chat first." },
-    offline:    { tr: "Sunucuya bağlı değilsin. Birazdan tekrar dene.", az: "Serverə qoşulu deyilsən. Bir az sonra yenidən yoxla.", en: "You are not connected to the server. Try again shortly." },
-    shareFail:  { tr: "Ekran paylaşımı başlatılamadı: ", az: "Ekran paylaşımı başlamadı: ", en: "Could not start screen sharing: " },
+                  en: "This browser does not support screen sharing.\n\nDesktop Chrome, Edge, Firefox and Safari usually do; most phone browsers do not. You can still see a screen the other person shares.", ru: "Этот браузер не поддерживает показ экрана.\n\nОбычно поддерживают Chrome, Edge, Firefox и Safari на компьютере; большинство браузеров телефонов — нет. Экран собеседника вы всё равно сможете видеть." },
+    group:      { tr: "Arama sadece birebir sohbetlerde yapılabilir.", az: "Zəng yalnız şəxsi söhbətdə mümkündür.", en: "Calls are only available in one-to-one chats.", ru: "Звонки доступны только в чатах один на один." },
+    already:    { tr: "Zaten bir aramadasın.", az: "Artıq zəngdəsən.", en: "You are already in a call.", ru: "Вы уже в звонке." },
+    noPeer:     { tr: "Önce bir sohbet seç.", az: "Əvvəlcə söhbət seç.", en: "Select a chat first.", ru: "Сначала выберите чат." },
+    offline:    { tr: "Sunucuya bağlı değilsin. Birazdan tekrar dene.", az: "Serverə qoşulu deyilsən. Bir az sonra yenidən yoxla.", en: "You are not connected to the server. Try again shortly.", ru: "Нет подключения к серверу. Попробуйте позже." },
+    shareFail:  { tr: "Ekran paylaşımı başlatılamadı: ", az: "Ekran paylaşımı başlamadı: ", en: "Could not start screen sharing: ", ru: "Не удалось начать показ экрана: " },
   };
   const tx = (k) => (S[k] && (S[k][LANG()] || S[k].tr)) || k;
 
@@ -168,7 +168,13 @@
     return "";
   };
   const getMic = () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
-  const micErrorText = (e) => `Mikrofon icazəsi alınmadı.\\n\\nXəta: ${e && e.name ? e.name : "UnknownError"}\\n${e && e.message ? e.message : "Əlavə məlumat yoxdur."}`;
+  const MIC_T = {
+    tr: ["Mikrofon izni alınamadı.", "Hata", "Ek bilgi yok."],
+    az: ["Mikrofon icazəsi alınmadı.", "Xəta", "Əlavə məlumat yoxdur."],
+    en: ["Could not get microphone access.", "Error", "No additional information."],
+    ru: ["Не удалось получить доступ к микрофону.", "Ошибка", "Дополнительных данных нет."],
+  };
+  const micErrorText = (e) => { const t = MIC_T[LANG()] || MIC_T.tr; return `${t[0]}\n\n${t[1]}: ${e && e.name ? e.name : "UnknownError"}\n${e && e.message ? e.message : t[2]}`; };
 
   async function createPC(c) {
     const pc = new RTCPeerConnection({ iceServers: ICE });

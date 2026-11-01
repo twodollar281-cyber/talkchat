@@ -493,12 +493,13 @@ app.delete("/api/friends/:username", requireAuth, (req, res) => {
 
 app.get("/api/feed", requireAuth, (req, res) => {
     const scope = req.query.scope === "following" ? "following" : "all";
-    const self = users().find(u => u.username === currentUser(req));
-    if (!self) return res.status(401).json({ error: "Sessiya bitib. Yenidən daxil olun." });
+    const me = currentUser(req);
+    const self = users().find(u => u.username === me);
+    if (!self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     const following = self.following || [];
     let list = posts();
     if (scope === "following") list = list.filter(p => p.username === self.username || following.includes(p.username));
-    res.json(list.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 100));
+    res.json(list.slice().sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 100));
 });
 app.post("/api/posts", requireAuth, upload.single("media"), (req, res) => {
     const text = String(req.body.text || "").trim().slice(0, 1000);
