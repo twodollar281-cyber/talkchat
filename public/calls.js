@@ -168,6 +168,13 @@
     return "";
   };
   const getMic = () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
+  const NATIVE_T = { tr: "Arama devam ediyor", az: "Zəng davam edir", en: "Call in progress", ru: "Идёт звонок" };
+  const nativeCall = (m, args) => {
+    try {
+      const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CallService;
+      if (P && P[m]) P[m](args || {}).catch(() => {});
+    } catch {}
+  };
   const MIC_T = {
     tr: ["Mikrofon izni alınamadı.", "Hata", "Ek bilgi yok."],
     az: ["Mikrofon icazəsi alınmadı.", "Xəta", "Əlavə məlumat yoxdur."],
@@ -180,6 +187,7 @@
     const pc = new RTCPeerConnection({ iceServers: ICE });
     c.pc = pc;
     c.local.getTracks().forEach((t) => pc.addTrack(t, c.local));
+    nativeCall("start", { title: "TalkChat", text: NATIVE_T[LANG()] || NATIVE_T.tr });
     // Ekran paylaşımı için baştan hazır video hattı: paylaşırken yeniden pazarlık gerekmez
     c.vTrans = pc.addTransceiver("video", { direction: "sendrecv" });
 
@@ -305,6 +313,7 @@
     el.audio.srcObject = null;
     el.video.srcObject = null;
     dropWake();
+    nativeCall("stop");
     paint();
     setTimeout(() => { if (cur === c) { cur = null; paint(); } }, text ? 1400 : 0);
   }
