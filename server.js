@@ -1,3 +1,11 @@
+// Məlumat bazası (DATABASE_URL) hazır olmayınca server başlamır
+const store = require("./db");
+if (!store.ready) {
+    store.init()
+        .then(() => { delete require.cache[__filename]; require(__filename); })
+        .catch(e => { console.error("DB başladıla bilmədi:", e.message); process.exit(1); });
+    return;
+}
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -19,15 +27,8 @@ const UPLOADS = path.join(__dirname, "public", "uploads");
 fs.mkdirSync(DATA, { recursive: true });
 fs.mkdirSync(UPLOADS, { recursive: true });
 
-function readJSON(name, fallback = []) {
-    const file = path.join(DATA, name);
-    if (!fs.existsSync(file)) fs.writeFileSync(file, JSON.stringify(fallback, null, 2));
-    try { return JSON.parse(fs.readFileSync(file, "utf8")); }
-    catch { return fallback; }
-}
-function saveJSON(name, value) {
-    fs.writeFileSync(path.join(DATA, name), JSON.stringify(value, null, 2));
-}
+function readJSON(name, fallback = []) { return store.read(name, fallback); }
+function saveJSON(name, value) { store.save(name, value); }
 
 // One-time migration: preserve accounts from the older TalkChat version.
 const oldUsersFile = path.join(__dirname, "users.json");
@@ -804,16 +805,10 @@ app.use((err, req, res, next) => {
 const roomFile = path.join(DATA, "rooms.json");
 const roomMessageFile = path.join(DATA, "roomMessages.json");
 
-function getRooms() {
-  if (!fs.existsSync(roomFile)) fs.writeFileSync(roomFile, "[]");
-  try { return JSON.parse(fs.readFileSync(roomFile, "utf8")); } catch { return []; }
-}
-function saveRooms(v) { fs.writeFileSync(roomFile, JSON.stringify(v, null, 2)); }
-function getRoomMessages() {
-  if (!fs.existsSync(roomMessageFile)) fs.writeFileSync(roomMessageFile, "[]");
-  try { return JSON.parse(fs.readFileSync(roomMessageFile, "utf8")); } catch { return []; }
-}
-function saveRoomMessages(v) { fs.writeFileSync(roomMessageFile, JSON.stringify(v, null, 2)); }
+function getRooms() { return store.read("rooms.json"); }
+function saveRooms(v) { store.save("rooms.json", v); }
+function getRoomMessages() { return store.read("roomMessages.json"); }
+function saveRoomMessages(v) { store.save("roomMessages.json", v); }
 const roomReactions = ["❤️", "😂", "👍", "🔥"];
 function roomMember(room, username) {
   return Array.isArray(room.members) && room.members.includes(username);
