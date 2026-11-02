@@ -47,7 +47,7 @@ function createPush({ readJSON, saveJSON }) {
                     const r = await messaging.send({
                         token: t.token,
                         notification: { title: "TalkChat", body },
-                        data: { kind, from: fromName },
+                        data: { kind, sender: String(fromName || "") },
                         android: {
                             priority: "high",
                             notification: { channelId: kind === "call" ? "calls" : "messages" }
@@ -57,7 +57,7 @@ function createPush({ readJSON, saveJSON }) {
                 } catch (e) {
                     const code = e.code || e.message || "";
                     console.error("FCM xeta:", code, e.message);
-                    if (/registration-token-not-registered|invalid-argument|invalid-registration-token/.test(code)) {
+                    if (/registration-token-not-registered|invalid-registration-token/.test(code)) {
                         saveJSON("pushTokens.json", load().filter(x => x.token !== t.token));
                     } else {
                         console.error("Push göndərilmədi:", code);
