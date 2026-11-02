@@ -37,13 +37,14 @@ function createPush({ readJSON, saveJSON }) {
         },
         async send(username, kind, fromName) {
             const messaging = getMessaging();
-            if (!messaging) return;
+            if (!messaging) { console.log("FCM: messaging yoxdur"); return; }
             const mine = load().filter(x => x.username === username);
+            console.log("FCM: token sayi", username, mine.length);
             for (const t of mine) {
                 const texts = TEXT[t.lang] || TEXT.tr;
                 const body = kind === "call" ? texts.call(fromName) : texts.message(fromName);
                 try {
-                    await messaging.send({
+                    const r = await messaging.send({
                         token: t.token,
                         notification: { title: "TalkChat", body },
                         data: { kind, from: fromName },
@@ -52,8 +53,10 @@ function createPush({ readJSON, saveJSON }) {
                             notification: { channelId: kind === "call" ? "calls" : "messages" }
                         }
                     });
+                    console.log("FCM gonderildi:", username, kind, r);
                 } catch (e) {
                     const code = e.code || e.message || "";
+                    console.error("FCM xeta:", code, e.message);
                     if (/registration-token-not-registered|invalid-argument|invalid-registration-token/.test(code)) {
                         saveJSON("pushTokens.json", load().filter(x => x.token !== t.token));
                     } else {
