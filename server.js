@@ -129,6 +129,17 @@ function deliverPending(name) {
     }
 }
 
+const activeGroupCalls = new Map();
+
+function getGroupCallConversation(conversationId, username) {
+    return conversations().find(c =>
+        c.id === conversationId &&
+        c.type === "group" &&
+        Array.isArray(c.participants) &&
+        c.participants.includes(username)
+    );
+}
+
 io.on("connection", socket => {
     const name = socket.request.session.username;
     socket.join(`user:${name}`);
@@ -174,6 +185,117 @@ for (const [incoming, outgoing] of Object.entries(callEvents)) {
 }
 
 
+    // Qrup zəngini başlat
+    socket.on("group-call:start", data => {
+        if (!data || typeof data.conversationId !== "string") return;
+        const convo = getGroupCallConversation(data.conversationId, name);
+        if (!convo) return;
+
+        if (activeGroupCalls.has(convo.id)) {
+            socket.emit("group-call:error", {
+                conversationId: convo.id,
+                message: "Bu qrupda artıq aktiv zəng var."
+            });
+            return;
+        }
+
+        activeGroupCalls.set(convo.id, { participants: [name] });
+
+        socket.emit("group-call:joined", {
+            conversationId: convo.id,
+            participants: []
+        });
+
+        convo.participants.filter(p => p !== name).forEach(p => {
+            io.to(`user:${p}`).emit("group-call:incoming", {
+                conversationId: convo.id,
+                from: name
+            });
+            push.send(p, "group-call", name, { conversationId: convo.id });
+        });
+    });
+
+    // Qrup zənginə qoşul
+    socket.on("group-call:join", data => {
+        if (!data || typeof data.conversationId !== "string") return;
+        const convo = getGroupCallConversation(data.conversationId, name);
+        const call = convo && activeGroupCalls.get(convo.id);
+        if (!call) {
+            socket.emit("group-call:error", {
+                conversationId: data.conversationId,
+                message: "Bu qrup zəngi artıq aktiv deyil."
+            });
+            return;
+        }
+
+        if (call.participants.includes(name)) {
+            socket.emit("group-call:joined", {
+                conversationId: convo.id,
+                participants: call.participants.filter(p => p !== name)
+            });
+            return;
+        }
+
+        if (call.participants.length >= 5) {
+            socket.emit("group-call:error", {
+                conversationId: convo.id,
+                message: "Qrup zəngi maksimum 5 nəfər üçündür."
+            });
+            return;
+        }
+
+        const previous = [...call.participants];
+        call.participants.push(name);
+
+        previous.forEach(p => {
+            io.to(`user:${p}`).emit("group-call:peer-joined", {
+                conversationId: convo.id,
+                username: name
+            });
+        });
+
+        socket.emit("group-call:joined", {
+            conversationId: convo.id,
+            participants: previous
+        });
+    });
+
+    // İştirakçılar arasında WebRTC siqnalları
+    socket.on("group-call:signal", data => {
+        if (!data || typeof data.conversationId !== "string" ||
+            typeof data.to !== "string" || !data.signal) return;
+
+        const convo = getGroupCallConversation(data.conversationId, name);
+        const call = convo && activeGroupCalls.get(convo.id);
+        if (!call || !call.participants.includes(name) ||
+            !call.participants.includes(data.to)) return;
+
+        io.to(`user:${data.to}`).emit("group-call:signal", {
+            conversationId: convo.id,
+            from: name,
+            signal: data.signal
+        });
+    });
+
+    // Qrup zəngindən çıx
+    socket.on("group-call:leave", data => {
+        if (!data || typeof data.conversationId !== "string") return;
+        const call = activeGroupCalls.get(data.conversationId);
+        if (!call || !call.participants.includes(name)) return;
+
+        call.participants = call.participants.filter(p => p !== name);
+        call.participants.forEach(p => {
+            io.to(`user:${p}`).emit("group-call:peer-left", {
+                conversationId: data.conversationId,
+                username: name
+            });
+        });
+
+        if (call.participants.length === 0) {
+            activeGroupCalls.delete(data.conversationId);
+        }
+    });
+
     socket.on("joinTalkRoom", roomId => {
       const room = getRooms().find(r => r.id === roomId);
       if (room && roomMember(room, name)) socket.join("talk-room:" + roomId);
@@ -192,6 +314,21 @@ for (const [incoming, outgoing] of Object.entries(callEvents)) {
     socket.on("disconnect", () => {
         const count = Math.max(0, (onlineUsers.get(name) || 1) - 1);
         if (count === 0) {
+            // İstifadəçi tamamilə offline olduqda onu qrup zənglərindən çıxar
+            for (const [conversationId, call] of activeGroupCalls) {
+                if (!call.participants.includes(name)) continue;
+                call.participants = call.participants.filter(p => p !== name);
+                call.participants.forEach(p => {
+                    io.to(`user:${p}`).emit("group-call:peer-left", {
+                        conversationId,
+                        username: name
+                    });
+                });
+                if (call.participants.length === 0) {
+                    activeGroupCalls.delete(conversationId);
+                }
+            }
+
             onlineUsers.delete(name);
             lastSeenMap.set(name, new Date().toISOString());
             io.emit("presenceUpdate", {

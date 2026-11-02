@@ -411,7 +411,17 @@
   el.hang.onclick = () => hangUp();
   // Sohbet başlığındaki telefon düğmesi (id ile; eski aria-label de çalışır, dil çevirisi aria-label'i değiştirse bile id yeter)
   document.addEventListener("click", (e) => {
-    if (e.target.closest('#tcCallBtn, [data-talk-original-aria-label="Səsli zəng"], [aria-label="Səsli zəng"]')) startCall();
+    const btn = e.target.closest('#tcCallBtn, [data-talk-original-aria-label="Səsli zəng"], [aria-label="Səsli zəng"]');
+    if (!btn) return;
+    const conv = conversationsCache.find(x => x.id === activeConversation);
+    if (conv && conv.type === "group") {
+      if (window.TalkChatGroupCalls) {
+        e.preventDefault();
+        window.TalkChatGroupCalls.startCall(activeConversation);
+      }
+      return;
+    }
+    startCall();
   });
   window.addEventListener("beforeunload", () => { if (cur && !cur.over) emit("call:end", cur.convo); });
 })();
