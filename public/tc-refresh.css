@@ -493,3 +493,42 @@ button { transition: color .18s ease, background-color .18s ease, border-color .
 #messagesPage.ig-dm.tc-keyboard-open #dmForm {
   padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
 }
+
+
+/* Final mobile viewport and scroll boundaries */
+@media (max-width: 760px) {
+  #messagesPage.ig-dm {
+    height: calc(100dvh - 170px - env(safe-area-inset-bottom));
+    min-height: 0;
+  }
+  #messagesPage.ig-dm .ig-side {
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: contain;
+  }
+  #messagesPage.ig-dm #conversationList {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+  }
+  #messagesPage.ig-dm #chatMessages {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+}
+#messagesPage.ig-dm.tc-keyboard-open {
+  height: calc(var(--tc-vv-height, 100dvh) - 70px) !important;
+  min-height: 0 !important;
+  overflow: hidden;
+}
+#messagesPage.ig-dm.tc-keyboard-open #chatMessages {
+  min-height: 0 !important;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
