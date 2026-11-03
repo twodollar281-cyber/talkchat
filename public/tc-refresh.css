@@ -532,3 +532,94 @@ button { transition: color .18s ease, background-color .18s ease, border-color .
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
 }
+
+
+/* Tablet and desktop: persistent two-pane messaging layout */
+@media (min-width: 761px) {
+  #messagesPage.ig-dm {
+    width: 100%;
+    max-width: 1080px;
+    height: calc(100dvh - 202px - env(safe-area-inset-bottom));
+    min-height: 0;
+    margin: 0 auto;
+    border: 1px solid var(--ig-line);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+  #messagesPage.ig-dm .ig-body {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  #messagesPage.ig-dm .ig-side {
+    display: flex !important;
+    flex: 0 0 300px;
+    width: 300px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--ig-line);
+  }
+  #messagesPage.ig-dm #conversationList {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+  #messagesPage.ig-dm .ig-main {
+    display: flex !important;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  #messagesPage.ig-dm .ig-back { display: none !important; }
+  #messagesPage.ig-dm .ig-head { min-height: 70px; padding: 13px 18px; }
+  #messagesPage.ig-dm #chatMessages {
+    flex: 1 1 auto;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 20px 22px 12px !important;
+    gap: 7px;
+  }
+  #messagesPage.ig-dm #dmForm {
+    gap: 10px;
+    padding: 12px 18px 14px !important;
+  }
+  #messagesPage.ig-dm #dmText { min-height: 46px; height: 46px; }
+  #messagesPage.ig-dm #dmSend { min-width: 74px; min-height: 44px; }
+}
+
+/* Compact conversation rail on tablets */
+@media (min-width: 761px) and (max-width: 1023px) {
+  #messagesPage.ig-dm .ig-side {
+    flex-basis: clamp(250px, 30vw, 288px);
+    width: clamp(250px, 30vw, 288px);
+  }
+  #messagesPage.ig-dm .ig-side-head { padding: 16px 14px 8px; }
+  #messagesPage.ig-dm .ig-search { margin: 6px 12px 10px; }
+  #messagesPage.ig-dm #conversationList { padding: 6px !important; }
+  #messagesPage.ig-dm #conversationList .ig-item { min-height: 68px; padding: 9px 10px !important; }
+  #messagesPage.ig-dm #chatMessages { padding: 16px 16px 10px !important; }
+  #messagesPage.ig-dm .ig-bub { max-width: 82%; }
+}
+
+/* More breathing room on desktop */
+@media (min-width: 1024px) {
+  #messagesPage.ig-dm .ig-side { flex-basis: 340px; width: 340px; }
+  #messagesPage.ig-dm .ig-side-head { padding: 18px 20px 9px; }
+  #messagesPage.ig-dm .ig-search { margin: 8px 18px 12px; }
+  #messagesPage.ig-dm #conversationList { padding: 8px !important; }
+  #messagesPage.ig-dm #conversationList .ig-item { min-height: 74px; }
+  #messagesPage.ig-dm #chatMessages { padding: 22px 24px 14px !important; }
+}
+@media (min-width: 1200px) {
+  #app.app-shell { width: min(100%, 1120px); max-width: 1120px; }
+  #app .bottom-nav { width: min(100%, 1120px); }
+  #messagesPage.ig-dm .ig-side { flex-basis: 360px; width: 360px; }
+}
