@@ -454,3 +454,42 @@ button { transition: color .18s ease, background-color .18s ease, border-color .
   #messagesPage.ig-dm #dmText { min-width: 0; padding: 0 13px !important; font-size: 14px; }
   #messagesPage.ig-dm #dmSend { min-width: 58px; padding: 0 10px !important; font-size: 14px; }
 }
+
+
+/* Mobile messaging: compact list and keyboard-aware chat height */
+@media (max-width: 760px) {
+  #messagesPage.ig-dm {
+    width: 100%;
+    min-height: 0;
+    margin: 0 auto;
+    border: 1px solid var(--ig-line);
+    border-radius: 18px;
+    overflow: hidden;
+  }
+  #messagesPage.ig-dm .ig-side-head { padding: 15px 14px 8px; }
+  #messagesPage.ig-dm .ig-search { margin: 6px 12px 10px; }
+  #messagesPage.ig-dm #conversationList { padding: 6px !important; }
+  #messagesPage.ig-dm #conversationList .ig-item { min-height: 68px; }
+  #messagesPage.ig-dm .ig-head { min-height: 58px; padding: 8px 10px; }
+  #messagesPage.ig-dm .ig-headinfo { gap: 9px; }
+  #messagesPage.ig-dm #chatMessages { padding: 13px 11px 8px !important; }
+  #messagesPage.ig-dm .ig-bub { max-width: 86%; }
+  #messagesPage.ig-dm #dmForm { padding: 8px 9px max(10px, env(safe-area-inset-bottom)) !important; }
+}
+#app.tc-keyboard-open {
+  min-height: var(--tc-vv-height, 100dvh) !important;
+  padding-bottom: 0 !important;
+}
+#app.tc-keyboard-open .topbar { height: 60px; }
+#app.tc-keyboard-open main { padding: 10px 10px 0 !important; }
+#app.tc-keyboard-open .bottom-nav { display: none !important; }
+#messagesPage.ig-dm.tc-keyboard-open {
+  height: calc(var(--tc-vv-height, 100dvh) - 70px) !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+#messagesPage.ig-dm.tc-keyboard-open .ig-body,
+#messagesPage.ig-dm.tc-keyboard-open .ig-chat { min-height: 0; height: 100%; }
+#messagesPage.ig-dm.tc-keyboard-open #dmForm {
+  padding-bottom: max(10px, env(safe-area-inset-bottom)) !important;
+}
