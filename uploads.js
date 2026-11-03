@@ -2,7 +2,7 @@ const path = require("path");
 const crypto = require("crypto");
 
 const supabaseUrl = (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const bucket = process.env.SUPABASE_STORAGE_BUCKET || "talkchat-uploads";
 
 function headers(extra = {}) {
@@ -11,7 +11,6 @@ function headers(extra = {}) {
     }
     return {
         apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
         ...extra
     };
 }
