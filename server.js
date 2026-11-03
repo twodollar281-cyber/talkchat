@@ -8,6 +8,7 @@ if (!store.ready) {
 }
 const express = require("express");
 const http = require("http");
+const { Readable } = require("stream");
 const { Server } = require("socket.io");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
@@ -17,6 +18,7 @@ const crypto = require("crypto");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
+const { uploadFile, deleteFile, getFile } = require("./uploads");
 
 const app = express();
 const server = http.createServer(app);
@@ -91,6 +93,35 @@ const sessionMiddleware = require("cookie-session")({
     secure: process.env.NODE_ENV === "production"
 });
 app.use(sessionMiddleware);
+app.get("/uploads/:filename", async (req, res, next) => {
+    try {
+        const filename = path.basename(req.params.filename);
+        if (!filename || filename !== req.params.filename) return res.sendStatus(400);
+
+        const response = await getFile(filename, req.headers.range);
+
+        // Köhnə lokal fayllar üçün əvvəlki static sistemə keç.
+        if (response.status === 404) return next();
+
+        if (!response.ok) {
+            console.error("Supabase fayl oxuma xətası:", response.status);
+            return res.sendStatus(502);
+        }
+
+        for (const header of ["content-type", "content-length", "content-range", "accept-ranges"]) {
+            const value = response.headers.get(header);
+            if (value) res.setHeader(header, value);
+        }
+
+        res.status(response.status);
+        if (!response.body) return res.end();
+        Readable.fromWeb(response.body).pipe(res);
+    } catch (error) {
+        console.error("Fayl oxuma xətası:", error.message);
+        res.sendStatus(502);
+    }
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 io.use((socket, next) => sessionMiddleware(socket.request, {}, next));
@@ -384,21 +415,25 @@ const allowedMime = new Set([
     "application/pdf", "text/plain",
     "application/zip", "application/x-zip-compressed"
 ]);
-const storage = multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, UPLOADS),
-    filename: (_req, file, cb) => {
-        const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 10);
-        cb(null, `${crypto.randomUUID()}${ext}`);
-    }
-});
 const upload = multer({
-    storage,
+    storage: multer.memoryStorage(),
     limits: { fileSize: 30 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
         if (!allowedMime.has(file.mimetype)) return cb(new Error("Bu fayl növünə icazə verilmir."));
         cb(null, true);
     }
 });
+
+async function storeUpload(req, res, next) {
+    if (!req.file) return next();
+    try {
+        req.file.filename = await uploadFile(req.file);
+        next();
+    } catch (error) {
+        console.error("Supabase upload xətası:", error.message);
+        res.status(500).json({ error: "Faylı yadda saxlamaq mümkün olmadı." });
+    }
+}
 
 app.post("/api/register", async (req, res) => {
     try {
@@ -463,7 +498,7 @@ app.put("/api/profile", requireAuth, (req, res) => {
     saveUsers(list);
     res.json(publicUser(user));
 });
-app.post("/api/profile/avatar", requireAuth, upload.single("file"), (req, res) => {
+app.post("/api/profile/avatar", requireAuth, upload.single("file"), storeUpload, (req, res) => {
     if (!req.file || !req.file.mimetype.startsWith("image/"))
         return res.status(400).json({ error: "Profil şəkli üçün şəkil faylı seç." });
     const list = users();
@@ -642,7 +677,7 @@ app.get("/api/feed", requireAuth, (req, res) => {
     if (scope === "following") list = list.filter(p => p.username === self.username || following.includes(p.username));
     res.json(list.slice().sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 100));
 });
-app.post("/api/posts", requireAuth, upload.single("media"), (req, res) => {
+app.post("/api/posts", requireAuth, upload.single("media"), storeUpload, (req, res) => {
     const text = String(req.body.text || "").trim().slice(0, 1000);
     if (!text && !req.file) return res.status(400).json({ error: "Mətn və ya media əlavə et." });
     let mediaType = "";
@@ -740,7 +775,7 @@ app.get("/api/conversations/:id/messages", requireAuth, (req, res) => {
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
     res.json(messages().filter(m => m.conversationId === convo.id).slice(-200));
 });
-app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), (req, res) => {
+app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), storeUpload, (req, res) => {
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
     const text = String(req.body.text || "").trim().slice(0, 2000);
@@ -791,7 +826,7 @@ app.delete("/api/conversations/:id/messages/:mid", requireAuth, (req, res) => {
     const m = list.find(x => x.id === req.params.mid && x.conversationId === convo.id);
     if (!m) return res.status(404).json({ error: "Mesaj tapılmadı." });
     if (m.from !== me) return res.status(403).json({ error: "Yalnız öz mesajını silə bilərsən." });
-    if (m.attachment) fs.unlink(path.join(UPLOADS, path.basename(m.attachment)), () => {});
+    if (m.attachment) deleteFile(m.attachment).catch(err => console.error("Fayl silinmədi:", err.message));
     Object.assign(m, { deleted: true, text: "", attachment: "", attachmentName: "", attachmentType: "" });
     saveMessages(list);
     convo.participants.forEach(to => io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
@@ -834,10 +869,10 @@ app.get("/api/stories", requireAuth, (req, res) => {
     res.json(result);
 });
 
-app.post("/api/stories", requireAuth, upload.single("media"), (req, res) => {
+app.post("/api/stories", requireAuth, upload.single("media"), storeUpload, (req, res) => {
     if (!req.file) return res.status(400).json({error:"Şəkil və ya video seç."});
     if (!req.file.mimetype.startsWith("image/") && !req.file.mimetype.startsWith("video/")) {
-        fs.unlink(req.file.path, () => {});
+        deleteFile(req.file.filename).catch(err => console.error("Fayl silinmədi:", err.message));
         return res.status(400).json({error:"Yalnız şəkil və video paylaşmaq olar."});
     }
     const now = new Date();
