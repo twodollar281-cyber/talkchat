@@ -14,6 +14,7 @@ const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { createCallRegistry } = require("./call-registry");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
@@ -130,6 +131,21 @@ function deliverPending(name) {
 }
 
 const activeGroupCalls = new Map();
+const directCallRegistry = createCallRegistry();
+const directCallTimers = new Map();
+
+function clearDirectCallTimer(callId) {
+    const timer = directCallTimers.get(callId);
+    if (timer) clearTimeout(timer);
+    directCallTimers.delete(callId);
+}
+
+function notifyDirectCallEnded(call, reason) {
+    const payload = { callId: call.id, conversationId: call.conversationId, reason };
+    io.to("user:" + call.caller).emit("call:ended", payload);
+    if (call.callee !== call.caller) io.to("user:" + call.callee).emit("call:ended", payload);
+}
+
 
 function getGroupCallConversation(conversationId, username) {
     return conversations().find(c =>
@@ -149,41 +165,60 @@ io.on("connection", socket => {
 
 
     
-const callEvents = {
-  "call:invite": "call:incoming",
-  "call:accept": "call:accepted",
-  "call:reject": "call:rejected",
-  "call:signal": "call:signal",
-  "call:end": "call:ended"
-};
+socket.on("call:invite", data => {
+  if (!data || typeof data.conversationId !== "string") return;
+  const target = getCallPeer(data.conversationId);
+  if (!target) { socket.emit("call:error", { conversationId: data.conversationId, code: "not-authorized" }); return; }
+  const opened = directCallRegistry.invite({ conversationId: data.conversationId, caller: name, callee: target, mediaType: data.mediaType || "audio" });
+  if (!opened.ok) { socket.emit("call:error", { conversationId: data.conversationId, code: opened.code }); return; }
+  const call = opened.call;
+  const payload = { callId: call.id, conversationId: call.conversationId, from: name, to: target, mediaType: call.mediaType };
+  socket.emit("call:created", payload);
+  io.to("user:" + target).emit("call:incoming", payload);
+  push.send(target, "call", name, { conversationId: call.conversationId, callId: call.id, mediaType: call.mediaType });
+  const timer = setTimeout(() => {
+    const ended = directCallRegistry.end({ callId: call.id, actor: call.caller, reason: "no-answer" });
+    directCallTimers.delete(call.id);
+    if (ended.ok) notifyDirectCallEnded(ended.call, "no-answer");
+  }, 40000);
+  if (timer && typeof timer.unref === "function") timer.unref();
+  directCallTimers.set(call.id, timer);
+});
 
-function getCallPeer(conversationId) {
-  const c = conversations().find(x =>
-    x.id === conversationId &&
-    x.type === "direct" &&
-    Array.isArray(x.participants) &&
-    x.participants.includes(name)
-  );
-  if (!c) return null;
-  return c.participants.find(p => p !== name) || null;
-}
+socket.on("call:accept", data => {
+  if (!data || typeof data.conversationId !== "string") return;
+  const accepted = directCallRegistry.accept({ callId: data.callId, conversationId: data.conversationId, actor: name });
+  if (!accepted.ok) { socket.emit("call:error", { conversationId: data.conversationId, code: accepted.code }); return; }
+  clearDirectCallTimer(accepted.call.id);
+  const payload = { callId: accepted.call.id, conversationId: accepted.call.conversationId, from: name, mediaType: accepted.call.mediaType };
+  io.to("user:" + accepted.call.caller).emit("call:accepted", payload);
+  io.to("user:" + accepted.call.callee).emit("call:answered", payload);
+});
 
-for (const [incoming, outgoing] of Object.entries(callEvents)) {
-  socket.on(incoming, data => {
-    if (!data || typeof data.conversationId !== "string") return;
-    const target = getCallPeer(data.conversationId);
-    if (!target) return;
-    if (incoming === "call:invite") push.send(target, "call", name);
+socket.on("call:reject", data => {
+  if (!data || typeof data.conversationId !== "string") return;
+  const rejected = directCallRegistry.reject({ callId: data.callId, conversationId: data.conversationId, actor: name });
+  if (!rejected.ok) { socket.emit("call:error", { conversationId: data.conversationId, code: rejected.code }); return; }
+  clearDirectCallTimer(rejected.call.id);
+  const payload = { callId: rejected.call.id, conversationId: rejected.call.conversationId, from: name, reason: "rejected" };
+  io.to("user:" + rejected.call.caller).emit("call:rejected", payload);
+  io.to("user:" + rejected.call.callee).emit("call:answered", payload);
+});
 
-    io.to(`user:${target}`).emit(outgoing, {
-      conversationId: data.conversationId,
-      from: name,
-      to: target,
-      ...(data.signal ? { signal: data.signal } : {})
-    });
-  });
-}
+socket.on("call:signal", data => {
+  if (!data || typeof data.conversationId !== "string") return;
+  const relayed = directCallRegistry.signal({ callId: data.callId, conversationId: data.conversationId, actor: name, signal: data.signal });
+  if (!relayed.ok) { socket.emit("call:error", { conversationId: data.conversationId, code: relayed.code }); return; }
+  io.to("user:" + relayed.peer).emit("call:signal", { callId: relayed.call.id, conversationId: relayed.call.conversationId, from: name, signal: data.signal });
+});
 
+socket.on("call:end", data => {
+  if (!data || typeof data.conversationId !== "string") return;
+  const ended = directCallRegistry.end({ callId: data.callId, conversationId: data.conversationId, actor: name, reason: "ended" });
+  if (!ended.ok) return;
+  clearDirectCallTimer(ended.call.id);
+  notifyDirectCallEnded(ended.call, "ended");
+});
 
     // Qrup zəngini başlat
     socket.on("group-call:start", data => {
@@ -314,6 +349,11 @@ for (const [incoming, outgoing] of Object.entries(callEvents)) {
     socket.on("disconnect", () => {
         const count = Math.max(0, (onlineUsers.get(name) || 1) - 1);
         if (count === 0) {
+            const activeDirectCall = directCallRegistry.findForUser(name);
+            if (activeDirectCall) {
+                const ended = directCallRegistry.end({ callId: activeDirectCall.id, conversationId: activeDirectCall.conversationId, actor: name, reason: "disconnected" });
+                if (ended.ok) { clearDirectCallTimer(ended.call.id); notifyDirectCallEnded(ended.call, "disconnected"); }
+            }
             // İstifadəçi tamamilə offline olduqda onu qrup zənglərindən çıxar
             for (const [conversationId, call] of activeGroupCalls) {
                 if (!call.participants.includes(name)) continue;
