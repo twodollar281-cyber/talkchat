@@ -49,7 +49,10 @@
     already:    { tr: "Zaten bir aramadasın.", az: "Artıq zəngdəsən.", en: "You are already in a call.", ru: "Вы уже в звонке." },
     noPeer:     { tr: "Önce bir sohbet seç.", az: "Əvvəlcə söhbət seç.", en: "Select a chat first.", ru: "Сначала выберите чат." },
     offline:    { tr: "Sunucuya bağlı değilsin. Birazdan tekrar dene.", az: "Serverə qoşulu deyilsən. Bir az sonra yenidən yoxla.", en: "You are not connected to the server. Try again shortly.", ru: "Нет подключения к серверу. Попробуйте позже." },
-    shareFail:  { tr: "Ekran paylaşımı başlatılamadı: ", az: "Ekran paylaşımı başlamadı: ", en: "Could not start screen sharing: ", ru: "Не удалось начать показ экрана: " },
+    busy: { tr: "Karşı taraf şu anda başka bir aramada.", az: "Qarşı tərəf hazırda başqa zəngdədir.", en: "The other person is already in a call.", ru: "Собеседник уже разговаривает." },
+  callDenied: { tr: "Bu sohbet için arama iznin yok.", az: "Bu söhbət üçün zəng icazən yoxdur.", en: "You are not allowed to call from this chat.", ru: "Вам нельзя звонить из этого чата." },
+  callFailed: { tr: "Arama başlatılamadı. Tekrar dene.", az: "Zəng başlatmaq alınmadı. Yenidən yoxla.", en: "The call could not start. Try again.", ru: "Не удалось начать звонок. Попробуйте ещё раз." },
+  shareFail:  { tr: "Ekran paylaşımı başlatılamadı: ", az: "Ekran paylaşımı başlamadı: ", en: "Could not start screen sharing: ", ru: "Не удалось начать показ экрана: " },
   };
   const tx = (k) => (S[k] && (S[k][LANG()] || S[k].tr)) || k;
 
@@ -91,10 +94,14 @@
   let cur = null; // aktif arama
   let inc = null; // gelen arama (henüz cevaplanmadı)
   const busy = () => (cur && !cur.over) || !!inc;
-  const newCall = (o) => ({ pc: null, vTrans: null, pending: [], cands: [], remoteSet: false, making: false, ignore: false,
+  const newCall = (o) => ({ callId: null, mediaType: "audio", pc: null, vTrans: null, pending: [], cands: [], remoteSet: false, making: false, ignore: false,
     accepted: false, muted: false, sharing: false, remoteMuted: false, remoteSharing: false, over: false, connectedAt: 0,
     tick: null, ringTimer: null, warn: "", endText: "", screenTrack: null, ...o });
-  const emit = (ev, convo, extra) => socket.emit(ev, { conversationId: convo, ...(extra || {}) });
+  const emit = (ev, convo, extra) => {
+    const active = cur && cur.convo === convo ? cur : inc && inc.convo === convo ? inc : null;
+    socket.emit(ev, { conversationId: convo, ...(active && active.callId ? { callId: active.callId } : {}), ...(extra || {}) });
+  };
+  const matchesCall = (call, data) => !!call && !!data && data.conversationId === call.convo && (!data.callId || !call.callId || data.callId === call.callId);
   const sig = (c, signal) => emit("call:signal", c.convo, { signal });
 
   function paint() {
@@ -246,7 +253,7 @@
   }
 
   /* ---------- arama akışı ---------- */
-  async function startCall() {
+  async function startCall(mode = "audio") {
     if (busy()) return alert(tx("already"));
     const conv = conversationsCache.find((x) => x.id === activeConversation);
     if (!conv || conv.type === "group") return alert(conv ? tx("group") : tx("noPeer"));
@@ -259,14 +266,15 @@
     let local;
     try { local = await getMic(); } catch (e) { console.error("TalkChat microphone error:", e); return alert(micErrorText(e)); }
     if (busy()) { local.getTracks().forEach((t) => t.stop()); return; }
-    const c = (cur = newCall({ convo: conv.id, peer, role: "caller", local, stage: "calling" }));
+    const mediaType = mode === "video" ? "video" : "audio";
+    const c = (cur = newCall({ convo: conv.id, peer, role: "caller", local, stage: "calling", mediaType }));
     paint();
-    emit("call:invite", c.convo);
+    emit("call:invite", c.convo, { mediaType: c.mediaType });
     c.ringTimer = setTimeout(() => { if (cur === c && !c.accepted && !c.over) hangUp(tx("noAnswer")); }, RING_MS);
   }
 
   function showIncoming(d) {
-    inc = { convo: d.conversationId, peer: d.from || "?" };
+    inc = { callId: d.callId || null, mediaType: d.mediaType === "video" ? "video" : "audio", convo: d.conversationId, peer: d.from || "?" };
     paint();
     startRing();
     notify(inc.peer);
@@ -293,7 +301,7 @@
     if (inc !== i) { local.getTracks().forEach((t) => t.stop()); return; } // bu arada arama bitti
     inc = null;
     stopRing();
-    const c = (cur = newCall({ convo: i.convo, peer: i.peer, role: "callee", local, stage: "connecting", accepted: true }));
+    const c = (cur = newCall({ callId: i.callId, mediaType: i.mediaType, convo: i.convo, peer: i.peer, role: "callee", local, stage: "connecting", accepted: true }));
     paint();
     try { await createPC(c); } catch (e) { emit("call:end", c.convo); endLocal(c, tx("failed")); return; }
     if (c.over) return;
@@ -368,6 +376,20 @@
   }
 
   /* ---------- socket olayları ---------- */
+  socket.on("call:created", (d) => {
+    const c = cur;
+    if (!c || c.over || !d || d.conversationId !== c.convo || typeof d.callId !== "string") return;
+    c.callId = d.callId;
+    c.mediaType = d.mediaType === "video" ? "video" : "audio";
+    paint();
+  });
+  socket.on("call:answered", (d) => { if (inc && matchesCall(inc, d)) dismissIncoming(); });
+  socket.on("call:error", (d) => {
+    const c = cur;
+    if (!c || c.over || !matchesCall(c, d)) return;
+    const key = d.code === "busy" ? "busy" : d.code === "not-authorized" ? "callDenied" : "callFailed";
+    endLocal(c, tx(key));
+  });
   socket.on("call:incoming", (d) => {
     if (!d || !d.conversationId) return;
     if (busy()) { emit("call:reject", d.conversationId); return; } // meşgul: arayan boşuna beklemesin
@@ -376,7 +398,9 @@
   });
   socket.on("call:accepted", async (d) => {
     const c = cur;
-    if (!c || c.over || c.role !== "caller" || !d || d.conversationId !== c.convo) return;
+    if (!c || c.over || c.role !== "caller" || !matchesCall(c, d)) return;
+    c.callId = d.callId || c.callId;
+    c.mediaType = d.mediaType === "video" ? "video" : c.mediaType;
     c.accepted = true;
     clearTimeout(c.ringTimer);
     c.stage = "connecting";
@@ -385,22 +409,22 @@
   });
   socket.on("call:signal", (d) => {
     const c = cur;
-    if (c && !c.over && d && d.conversationId === c.convo) handleSignal(c, d.signal);
+    if (c && !c.over && matchesCall(c, d)) handleSignal(c, d.signal);
   });
   socket.on("call:rejected", (d) => {
     const c = cur;
-    if (c && !c.over && d && d.conversationId === c.convo) endLocal(c, tx("declined"));
+    if (c && !c.over && matchesCall(c, d)) endLocal(c, tx("declined"));
   });
   socket.on("call:ended", (d) => {
     if (!d) return;
-    if (inc && inc.convo === d.conversationId) dismissIncoming();
+    if (inc && matchesCall(inc, d)) dismissIncoming();
     const c = cur;
-    if (c && !c.over && c.convo === d.conversationId) endLocal(c, c.connectedAt ? "" : tx("noAnswer"));
+    if (c && !c.over && matchesCall(c, d)) endLocal(c, d.reason === "disconnected" ? tx("dropped") : (c.connectedAt ? "" : tx("noAnswer")));
   });
   socket.on("disconnect", () => {
     if (inc) dismissIncoming();
     const c = cur;
-    if (c && !c.over && !c.connectedAt) endLocal(c, tx("dropped")); // bağlanmış arama p2p devam eder
+    if (c && !c.over) endLocal(c, tx("dropped"));
   });
 
   /* ---------- düğmeler ---------- */
