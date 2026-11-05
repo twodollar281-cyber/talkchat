@@ -67,6 +67,7 @@ function enterApp() {
   $("authPage").hidden = true; $("app").hidden = false;
   socket.connect(); showPage("home");
   setTimeout(() => { try { registerPush(); } catch(e) { console.error(e); } }, 4000);
+  window.dispatchEvent(new CustomEvent("talkchat:entered", { detail: { username: me } }));
 }
 
 // ---- Push bildirişləri (yalnız Android tətbiqində) ----
@@ -131,10 +132,12 @@ function postHTML(p) {
   </article>`;
 }
 async function loadFeed() {
+  window.TalkChat2027?.beginFeedLoading();
   try {
     const list=await api("/api/feed?scope="+scope);
     $("feed").innerHTML=list.length?list.map(postHTML).join(""):"<p class='muted'>Hələ paylaşım yoxdur. İlk paylaşımı sən et! 💜</p>";
   } catch(e) { $("feed").textContent=e.message; }
+  finally { window.TalkChat2027?.endFeedLoading(); }
 }
 $("feed").addEventListener("click",async e=>{
   const like=e.target.closest("[data-like]");
@@ -158,10 +161,13 @@ $("searchInput").addEventListener("input",()=>{
   clearTimeout(searchTimer);
   searchTimer=setTimeout(async()=>{
     const q=$("searchInput").value.trim();if(!q){$("searchResults").innerHTML="";return;}
+    $("searchResults").setAttribute("aria-busy", "true");
+    $("searchResults").innerHTML = window.TalkChat2027?.searchSkeleton?.() || "";
     try{
       const list=await api("/api/search?q="+encodeURIComponent(q));
       $("searchResults").innerHTML=list.map(u=>`<div class="user-row">${avatarHTML(u)}<div class="user-info"><b>@${esc(u.username)}</b><small>${esc(u.bio||"TalkChat istifadəçisi")}</small></div><button class="primary" data-open-user="${esc(u.username)}">Profil</button></div>`).join("")||"<p class='muted'>İstifadəçi tapılmadı.</p>";
     }catch(e){$("searchResults").textContent=e.message;}
+    finally{$("searchResults").removeAttribute("aria-busy");}
   },250);
 });
 $("searchResults").addEventListener("click",e=>{
@@ -222,7 +228,17 @@ $("backFromPublic").onclick=()=>showPage("discover");
 async function loadNotifications(){
   try{
     const list=await api("/api/notifications");
-    $("notificationList").innerHTML=list.map(n=>`<div class="notification">@${esc(n.from)} ${n.type==="follow"?"səni izləməyə başladı.":n.type==="like"?"paylaşımını bəyəndi.":n.type==="comment"?"paylaşımına şərh yazdı.":"sənə mesaj göndərdi."}</div>`).join("")||"<p class='muted'>Hələ bildiriş yoxdur.</p>";
+    const types = {
+      follow: {icon:"↗", label:"səni izləməyə başladı."},
+      like: {icon:"♥", label:"paylaşımını bəyəndi."},
+      comment: {icon:"···", label:"paylaşımına şərh yazdı."},
+      message: {icon:"✉", label:"sənə mesaj göndərdi."}
+    };
+    $("notificationList").innerHTML=list.map(n=>{
+      const type=types[n.type]||{icon:"✦",label:"səninlə əlaqə saxladı."};
+      const initial=esc((n.from||"?").charAt(0).toUpperCase());
+      return `<article class="notification${n.read?"":" unread"}"><span class="notification-avatar" aria-hidden="true">${initial}</span><span class="notification-icon notification-icon-${esc(n.type||"other")}" aria-hidden="true">${type.icon}</span><span class="notification-copy"><b>@${esc(n.from)}</b> ${type.label}<small>${n.createdAt?new Date(n.createdAt).toLocaleString("az-AZ"):"TalkChat bildirişi"}</small></span></article>`;
+    }).join("")||"<p class='muted'>Hələ bildiriş yoxdur.</p>";
   }catch(e){$("notificationList").textContent=e.message;}
 }
 
