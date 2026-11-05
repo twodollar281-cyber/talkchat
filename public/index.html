@@ -3,39 +3,131 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
-  <meta name="theme-color" content="#171322">
-  <title>TalkChat</title>
+  <meta name="theme-color" content="#080811">
+  <meta name="description" content="TalkChat — Connect. Chat. Share.">
+  <meta name="color-scheme" content="dark">
+  <title>TalkChat — 2027</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/app-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <link rel="stylesheet" href="style.css?v=8">
   <link rel="stylesheet" href="tc-refresh.css?v=1">
   <link rel="stylesheet" href="calls.css?v=1">
+  <link rel="stylesheet" href="talkchat-2027.css?v=1">
 </head>
 <body>
+  <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="tc-brand-gradient" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#A58BFF"/>
+        <stop offset=".52" stop-color="#8257FF"/>
+        <stop offset="1" stop-color="#36C5FF"/>
+      </linearGradient>
+      <symbol id="tc-brand-mark" viewBox="0 0 48 48">
+        <path fill="url(#tc-brand-gradient)" d="M9 7.5h22A7.5 7.5 0 0 1 38.5 15v13.2a7.5 7.5 0 0 1-7.5 7.5H23l-8.4 6.1a1.8 1.8 0 0 1-2.8-1.9l1-4.2A7.5 7.5 0 0 1 6 28.2V15a7.5 7.5 0 0 1 3-7.5Z"/>
+        <path fill="url(#tc-brand-gradient)" stroke="#11111D" stroke-width="2.2" d="M24.5 17.1h13A6.5 6.5 0 0 1 44 23.6v8.2a6.5 6.5 0 0 1-6.5 6.5h-3.1l2 4.1a1.5 1.5 0 0 1-2.2 1.9l-7.4-6h-2.3a6.5 6.5 0 0 1-6.5-6.5v-8.2a6.5 6.5 0 0 1 6.5-6.5Z"/>
+        <circle cx="16" cy="21" r="1.7" fill="#fff"/>
+        <circle cx="22" cy="21" r="1.7" fill="#fff"/>
+        <circle cx="28" cy="21" r="1.7" fill="#fff"/>
+        <circle cx="28" cy="29" r="1.35" fill="#fff" opacity=".95"/>
+        <circle cx="33" cy="29" r="1.35" fill="#fff" opacity=".95"/>
+        <circle cx="38" cy="29" r="1.35" fill="#fff" opacity=".95"/>
+      </symbol>
+    </defs>
+  </svg>
+
   <section id="authPage" class="auth-page">
-    <div class="auth-card">
-      <div class="brand">Talk<span>Chat</span></div>
-      <p class="muted">Connect. Chat. Share.</p>
-      <div class="auth-switch">
-        <button id="loginTab" class="active" type="button">Giriş</button>
-        <button id="registerTab" type="button">Qeydiyyat</button>
+    <div class="auth-layout">
+      <aside class="auth-showcase">
+        <div class="auth-brand">
+          <svg class="tc-logo-mark" aria-hidden="true"><use href="#tc-brand-mark"/></svg>
+          <span>Talk<span>Chat</span></span>
+        </div>
+        <div class="auth-showcase-copy">
+          <span class="eyebrow">TALKCHAT · 2027</span>
+          <h1>Yaxınlıq bir mesajla başlayır.</h1>
+          <p>Fikirlərini bölüş, öz insanlarını tap və söhbəti davam etdir.</p>
+          <div class="auth-showcase-pill"><span class="tc-live-dot"></span> Connect. Chat. Share.</div>
+        </div>
+        <div class="auth-art" aria-hidden="true">
+          <div class="auth-art-orbit auth-art-orbit-a"></div>
+          <div class="auth-art-orbit auth-art-orbit-b"></div>
+          <div class="auth-art-bubble auth-art-bubble-back">...</div>
+          <div class="auth-art-bubble auth-art-bubble-front">↗</div>
+          <span class="auth-art-spark auth-art-spark-a"></span>
+          <span class="auth-art-spark auth-art-spark-b"></span>
+        </div>
+        <p class="auth-showcase-foot">Söhbətlər üçün yeni bir başlanğıc.</p>
+      </aside>
+
+      <div class="auth-card">
+        <div class="auth-card-brand">
+          <svg class="tc-logo-mark" aria-hidden="true"><use href="#tc-brand-mark"/></svg>
+          <span>Talk<span>Chat</span></span>
+        </div>
+        <span class="eyebrow auth-overline">TALKCHAT · 2027</span>
+        <h2 class="auth-title">Yenidən salam.</h2>
+        <p class="auth-intro">Davam etmək üçün hesabına daxil ol.</p>
+        <div class="auth-switch">
+          <button id="loginTab" class="active" type="button">Giriş</button>
+          <button id="registerTab" type="button">Qeydiyyat</button>
+        </div>
+        <form id="authForm">
+          <label class="field-label" for="authUsername">İstifadəçi adı</label>
+          <input id="authUsername" placeholder="İstifadəçi adı (@ olmadan)" maxlength="20" required autocomplete="username">
+          <label class="field-label" for="authPassword">Şifrə</label>
+          <div class="password-field">
+            <input id="authPassword" type="password" placeholder="Şifrə (ən azı 8 simvol)" required autocomplete="current-password">
+            <button id="passwordToggle" type="button" aria-label="Şifrəni göstər" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>
+            </button>
+          </div>
+          <button class="primary full" id="authSubmit" type="submit">Daxil ol</button>
+        </form>
+        <p id="authStatus" class="status" aria-live="polite"></p>
+        <p class="auth-legal">Davam etməklə TalkChat icmasının bir hissəsi olursan.</p>
       </div>
-      <form id="authForm">
-        <input id="authUsername" placeholder="İstifadəçi adı (@ olmadan)" maxlength="20" required autocomplete="username">
-        <input id="authPassword" type="password" placeholder="Şifrə (ən azı 8 simvol)" required autocomplete="current-password">
-        <button class="primary full" id="authSubmit">Daxil ol</button>
-      </form>
-      <p id="authStatus" class="status"></p>
     </div>
   </section>
 
   <div id="app" class="app-shell" hidden>
+    <aside class="desktop-sidebar" aria-label="Əsas naviqasiya">
+      <div class="sidebar-brand">
+        <svg class="tc-logo-mark" aria-hidden="true"><use href="#tc-brand-mark"/></svg>
+        <span>Talk<span>Chat</span></span>
+        <small>2027</small>
+      </div>
+      <nav class="sidebar-nav">
+        <span class="sidebar-label">İŞ SAHƏSİ</span>
+        <button type="button" data-page="home" class="nav-item active"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span class="nav-item-label">Ana səhifə</span></button>
+        <button type="button" data-page="discover" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5M10.8 7.5v6.6M7.5 10.8h6.6"/></svg></span><span class="nav-item-label">Discover</span></button>
+        <button type="button" data-page="messages" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.5a8.5 8.5 0 0 1-12.2 7.7L3 21l1.7-4.8a8.5 8.5 0 1 1 15.8-4.7Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg></span><span class="nav-item-label">Mesajlar</span></button>
+        <button type="button" data-page="notifications" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg></span><span class="nav-item-label">Bildirişlər</span></button>
+        <button type="button" data-page="profile" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c.8-3.6 3.4-5.5 7.5-5.5s6.7 1.9 7.5 5.5"/></svg></span><span class="nav-item-label">Profil</span></button>
+      </nav>
+      <div class="sidebar-footer">
+        <span class="sidebar-footer-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 14.5 9.5 21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/></svg></span>
+        <span><b>Özün kimi danış</b><small>TalkChat 2027</small></span>
+      </div>
+    </aside>
+
+    <div class="app-main-shell">
     <header class="topbar">
-      <div class="brand small">Talk<span>Chat</span></div>
-      <button class="icon-button" data-page="discover" aria-label="Axtarış">⌕</button>
+      <div class="brand small">
+        <svg class="tc-logo-mark" aria-hidden="true"><use href="#tc-brand-mark"/></svg>
+        <span>Talk<span>Chat</span></span>
+      </div>
+      <div class="topbar-actions">
+        <span class="topbar-greeting">Yaxşı ki, buradasan.</span>
+        <button class="icon-button" type="button" data-page="discover" aria-label="Axtarış">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+        </button>
+      </div>
     </header>
 
     <main>
       <section id="homePage" class="page">
-        <div class="page-heading"><div><h1>Ana səhifə</h1><p class="muted">Nələr baş verir?</p></div></div>
+        <div class="page-heading"><div><span class="eyebrow">SƏNİN DÜNYAN</span><h1>Ana səhifə</h1><p class="muted">Nələr baş verir?</p></div><span class="page-heading-date">TALKCHAT · 2027</span></div>
         <div class="tabs">
           <button class="feed-tab active" data-scope="all">Kəşf et</button>
           <button class="feed-tab" data-scope="following">İzlədiklərim</button>
@@ -87,7 +179,7 @@
                 <div class="direct-story-loading">Yüklənir…</div>
               </div>
             </div>
-            <details class="ig-extras">
+            <details class="ig-extras" open>
               <summary>Hekayə və mesaj istəkləri</summary>
               <div id="tcExtrasSlot"></div>
             </details>
@@ -163,6 +255,7 @@
       <section id="profilePage" class="page" hidden>
         <h1>Mənim profilim</h1>
         <div class="profile-card">
+          <div class="profile-cover" aria-hidden="true"><span>TalkChat</span><span class="profile-cover-orb"></span></div>
           <div class="avatar-wrap"><img id="myAvatar" alt="Profil şəkli"><span id="avatarFallback">?</span></div>
           <label class="file-label">Profil şəklini dəyiş<input id="avatarFile" type="file" accept="image/*"></label>
           <h2 id="myUsername">@username</h2>
@@ -188,17 +281,34 @@
         <div id="publicPosts" class="feed"></div>
       </section>
     </main>
+    </div>
 
     <nav class="bottom-nav">
-      <button data-page="home" class="nav-item active"><span>⌂</span>Ana səhifə</button>
-      <button data-page="discover" class="nav-item"><span>⌕</span>Axtarış</button>
-      <button data-page="messages" class="nav-item"><span>✉</span>Mesajlar</button>
-      <button data-page="notifications" class="nav-item"><span>♡</span>Bildiriş</button>
-      <button data-page="profile" class="nav-item"><span>◉</span>Profil</button>
+      <button type="button" data-page="home" class="nav-item active" aria-label="Ana səhifə"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span class="nav-item-label">Ana səhifə</span></button>
+      <button type="button" data-page="discover" class="nav-item" aria-label="Discover"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5M10.8 7.5v6.6M7.5 10.8h6.6"/></svg></span><span class="nav-item-label">Discover</span></button>
+      <button type="button" data-page="messages" class="nav-item" aria-label="Mesajlar"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.5a8.5 8.5 0 0 1-12.2 7.7L3 21l1.7-4.8a8.5 8.5 0 1 1 15.8-4.7Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg></span><span class="nav-item-label">Mesajlar</span></button>
+      <button type="button" data-page="notifications" class="nav-item" aria-label="Bildirişlər"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg></span><span class="nav-item-label">Bildirişlər</span></button>
+      <button type="button" data-page="profile" class="nav-item" aria-label="Profil"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c.8-3.6 3.4-5.5 7.5-5.5s6.7 1.9 7.5 5.5"/></svg></span><span class="nav-item-label">Profil</span></button>
     </nav>
   </div>
+  <section id="tc2027Intro" class="tc-intro" role="dialog" aria-modal="true" aria-labelledby="tcIntroTitle" tabindex="-1" hidden>
+    <div class="tc-intro-glow" aria-hidden="true"></div>
+    <div class="tc-intro-content">
+      <div class="tc-intro-brand">
+        <svg class="tc-logo-mark" aria-hidden="true"><use href="#tc-brand-mark"/></svg>
+        <span>Talk<span>Chat</span></span>
+      </div>
+      <div class="tc-intro-year">2027</div>
+      <h1 id="tcIntroTitle">A New Era of TalkChat</h1>
+      <p>Connect. Chat. Share.</p>
+      <button id="tcIntroContinue" class="primary tc-intro-continue" type="button" hidden>Davam et <span aria-hidden="true">→</span></button>
+    </div>
+    <button id="tcIntroSkip" class="tc-intro-skip" type="button">Skip</button>
+  </section>
+  <div id="tcToastRegion" class="tc-toast-region" aria-live="polite" aria-atomic="true"></div>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="app.js?v=20261101lang"></script>
+  <script src="talkchat-2027.js?v=1"></script>
+  <script src="app.js?v=2027redesign1"></script>
   <script src="tc-mobile-chat.js?v=1"></script>
   <script src="calls.js?v=3"></script>
 <script src="group-calls.js?v=2"></script>
