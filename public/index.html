@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="tc-refresh.css?v=1">
   <link rel="stylesheet" href="calls.css?v=1">
   <link rel="stylesheet" href="talkchat-2027.css?v=1">
+  <link rel="stylesheet" href="social.css?v=1">
 </head>
 <body>
   <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -113,13 +114,16 @@
 
     <div class="app-main-shell">
     <header class="topbar">
+      <button id="menuButton" class="icon-button menu-button" type="button" aria-label="Menyunu aç" aria-expanded="false" aria-controls="menuDialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
       <div class="brand small">
         <svg class="tc-logo-mark" aria-hidden="true"><use href="#tc-brand-mark"/></svg>
         <span>Talk<span>Chat</span></span>
       </div>
       <div class="topbar-actions">
         <span class="topbar-greeting">Yaxşı ki, buradasan.</span>
-        <button class="icon-button" type="button" data-page="discover" aria-label="Axtarış">
+        <button class="icon-button topbar-search" type="button" data-page="discover" aria-label="Axtarış">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
         </button>
       </div>
@@ -132,15 +136,17 @@
           <button class="feed-tab active" data-scope="all">Kəşf et</button>
           <button class="feed-tab" data-scope="following">İzlədiklərim</button>
         </div>
-        <form id="postForm" class="composer">
-          <textarea id="postText" maxlength="1000" placeholder="Nə paylaşmaq istəyirsən?"></textarea>
-          <div class="composer-bottom">
-            <label class="file-label">＋ Şəkil / Video<input id="postMedia" type="file" accept="image/*,video/mp4,video/webm"></label>
-            <button class="primary" type="submit">Paylaş</button>
-          </div>
-          <p id="postStatus" class="status"></p>
-        </form>
         <div id="feed" class="feed"></div>
+      </section>
+
+      <section id="reelsPage" class="page reels-page" hidden>
+        <div class="reels-heading">
+          <div><span class="eyebrow">TALKCHAT · VIDEO</span><h1>Reels</h1></div>
+          <button class="share-action share-reel" type="button" data-open-share="reel">
+            <span class="share-action-icon" aria-hidden="true">▶</span><span>Reels Paylaş</span>
+          </button>
+        </div>
+        <div id="reelsFeed" class="reels-feed" aria-label="Reels lenti"></div>
       </section>
 
       <section id="discoverPage" class="page" hidden>
@@ -259,20 +265,31 @@
           <div class="avatar-wrap"><img id="myAvatar" alt="Profil şəkli"><span id="avatarFallback">?</span></div>
           <label class="file-label">Profil şəklini dəyiş<input id="avatarFile" type="file" accept="image/*"></label>
           <h2 id="myUsername">@username</h2>
+          <p id="myDisplayNameValue" class="profile-display-name"></p>
           <div id="myStats" class="stats"></div>
+          <a id="myProfileLink" class="profile-link" href="" target="_blank" rel="noopener noreferrer" hidden></a>
           <label class="lang-picker">Dil
             <select id="talkLanguage">
-              <option value="tr">Türkiye (Recommended)</option>
-              <option value="az">Azərbaycan</option>
+              <option value="az">Azərbaycan dili</option>
+              <option value="tr">Türkçe</option>
               <option value="en">English</option>
               <option value="ru">Русский</option>
             </select>
           </label>
+          <label class="profile-field-label" for="myDisplayName">Ad</label>
+          <input id="myDisplayName" maxlength="50" placeholder="Adını daxil et">
+          <label class="profile-field-label" for="myBio">Açıqlama</label>
           <textarea id="myBio" maxlength="160" placeholder="Özün haqqında yaz..."></textarea>
+          <label class="profile-field-label" for="myLink">Link əlavə et</label>
+          <input id="myLink" type="url" maxlength="200" placeholder="https://...">
           <button id="saveBio" class="primary full">Profili yadda saxla</button>
           <p id="profileStatus" class="status"></p>
           <button id="logoutButton" class="secondary full">Çıxış</button>
         </div>
+        <section class="profile-posts-section">
+          <h2>Paylaşımlarım</h2>
+          <div id="myPosts" class="feed"></div>
+        </section>
       </section>
 
       <section id="publicProfilePage" class="page" hidden>
@@ -291,6 +308,71 @@
       <button type="button" data-page="profile" class="nav-item" aria-label="Profil"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c.8-3.6 3.4-5.5 7.5-5.5s6.7 1.9 7.5 5.5"/></svg></span><span class="nav-item-label">Profil</span></button>
     </nav>
   </div>
+  <dialog id="menuDialog" class="tc-menu-dialog">
+    <div class="tc-menu-panel">
+      <header class="tc-menu-header">
+        <div class="brand small"><svg class="tc-logo-mark" aria-hidden="true"><use href="#tc-brand-mark"/></svg><span>Talk<span>Chat</span></span></div>
+        <button id="closeMenu" class="icon-button" type="button" aria-label="Bağla">×</button>
+      </header>
+      <div class="tc-menu-user">
+        <span class="tc-menu-avatar" id="menuAvatar">T</span>
+        <span><b id="menuDisplayName">TalkChat</b><small id="menuUsername">@username</small></span>
+      </div>
+      <nav class="tc-menu-links" aria-label="Əsas menyu">
+        <button type="button" data-page="home"><span aria-hidden="true">⌂</span>Ana Səhifə</button>
+        <button type="button" data-page="discover"><span aria-hidden="true">⌕</span>Discover</button>
+        <button type="button" data-page="reels"><span aria-hidden="true">▶</span>Reels</button>
+        <button type="button" data-page="messages"><span aria-hidden="true">▣</span>Mesajlar</button>
+        <button type="button" data-page="notifications"><span aria-hidden="true">♧</span>Bildirişlər</button>
+        <button type="button" data-page="profile"><span aria-hidden="true">◉</span>Profil</button>
+      </nav>
+      <div class="tc-menu-share">
+        <span class="eyebrow">YENİ PAYLAŞIM</span>
+        <button class="share-action share-post" type="button" data-open-share="post"><span class="share-action-icon" aria-hidden="true">✎</span><span>Post Paylaş</span><span class="share-action-arrow">↗</span></button>
+        <button class="share-action share-story" type="button" data-open-share="story"><span class="share-action-icon" aria-hidden="true">◌</span><span>Story Paylaş</span><span class="share-action-arrow">↗</span></button>
+        <button class="share-action share-reel" type="button" data-open-share="reel"><span class="share-action-icon" aria-hidden="true">▶</span><span>Reels Paylaş</span><span class="share-action-arrow">↗</span></button>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="shareDialog" class="tc-share-dialog">
+    <div class="tc-share-panel">
+      <header class="tc-share-header">
+        <div><span class="eyebrow">TALKCHAT · SHARE</span><h2 id="shareDialogTitle">Yeni paylaşım</h2></div>
+        <button id="closeShare" class="icon-button" type="button" aria-label="Bağla">×</button>
+      </header>
+      <div class="share-type-grid">
+        <button class="share-type-card share-post" type="button" data-share-mode="post"><span class="share-action-icon" aria-hidden="true">✎</span><span><b>Post Paylaş</b><small>Şəkil və mətn</small></span></button>
+        <button class="share-type-card share-story" type="button" data-share-mode="story"><span class="share-action-icon" aria-hidden="true">◌</span><span><b>Story Paylaş</b><small>24 saat görünür</small></span></button>
+        <button class="share-type-card share-reel" type="button" data-share-mode="reel"><span class="share-action-icon" aria-hidden="true">▶</span><span><b>Reels Paylaş</b><small>Şaquli video</small></span></button>
+      </div>
+      <form id="postForm" class="share-form">
+        <label class="profile-field-label" for="postText">Açıqlama</label>
+        <textarea id="postText" maxlength="1000" placeholder="Nə paylaşmaq istəyirsən?"></textarea>
+        <label class="file-label">Şəkil seç<input id="postMedia" type="file" accept="image/jpeg,image/png,image/webp,image/gif"></label>
+        <div id="postPreview" class="share-preview" hidden></div>
+        <button class="primary full" type="submit">Post Paylaş</button>
+        <p id="postStatus" class="status" aria-live="polite"></p>
+      </form>
+      <form id="storyForm" class="share-form" hidden>
+        <label class="profile-field-label" for="storyText">Story haqqında yaz</label>
+        <input id="storyText" maxlength="250" placeholder="Story haqqında yaz...">
+        <label class="file-label">Şəkil və ya video seç<input id="storyMedia" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" required></label>
+        <div id="storyPreview" class="share-preview" hidden></div>
+        <progress id="storyProgress" max="100" value="0" hidden></progress>
+        <button class="primary full" type="submit">Story Paylaş</button>
+        <p id="storyStatus" class="status" aria-live="polite"></p>
+      </form>
+      <form id="reelForm" class="share-form" hidden>
+        <label class="profile-field-label" for="reelText">Reels açıqlaması</label>
+        <textarea id="reelText" maxlength="500" placeholder="Reels haqqında yaz..."></textarea>
+        <label class="file-label">Video seç<input id="reelMedia" type="file" accept="video/mp4,video/webm" required></label>
+        <div id="reelPreview" class="share-preview reel-preview" hidden></div>
+        <progress id="reelProgress" max="100" value="0" hidden></progress>
+        <button class="primary full" type="submit">Reels Paylaş</button>
+        <p id="reelStatus" class="status" aria-live="polite"></p>
+      </form>
+    </div>
+  </dialog>
   <section id="tc2027Intro" class="tc-intro" role="dialog" aria-modal="true" aria-labelledby="tcIntroTitle" tabindex="-1" hidden>
     <div class="tc-intro-glow" aria-hidden="true"></div>
     <div class="tc-intro-content">
@@ -308,7 +390,8 @@
   <div id="tcToastRegion" class="tc-toast-region" aria-live="polite" aria-atomic="true"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="talkchat-2027.js?v=1"></script>
-  <script src="app.js?v=2027redesign1"></script>
+  <script src="app.js?v=2027social1"></script>
+  <script src="social.js?v=1"></script>
   <script src="tc-mobile-chat.js?v=1"></script>
   <script src="calls.js?v=3"></script>
 <script src="group-calls.js?v=2"></script>
