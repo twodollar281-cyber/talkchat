@@ -36,6 +36,8 @@ function showPage(name) {
   if (name === "discover") { $("searchInput").focus(); loadFriendCenter(); }
   if (name === "messages") loadDirectStoryRail();
   if (name === "messages") loadTalkChatExtras();
+  if (name === "reels") window.TalkChatSocial?.loadReels();
+  if (name === "profile") loadMyPosts();
 }
 document.querySelectorAll("[data-page]").forEach(b => b.addEventListener("click", () => showPage(b.dataset.page)));
 $("loginTab").onclick = () => setAuthMode("login");
@@ -66,6 +68,7 @@ $("authForm").addEventListener("submit", async e => {
 function enterApp() {
   $("authPage").hidden = true; $("app").hidden = false;
   socket.connect(); showPage("home");
+  window.TalkChatSocial?.refreshMenuProfile?.();
   setTimeout(() => { try { registerPush(); } catch(e) { console.error(e); } }, 4000);
   window.dispatchEvent(new CustomEvent("talkchat:entered", { detail: { username: me } }));
 }
@@ -121,12 +124,23 @@ function avatarHTML(user,sizeClass="avatar") {
 }
 function postHTML(p) {
   const liked=(p.likes||[]).includes(me);
-  const media=p.mediaType==="video" ? `<video class="post-media" src="${esc(p.media)}" controls playsinline></video>` : p.media ? `<img class="post-media" src="${esc(p.media)}" alt="Paylaşım şəkli">` : "";
+  const isReel=p.kind==="reel";
+  const isMine=p.username===me;
+  const authorName=p.authorName||p.username;
+  const avatar=p.authorAvatar
+    ? `<img class="post-avatar" src="${esc(p.authorAvatar)}" alt="">`
+    : `<span class="avatar-fallback post-avatar">${esc((p.username||"?")[0].toUpperCase())}</span>`;
+  const media=p.mediaType==="video" ? `<video class="post-media" src="${esc(p.media)}" controls playsinline preload="metadata"></video>` : p.media ? `<img class="post-media" src="${esc(p.media)}" alt="Paylaşım şəkli" loading="lazy">` : "";
   const comments=(p.comments||[]).slice(-4).map(c=>`<div><b>@${esc(c.username)}</b> ${esc(c.text)}</div>`).join("");
-  return `<article class="post-card" data-post="${esc(p.id)}">
-    <div class="post-head"><span class="avatar-fallback">${esc(p.username[0].toUpperCase())}</span><div><div class="post-user">@${esc(p.username)}</div><div class="post-date">${new Date(p.createdAt).toLocaleString("az-AZ")}</div></div></div>
+  return `<article class="post-card${isReel?" post-card-reel":""}" data-post="${esc(p.id)}" data-kind="${isReel?"reel":"post"}">
+    <div class="post-head">${avatar}<div class="post-author"><div class="post-user">${esc(authorName)}</div><small>@${esc(p.username)}</small><div class="post-date">${new Date(p.createdAt).toLocaleString(currentLang()==="en"?"en-US":currentLang()==="ru"?"ru-RU":currentLang()==="tr"?"tr-TR":"az-AZ")}</div></div>
+      <details class="post-more"><summary aria-label="Əlavə əməliyyatlar">···</summary><div class="post-more-menu">
+        ${isMine?`<button type="button" data-edit-post="${esc(p.id)}">Redaktə et</button><button type="button" data-delete-post="${esc(p.id)}">Paylaşımı sil</button>`:`<button type="button" data-report-post="${esc(p.id)}">Şikayət et</button>`}
+      </div></details>
+    </div>
+    ${isReel?`<span class="post-kind-badge">▶ REELS</span>`:""}
     ${p.text?`<div class="post-text">${esc(p.text)}</div>`:""}${media}
-    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button></div>
+    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button><button type="button" data-share-post="${esc(p.id)}">Göndər</button></div>
     <div class="comment-list">${comments}</div>
     <form class="comment-form" data-comment="${esc(p.id)}"><input name="text" placeholder="Şərh yaz..." maxlength="500" required><button class="primary">Göndər</button></form>
   </article>`;
@@ -135,7 +149,7 @@ async function loadFeed() {
   window.TalkChat2027?.beginFeedLoading();
   try {
     const list=await api("/api/feed?scope="+scope);
-    $("feed").innerHTML=list.length?list.map(postHTML).join(""):"<p class='muted'>Hələ paylaşım yoxdur. İlk paylaşımı sən et! 💜</p>";
+    $("feed").innerHTML=list.length?list.map(postHTML).join(""):"<div class='tc-empty-state'><span aria-hidden='true'>✦</span><b>Hələ paylaşım yoxdur</b><p>Paylaşım menyusundan ilk postunu əlavə et.</p></div>";
   } catch(e) { $("feed").textContent=e.message; }
   finally { window.TalkChat2027?.endFeedLoading(); }
 }
@@ -151,9 +165,11 @@ $("feed").addEventListener("submit",async e=>{
 $("postForm").onsubmit=async e=>{
   e.preventDefault();$("postStatus").textContent="Paylaşılır...";
   try{
-    const fd=formDataFile("media",$("postMedia").files[0],{text:$("postText").value});
+    const file=$("postMedia").files[0];
+    if(file&&(!["image/jpeg","image/png","image/webp","image/gif"].includes(file.type)||file.size>12*1024*1024))throw new Error("Şəkil JPG, PNG, WebP və ya GIF olmalı və 12 MB-dan böyük olmamalıdır.");
+    const fd=formDataFile("media",file,{text:$("postText").value});
     await api("/api/posts",{method:"POST",body:fd});
-    $("postText").value="";$("postMedia").value="";$("postStatus").textContent="Paylaşıldı! 💜";loadFeed();
+    $("postForm").reset();$("postPreview").hidden=true;$("postPreview").innerHTML="";$("postStatus").textContent="Paylaşıldı! 💜";loadFeed();loadMyPosts();$("shareDialog").close();
   }catch(err){$("postStatus").textContent=err.message;}
 };
 let searchTimer;
@@ -177,20 +193,46 @@ async function loadMyProfile(){
   try{
     const u=await api("/api/profile");
     $("myUsername").textContent="@"+u.username;
+    $("myDisplayNameValue").textContent=u.displayName||u.username;
+    $("myDisplayName").value=u.displayName||"";
+    $("myLink").value=u.link||"";
+    $("myProfileLink").href=u.link||"";
+    $("myProfileLink").textContent=u.link?u.link.replace(/^https?:\/\//i,""):"";
+    $("myProfileLink").hidden=!u.link;
     $("myBio").value=u.bio||"";
     $("myStats").textContent=`${u.followersCount} izləyici · ${u.followingCount} izlənilən`;
     $("avatarFallback").textContent=u.username[0].toUpperCase();
     $("myAvatar").src=u.avatar||"";
     $("myAvatar").style.display=u.avatar?"block":"none";
     $("avatarFallback").style.display=u.avatar?"none":"grid";
+    $("menuDisplayName").textContent=u.displayName||u.username;
+    $("menuUsername").textContent="@"+u.username;
+    $("menuAvatar").innerHTML=u.avatar?`<img src="${esc(u.avatar)}" alt="">`:esc(u.username[0].toUpperCase());
   }catch(e){$("profileStatus").textContent=e.message;}
 }
+async function loadMyPosts(){
+  if(!$("myPosts"))return;
+  try{
+    const list=await api("/api/profile/posts");
+    $("myPosts").innerHTML=list.length?list.map(postHTML).join(""):"<div class='tc-empty-state'><span aria-hidden='true'>✦</span><b>Hələ paylaşım yoxdur</b><p>İlk postunu və ya Reels videonu paylaş.</p><button class='share-action share-post' type='button' data-open-share='post'>Post Paylaş</button></div>";
+  }catch(e){$("myPosts").textContent=e.message;}
+}
 $("saveBio").onclick=async()=>{
-  try{await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({bio:$("myBio").value})});$("profileStatus").textContent="Profil yadda saxlanıldı!";}
+  try{
+    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value})});
+    $("profileStatus").textContent="Profil yadda saxlanıldı!";
+    $("myDisplayNameValue").textContent=u.displayName||u.username;
+    $("myProfileLink").href=u.link||"";
+    $("myProfileLink").textContent=u.link?u.link.replace(/^https?:\/\//i,""):"";
+    $("myProfileLink").hidden=!u.link;
+    $("menuDisplayName").textContent=u.displayName||u.username;
+    $("menuUsername").textContent="@"+u.username;
+  }
   catch(e){$("profileStatus").textContent=e.message;}
 };
 $("avatarFile").onchange=async()=>{
   const file=$("avatarFile").files[0];if(!file)return;
+  if(!["image/jpeg","image/png","image/webp","image/gif"].includes(file.type)||file.size>12*1024*1024){$("profileStatus").textContent="Şəkil JPG, PNG, WebP və ya GIF olmalı və 12 MB-dan böyük olmamalıdır.";return;}
   try{await api("/api/profile/avatar",{method:"POST",body:formDataFile("file",file)});$("profileStatus").textContent="Profil şəkli yeniləndi!";loadMyProfile();}
   catch(e){$("profileStatus").textContent=e.message;}
 };
@@ -205,7 +247,8 @@ async function openPublicProfile(name){
     const incoming = friendRequests.incoming.some(x => x.username === u.username);
     const outgoing = friendRequests.outgoing.some(x => x.username === u.username);
     $("homePage").hidden=true;$("discoverPage").hidden=true;$("messagesPage").hidden=true;$("notificationsPage").hidden=true;$("profilePage").hidden=true;$("publicProfilePage").hidden=false;
-    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>@${esc(u.username)}</h2><p>${esc(u.bio||"")}</p><div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button>`}`;
+    const profileLink=u.link?`<a class="profile-link" href="${esc(u.link)}" target="_blank" rel="noopener noreferrer">${esc(u.link.replace(/^https?:\/\//i,""))}</a>`:"";
+    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)}</h2><p class="public-username">@${esc(u.username)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button>`}`;
     $("friendButton")?.addEventListener("click", async()=>{
       try {
         if(incoming) {
@@ -220,8 +263,8 @@ async function openPublicProfile(name){
       try{await api("/api/follow/"+encodeURIComponent(name),{method:u.isFollowing?"DELETE":"POST"});openPublicProfile(name);}
       catch(e){alert(e.message);}
     };
-    const feed=await api("/api/feed?scope=all");
-    $("publicPosts").innerHTML=feed.filter(p=>p.username===name).map(postHTML).join("")||"<p class='muted'>Hələ paylaşım yoxdur.</p>";
+    const feed=await api("/api/users/"+encodeURIComponent(u.username)+"/posts");
+    $("publicPosts").innerHTML=feed.map(postHTML).join("")||"<div class='tc-empty-state'><span aria-hidden='true'>✦</span><b>Hələ paylaşım yoxdur</b></div>";
   }catch(e){alert(e.message);}
 }
 $("backFromPublic").onclick=()=>showPage("discover");
@@ -234,11 +277,11 @@ async function loadNotifications(){
       comment: {icon:"···", label:"paylaşımına şərh yazdı."},
       message: {icon:"✉", label:"sənə mesaj göndərdi."}
     };
-    $("notificationList").innerHTML=list.map(n=>{
+    $("notificationList").innerHTML=list.length?list.map(n=>{
       const type=types[n.type]||{icon:"✦",label:"səninlə əlaqə saxladı."};
       const initial=esc((n.from||"?").charAt(0).toUpperCase());
       return `<article class="notification${n.read?"":" unread"}"><span class="notification-avatar" aria-hidden="true">${initial}</span><span class="notification-icon notification-icon-${esc(n.type||"other")}" aria-hidden="true">${type.icon}</span><span class="notification-copy"><b>@${esc(n.from)}</b> ${type.label}<small>${n.createdAt?new Date(n.createdAt).toLocaleString("az-AZ"):"TalkChat bildirişi"}</small></span></article>`;
-    }).join("")||"<p class='muted'>Hələ bildiriş yoxdur.</p>";
+    }).join(""):"<div class='tc-empty-state'><span aria-hidden='true'>♧</span><b>Hələ bildiriş yoxdur.</b><p>Yeni aktivlik olanda burada görünəcək.</p></div>";
   }catch(e){$("notificationList").textContent=e.message;}
 }
 
@@ -253,12 +296,7 @@ async function loadTalkChatExtras() {
     root.className = "tc-extras";
     root.innerHTML = `
       <div class="tc-extra-card">
-        <h3>📸 Story paylaş</h3>
-        <form id="tcStoryForm">
-          <input id="tcStoryFile" type="file" accept="image/*,video/mp4,video/webm" required>
-          <input id="tcStoryText" maxlength="250" placeholder="Story haqqında yaz...">
-          <button class="primary" type="submit">Paylaş</button>
-        </form>
+        <h3>Story-lər</h3>
         <div id="tcStories" class="tc-stories"></div>
       </div>
       <div class="tc-extra-card">
@@ -270,21 +308,6 @@ async function loadTalkChatExtras() {
         <div id="tcRequests"></div>
       </div>`;
     (document.getElementById("tcExtrasSlot") || page).prepend(root);
-
-    $("tcStoryForm").onsubmit = async e => {
-      e.preventDefault();
-      const file = $("tcStoryFile").files[0];
-      if (!file) return alert("Şəkil və ya video seç.");
-      const fd = new FormData();
-      fd.append("media", file);
-      fd.append("text", $("tcStoryText").value);
-      try {
-        await api("/api/stories", {method:"POST", body:fd});
-        $("tcStoryForm").reset();
-        await loadTalkChatExtras();
-        alert("Story paylaşıldı! 24 saat sonra silinəcək.");
-      } catch(err) { alert(err.message); }
-    };
 
     $("tcRequestForm").onsubmit = async e => {
       e.preventDefault();
@@ -351,7 +374,7 @@ async function loadTalkChatExtras() {
           <span class="tc-story-ring">${x.mediaType === "video" ? "▶" : "●"}</span>
           <b>@${esc(x.username)}</b>
         </button>
-        ${x.mine ? `<button type="button" class="tc-delete-story" data-tc-story-delete="${esc(x.id)}">Sil</button>` : ""}
+        ${x.mine ? `<button type="button" class="tc-delete-story" data-tc-story-delete="${esc(x.id)}">Story-ni sil</button>` : ""}
       </div>`).join("") || "<p class='muted'>Hələ aktiv Story yoxdur.</p>";
   } catch(err) {
     $("tcStories").textContent = err.message;
@@ -559,6 +582,84 @@ const translations = {
     "✉️ Mesaj sorğuları": "✉️ Mesaj istekleri",
     "Sən": "Sen",
     "Şəxsi mesajlaşmaq üçün bir söhbət seç və ya yeni söhbət başlat.": "Özel mesajlaşmak için bir sohbet seç veya yeni sohbet başlat.",
+    "Menyunu aç": "Menüyü aç",
+    "Əlavə əməliyyatlar": "Diğer işlemler",
+    "Ana Səhifə": "Ana Sayfa",
+    "Reels": "Reels",
+    "Yeni paylaşım": "Yeni paylaşım",
+    "YENİ PAYLAŞIM": "YENİ PAYLAŞIM",
+    "Post Paylaş": "Gönderi Paylaş",
+    "Story Paylaş": "Hikaye Paylaş",
+    "Reels Paylaş": "Reels Paylaş",
+    "Açıqlama": "Açıklama",
+    "Şəkil seç": "Fotoğraf seç",
+    "Şəkil və ya video seç": "Fotoğraf veya video seç",
+    "Reels açıqlaması": "Reels açıklaması",
+    "Video seç": "Video seç",
+    "Şəkil və mətn": "Fotoğraf ve metin",
+    "24 saat görünür": "24 saat görünür",
+    "Şaquli video": "Dikey video",
+    "Post": "Gönderi",
+    "Story-lər": "Hikayeler",
+    "Paylaşımlarım": "Paylaşımlarım",
+    "Ad": "Ad",
+    "Link əlavə et": "Bağlantı ekle",
+    "Adını daxil et": "Adını gir",
+    "Reels haqqında yaz...": "Reels hakkında yaz...",
+    "İlk postunu və ya Reels videonu paylaş.": "İlk gönderini veya Reels videonu paylaş.",
+    "Hələ paylaşım yoxdur": "Henüz gönderi yok",
+    "Redaktə et": "Düzenle",
+    "Paylaşımı sil": "Gönderiyi sil",
+    "Story-ni sil": "Hikayeyi sil",
+    "Şikayət et": "Şikayet et",
+    "Bu paylaşımı silmək istəyirsən?": "Bu gönderiyi silmek istiyor musun?",
+    "Bu paylaşımı şikayət et": "Bu gönderiyi şikayet et",
+    "Səbəb (istəyə bağlı)": "Sebep (isteğe bağlı)",
+    "Paylaşımı göndər": "Gönderiyi gönder",
+    "İstifadəçi adı ilə göndər": "Kullanıcı adıyla gönder",
+    "Şəkil JPG, PNG, WebP və ya GIF olmalı və 12 MB-dan böyük olmamalıdır.": "Fotoğraf JPG, PNG, WebP veya GIF olmalı ve 12 MB'tan büyük olmamalı.",
+    "Video MP4 və ya WebM olmalı və 30 MB-dan böyük olmamalıdır.": "Video MP4 veya WebM olmalı ve 30 MB'tan büyük olmamalı.",
+    "Yalnız JPG, PNG, WebP, GIF, MP4 və ya WebM faylı seç.": "Yalnızca JPG, PNG, WebP, GIF, MP4 veya WebM dosyası seç.",
+    "Ad maksimum 50 simvol ola bilər.": "Ad en fazla 50 karakter olabilir.",
+    "Link maksimum 200 simvol ola bilər.": "Bağlantı en fazla 200 karakter olabilir.",
+    "Düzgün veb linki daxil et.": "Geçerli bir web bağlantısı gir.",
+    "Yalnız öz paylaşımını redaktə edə bilərsən.": "Yalnızca kendi gönderini düzenleyebilirsin.",
+    "Yalnız öz paylaşımını silə bilərsən.": "Yalnızca kendi gönderini silebilirsin.",
+    "Mətn boş ola bilməz.": "Metin boş olamaz.",
+    "Öz paylaşımını şikayət edə bilməzsən.": "Kendi gönderini şikayet edemezsin.",
+    "Bu paylaşımı artıq şikayət etmisən.": "Bu gönderiyi zaten şikayet ettin.",
+    "Qəbul edənin istifadəçi adını yoxla.": "Alıcının kullanıcı adını kontrol et.",
+    "Şəkil maksimum 12 MB ola bilər.": "Fotoğraf en fazla 12 MB olabilir.",
+    "Reels üçün video seç.": "Reels için bir video seç.",
+    "Reels yalnız MP4 və ya WebM videoları qəbul edir.": "Reels yalnızca MP4 veya WebM videolarını destekler.",
+    "Post göndərildi.": "Gönderi gönderildi.",
+    "Reels göndərildi.": "Reels gönderildi.",
+    "↗ Reels göndərildi": "↗ Reels gönderildi",
+    "↗ Paylaşım göndərildi": "↗ Gönderi gönderildi",
+    "▶ Reels göndərildi": "▶ Reels gönderildi",
+    "Post göndərildi": "Gönderi gönderildi",
+    "Paylaşım uğurla göndərildi.": "Gönderi başarıyla gönderildi.",
+    "Paylaşım şikayət üçün göndərildi.": "Gönderi şikayet edildi.",
+    "Fayl seç.": "Dosya seç.",
+    "Yükləmə alınmadı. Yenidən yoxla.": "Yükleme başarısız. Yeniden dene.",
+    "Paylaşımın yeni mətnini yaz": "Gönderinin yeni metnini yaz",
+    "Göndərilir…": "Gönderiliyor…",
+    "Reels yüklənir…": "Reels yükleniyor…",
+    "Hələ Reels yoxdur": "Henüz Reels yok",
+    "Şaquli videonu paylaş, lentdə görünsün.": "Dikey videonu paylaş, akışta görünsün.",
+    "Yenidən yoxla": "Yeniden dene",
+    "Şərhlər": "Yorumlar",
+    "Hələ şərh yoxdur": "Henüz yorum yok",
+    "İlk şərhi sən yaz.": "İlk yorumu sen yaz.",
+    "Səs bağlı": "Ses kapalı",
+    "Səs açıq": "Ses açık",
+    "REELS videosu": "Reels videosu",
+    "Bəyən": "Beğen",
+    "Şərh yaz": "Yorum yaz",
+    "Reels paylaşıldı.": "Reels paylaşıldı.",
+    "Paylaşıldı! 💜": "Paylaşıldı! 💜",
+    "Paylaşım menyusundan ilk postunu əlavə et.": "Paylaşım menüsünden ilk gönderini ekle.",
+    "Yeni aktivlik olanda burada görünəcək.": "Yeni etkinlik olduğunda burada görünecek.",
   },
   en: {
     "Ana səhifə": "Home",
@@ -780,6 +881,83 @@ const translations = {
     "✉️ Mesaj sorğuları": "✉️ Message requests",
     "Sən": "You",
     "Şəxsi mesajlaşmaq üçün bir söhbət seç və ya yeni söhbət başlat.": "Pick a chat or start a new one to send private messages.",
+    "Menyunu aç": "Open menu",
+    "Əlavə əməliyyatlar": "More actions",
+    "Ana Səhifə": "Home",
+    "Reels": "Reels",
+    "Yeni paylaşım": "New share",
+    "YENİ PAYLAŞIM": "NEW SHARE",
+    "Post Paylaş": "Share a post",
+    "Story Paylaş": "Share a story",
+    "Reels Paylaş": "Share a Reel",
+    "Açıqlama": "Caption",
+    "Şəkil seç": "Choose photo",
+    "Şəkil və ya video seç": "Choose photo or video",
+    "Reels açıqlaması": "Reel caption",
+    "Video seç": "Choose video",
+    "Şəkil və mətn": "Photo and text",
+    "24 saat görünür": "Visible for 24 hours",
+    "Şaquli video": "Vertical video",
+    "Post": "Post",
+    "Story-lər": "Stories",
+    "Paylaşımlarım": "My posts",
+    "Ad": "Name",
+    "Link əlavə et": "Add a link",
+    "Adını daxil et": "Enter your name",
+    "Reels haqqında yaz...": "Write a caption...",
+    "İlk postunu və ya Reels videonu paylaş.": "Share your first post or Reel.",
+    "Hələ paylaşım yoxdur": "No posts yet",
+    "Redaktə et": "Edit",
+    "Paylaşımı sil": "Delete post",
+    "Story-ni sil": "Delete story",
+    "Şikayət et": "Report",
+    "Bu paylaşımı silmək istəyirsən?": "Delete this post?",
+    "Bu paylaşımı şikayət et": "Report this post",
+    "Səbəb (istəyə bağlı)": "Reason (optional)",
+    "Paylaşımı göndər": "Send post",
+    "İstifadəçi adı ilə göndər": "Send to username",
+    "Şəkil JPG, PNG, WebP və ya GIF olmalı və 12 MB-dan böyük olmamalıdır.": "Image must be JPG, PNG, WebP, or GIF and no larger than 12 MB.",
+    "Video MP4 və ya WebM olmalı və 30 MB-dan böyük olmamalıdır.": "Video must be MP4 or WebM and no larger than 30 MB.",
+    "Yalnız JPG, PNG, WebP, GIF, MP4 və ya WebM faylı seç.": "Choose a JPG, PNG, WebP, GIF, MP4, or WebM file.",
+    "Ad maksimum 50 simvol ola bilər.": "Name can be up to 50 characters.",
+    "Link maksimum 200 simvol ola bilər.": "Link can be up to 200 characters.",
+    "Düzgün veb linki daxil et.": "Enter a valid web link.",
+    "Yalnız öz paylaşımını redaktə edə bilərsən.": "You can only edit your own post.",
+    "Yalnız öz paylaşımını silə bilərsən.": "You can only delete your own post.",
+    "Mətn boş ola bilməz.": "Text cannot be empty.",
+    "Öz paylaşımını şikayət edə bilməzsən.": "You cannot report your own post.",
+    "Bu paylaşımı artıq şikayət etmisən.": "You already reported this post.",
+    "Qəbul edənin istifadəçi adını yoxla.": "Check the recipient's username.",
+    "Şəkil maksimum 12 MB ola bilər.": "Image can be up to 12 MB.",
+    "Reels üçün video seç.": "Choose a video for Reels.",
+    "Reels yalnız MP4 və ya WebM videoları qəbul edir.": "Reels only accepts MP4 or WebM video.",
+    "Post göndərildi.": "Post sent.",
+    "Reels göndərildi.": "Reel sent.",
+    "↗ Reels göndərildi": "↗ Reel sent",
+    "↗ Paylaşım göndərildi": "↗ Post sent",
+    "▶ Reels göndərildi": "▶ Reel sent",
+    "Post göndərildi": "Post sent",
+    "Paylaşım uğurla göndərildi.": "Post sent successfully.",
+    "Paylaşım şikayət üçün göndərildi.": "Post reported.",
+    "Fayl seç.": "Choose a file.",
+    "Yükləmə alınmadı. Yenidən yoxla.": "Upload failed. Please try again.",
+    "Paylaşımın yeni mətnini yaz": "Write the updated post text",
+    "Göndərilir…": "Sending…",
+    "Reels yüklənir…": "Loading Reels…",
+    "Hələ Reels yoxdur": "No Reels yet",
+    "Şaquli videonu paylaş, lentdə görünsün.": "Share a vertical video to start the feed.",
+    "Yenidən yoxla": "Try again",
+    "Şərhlər": "Comments",
+    "Hələ şərh yoxdur": "No comments yet",
+    "İlk şərhi sən yaz.": "Be the first to comment.",
+    "Səs bağlı": "Sound off",
+    "Səs açıq": "Sound on",
+    "Reels videosu": "Reels video",
+    "Bəyən": "Like",
+    "Şərh yaz": "Write a comment",
+    "Reels paylaşıldı.": "Reel shared.",
+    "Paylaşım menyusundan ilk postunu əlavə et.": "Use the sharing menu to add your first post.",
+    "Yeni aktivlik olanda burada görünəcək.": "New activity will appear here.",
   },
   ru: {
     "Ana səhifə": "Главная",
@@ -852,7 +1030,8 @@ const translations = {
     "İsteğin bekliyor": "Запрос ожидает ответа",
     "Sorğu göndərilib": "Запрос отправлен",
     "Dostun": "Ваш друг",
-    "Sil": "Удалить",
+    "Paylaşımı sil": "Удалить публикацию",
+    "Story-ni sil": "Удалить историю",
     "Gələn sorğu yoxdur.": "Входящих запросов нет.",
     "Göndərdiyim sorğular": "Отправленные запросы",
     "Gözləyən sorğun yoxdur.": "Ожидающих запросов нет.",
@@ -1001,6 +1180,82 @@ const translations = {
     "✉️ Mesaj sorğuları": "✉️ Запросы сообщений",
     "Sən": "Вы",
     "Şəxsi mesajlaşmaq üçün bir söhbət seç və ya yeni söhbət başlat.": "Выберите чат или начните новый, чтобы писать личные сообщения.",
+    "Menyunu aç": "Открыть меню",
+    "Əlavə əməliyyatlar": "Другие действия",
+    "Ana Səhifə": "Главная",
+    "Reels": "Reels",
+    "Yeni paylaşım": "Новая публикация",
+    "YENİ PAYLAŞIM": "НОВАЯ ПУБЛИКАЦИЯ",
+    "Post Paylaş": "Опубликовать пост",
+    "Story Paylaş": "Опубликовать историю",
+    "Reels Paylaş": "Опубликовать Reels",
+    "Açıqlama": "Описание",
+    "Şəkil seç": "Выбрать фото",
+    "Şəkil və ya video seç": "Выбрать фото или видео",
+    "Reels açıqlaması": "Описание Reels",
+    "Video seç": "Выбрать видео",
+    "Şəkil və mətn": "Фото и текст",
+    "24 saat görünür": "Доступно 24 часа",
+    "Şaquli video": "Вертикальное видео",
+    "Post": "Пост",
+    "Story-lər": "Истории",
+    "Paylaşımlarım": "Мои публикации",
+    "Ad": "Имя",
+    "Link əlavə et": "Добавить ссылку",
+    "Adını daxil et": "Введите имя",
+    "Reels haqqında yaz...": "Добавьте описание...",
+    "İlk postunu və ya Reels videonu paylaş.": "Опубликуйте свой первый пост или Reels.",
+    "Hələ paylaşım yoxdur": "Публикаций пока нет",
+    "Redaktə et": "Редактировать",
+    "Sil": "Удалить",
+    "Şikayət et": "Пожаловаться",
+    "Bu paylaşımı silmək istəyirsən?": "Удалить эту публикацию?",
+    "Bu paylaşımı şikayət et": "Пожаловаться на публикацию",
+    "Səbəb (istəyə bağlı)": "Причина (необязательно)",
+    "Paylaşımı göndər": "Отправить публикацию",
+    "İstifadəçi adı ilə göndər": "Отправить пользователю",
+    "Şəkil JPG, PNG, WebP və ya GIF olmalı və 12 MB-dan böyük olmamalıdır.": "Изображение должно быть JPG, PNG, WebP или GIF и не больше 12 МБ.",
+    "Video MP4 və ya WebM olmalı və 30 MB-dan böyük olmamalıdır.": "Видео должно быть MP4 или WebM и не больше 30 МБ.",
+    "Yalnız JPG, PNG, WebP, GIF, MP4 və ya WebM faylı seç.": "Выберите JPG, PNG, WebP, GIF, MP4 или WebM файл.",
+    "Ad maksimum 50 simvol ola bilər.": "Имя может содержать не более 50 символов.",
+    "Link maksimum 200 simvol ola bilər.": "Ссылка может содержать не более 200 символов.",
+    "Düzgün veb linki daxil et.": "Введите корректную веб-ссылку.",
+    "Yalnız öz paylaşımını redaktə edə bilərsən.": "Можно редактировать только свои публикации.",
+    "Yalnız öz paylaşımını silə bilərsən.": "Можно удалять только свои публикации.",
+    "Mətn boş ola bilməz.": "Текст не может быть пустым.",
+    "Öz paylaşımını şikayət edə bilməzsən.": "Нельзя пожаловаться на собственную публикацию.",
+    "Bu paylaşımı artıq şikayət etmisən.": "Вы уже пожаловались на эту публикацию.",
+    "Qəbul edənin istifadəçi adını yoxla.": "Проверьте имя пользователя получателя.",
+    "Şəkil maksimum 12 MB ola bilər.": "Изображение может быть не больше 12 МБ.",
+    "Reels üçün video seç.": "Выберите видео для Reels.",
+    "Reels yalnız MP4 və ya WebM videoları qəbul edir.": "Reels поддерживает только MP4 или WebM.",
+    "Post göndərildi.": "Пост отправлен.",
+    "Reels göndərildi.": "Reels отправлен.",
+    "↗ Reels göndərildi": "↗ Reels отправлен",
+    "↗ Paylaşım göndərildi": "↗ Публикация отправлена",
+    "▶ Reels göndərildi": "▶ Reels отправлен",
+    "Post göndərildi": "Публикация отправлена",
+    "Paylaşım uğurla göndərildi.": "Публикация успешно отправлена.",
+    "Paylaşım şikayət üçün göndərildi.": "Жалоба на публикацию отправлена.",
+    "Fayl seç.": "Выберите файл.",
+    "Yükləmə alınmadı. Yenidən yoxla.": "Не удалось загрузить. Попробуйте ещё раз.",
+    "Paylaşımın yeni mətnini yaz": "Измените текст публикации",
+    "Göndərilir…": "Отправка…",
+    "Reels yüklənir…": "Загрузка Reels…",
+    "Hələ Reels yoxdur": "Пока нет Reels",
+    "Şaquli videonu paylaş, lentdə görünsün.": "Опубликуйте вертикальное видео, чтобы начать ленту.",
+    "Yenidən yoxla": "Повторить",
+    "Şərhlər": "Комментарии",
+    "Hələ şərh yoxdur": "Пока нет комментариев",
+    "İlk şərhi sən yaz.": "Оставьте первый комментарий.",
+    "Səs bağlı": "Звук выключен",
+    "Səs açıq": "Звук включён",
+    "Reels videosu": "Видео Reels",
+    "Bəyən": "Нравится",
+    "Şərh yaz": "Написать комментарий",
+    "Reels paylaşıldı.": "Reels опубликован.",
+    "Paylaşım menyusundan ilk postunu əlavə et.": "Добавьте первую публикацию через меню.",
+    "Yeni aktivlik olanda burada görünəcək.": "Новая активность появится здесь.",
   },
   az: {}
 };
@@ -1019,10 +1274,11 @@ const TRANSLATE_RULES = [
   [/^JAVASCRIPT XƏTASI: /, {tr:"JAVASCRIPT HATASI: ", en:"JAVASCRIPT ERROR: ", ru:"ОШИБКА JAVASCRIPT: "}],
   [/ \| Sətir: /, {tr:" | Satır: ", en:" | Line: ", ru:" | Строка: "}],
   [/dostluqdan silinsin\?/, {tr:"arkadaşlıktan çıkarılsın mı?", en:"remove from friends?", ru:"удалить из друзей?"}],
+  [/^Yüklənir… (\d+)%$/, {tr:"Yükleniyor… $1%", en:"Uploading… $1%", ru:"Загрузка… $1%"}],
 ];
 
 function currentLang() {
-  try { return localStorage.getItem("talkchat-language") || "tr"; } catch { return "tr"; }
+  try { return localStorage.getItem("talkchat-language") || "az"; } catch { return "az"; }
 }
 
 // Mətni seçilmiş dilə çevirir: əvvəl tam uyğunluq, sonra say/şablon qaydaları
@@ -1058,7 +1314,7 @@ function translateElement(root, lang) {
 }
 
 function applyTalkLanguage(lang) {
-  if (!translations[lang]) lang = "tr";
+  if (!translations[lang]) lang = "az";
   translateElement(document.body, lang);
   document.documentElement.lang = lang;
   localStorage.setItem("talkchat-language", lang);
@@ -1092,8 +1348,10 @@ talkLanguageObserver.observe(document.body, {childList:true, subtree:true});
 // alert və confirm mesajlarını da seçilmiş dilə çevir
 const nativeAlert = window.alert.bind(window);
 const nativeConfirm = window.confirm.bind(window);
+const nativePrompt = window.prompt.bind(window);
 window.alert = msg => nativeAlert(translateText(String(msg), currentLang()));
 window.confirm = msg => nativeConfirm(translateText(String(msg), currentLang()));
+window.prompt = (msg, value) => nativePrompt(translateText(String(msg), currentLang()), value);
 
 async function loadFriendCenter() {
   const box = $("friendCenter");
@@ -1348,6 +1606,13 @@ function igBubble(m, byId) {
     body += isImg
       ? `<a href="${esc(m.attachment)}" target="_blank" rel="noopener"><img src="${esc(m.attachment)}" alt="Şəkil" loading="lazy"></a>`
       : `<a class="ig-file" href="${esc(m.attachment)}" target="_blank" rel="noopener">📎 ${esc(m.attachmentName || "Fayl")}</a>`;
+  }
+  if (m.sharedPost) {
+    const shared=m.sharedPost;
+    const sharedMedia=shared.mediaType==="video"
+      ? `<video src="${esc(shared.media)}" controls playsinline preload="metadata"></video>`
+      : shared.media?`<img src="${esc(shared.media)}" alt="" loading="lazy">`:"";
+    body+=`<span class="ig-shared-post"><small>${shared.kind==="reel"?"▶ Reels göndərildi":"Post göndərildi"}</small><b>${esc(shared.authorName||shared.username||"TalkChat")}</b>${shared.text?`<span>${esc(shared.text)}</span>`:""}${sharedMedia?`<span class="ig-shared-media">${sharedMedia}</span>`:""}</span>`;
   }
   if (m.text) body += `<span class="ig-t">${esc(m.text)}</span>`;
   const cls = m.attachment && isImg && !m.text ? " img" : "";
