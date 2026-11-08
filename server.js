@@ -103,6 +103,10 @@ const sessionMiddleware = require("cookie-session")({
 });
 app.use(sessionMiddleware);
 app.use(express.static(path.join(__dirname, "public")));
+app.get("/uploads/:name", (req, res, next) => {
+    if (!supa.enabled) return next();
+    res.redirect(302, supa.publicUrl(req.params.name));
+});
 
 io.use((socket, next) => sessionMiddleware(socket.request, {}, next));
 io.use((socket, next) => {
