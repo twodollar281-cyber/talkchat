@@ -65,6 +65,8 @@ const friendRequests = () => readJSON("friendRequests.json");
 const saveFriendRequests = value => saveJSON("friendRequests.json", value);
 const stories = () => readJSON("stories.json");
 const saveStories = value => saveJSON("stories.json", value);
+const reports = () => readJSON("reports.json");
+const saveReports = value => saveJSON("reports.json", value);
 const messageRequests = () => readJSON("messageRequests.json");
 const saveMessageRequests = value => saveJSON("messageRequests.json", value);
 const { createPush } = require("./push");
@@ -106,6 +108,7 @@ const lastSeenMap = new Map();
 // Mesajın önizlemesi (söhbət siyahısında göstərilir)
 function previewOf(m) {
     if (m.deleted) return "Mesaj silindi";
+    if (m.sharedPost) return m.sharedPost.kind === "reel" ? "↗ Reels göndərildi" : "↗ Paylaşım göndərildi";
     if (m.text) return m.text;
     if ((m.attachmentType || "").startsWith("image/")) return "📷 Şəkil";
     return "📎 " + (m.attachmentName || "Fayl");
@@ -400,12 +403,29 @@ function requireAuth(req, res, next) {
 function publicUser(user) {
     return {
         username: user.username,
+        displayName: user.displayName || "",
         bio: user.bio || "",
         avatar: user.avatar || "",
+        link: user.link || "",
         followersCount: (user.followers || []).length,
         followingCount: (user.following || []).length,
         isFollowing: false
     };
+}
+function publicPost(post, userList = users()) {
+    const author = userList.find(user => user.username === post.username);
+    return {
+        ...post,
+        kind: post.kind === "reel" ? "reel" : "post",
+        authorName: author?.displayName || "",
+        authorAvatar: author?.avatar || ""
+    };
+}
+function removeLocalUpload(media) {
+    if (typeof media !== "string" || !media.startsWith("/uploads/")) return;
+    const filename = path.basename(media);
+    if (!filename || filename === "." || filename === "..") return;
+    fs.unlink(path.join(UPLOADS, filename), () => {});
 }
 function addNotification(to, from, type, extra = {}) {
     if (!to || to === from) return;
@@ -439,6 +459,28 @@ const upload = multer({
         cb(null, true);
     }
 });
+const socialMediaMime = new Set([
+    "image/jpeg", "image/png", "image/webp", "image/gif",
+    "video/mp4", "video/webm"
+]);
+const socialExtensions = {
+    "image/jpeg": [".jpg", ".jpeg"],
+    "image/png": [".png"],
+    "image/webp": [".webp"],
+    "image/gif": [".gif"],
+    "video/mp4": [".mp4"],
+    "video/webm": [".webm"]
+};
+const socialUpload = multer({
+    storage,
+    limits: { fileSize: 30 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const ext = path.extname(file.originalname || "").toLowerCase();
+        if (!socialMediaMime.has(file.mimetype) || !socialExtensions[file.mimetype]?.includes(ext))
+            return cb(new Error("Yalnız JPG, PNG, WebP, GIF, MP4 və ya WebM faylı seç."));
+        cb(null, true);
+    }
+});
 
 app.post("/api/register", async (req, res) => {
     try {
@@ -455,7 +497,7 @@ app.post("/api/register", async (req, res) => {
             return res.status(409).json({ error: "Bu istifadəçi adı artıq mövcuddur." });
         const user = {
             username: name, password: await bcrypt.hash(password, 12),
-            bio: "", avatar: "", followers: [], following: [],
+            displayName: "", bio: "", avatar: "", link: "", followers: [], following: [],
             createdAt: new Date().toISOString()
         };
         list.push(user);
@@ -493,21 +535,51 @@ app.get("/api/profile", requireAuth, (req, res) => {
     res.json(publicUser(user));
 });
 app.put("/api/profile", requireAuth, (req, res) => {
-    const { bio } = req.body || {};
-    if (typeof bio !== "string" || bio.length > 160)
+    const body = req.body || {};
+    if (body.bio !== undefined && (typeof body.bio !== "string" || body.bio.length > 160))
         return res.status(400).json({ error: "Bio maksimum 160 simvol ola bilər." });
+    if (body.displayName !== undefined && (typeof body.displayName !== "string" || body.displayName.length > 50))
+        return res.status(400).json({ error: "Ad maksimum 50 simvol ola bilər." });
+    let link = "";
+    if (body.link !== undefined) {
+        if (typeof body.link !== "string" || body.link.length > 200)
+            return res.status(400).json({ error: "Link maksimum 200 simvol ola bilər." });
+        link = body.link.trim();
+        if (link) {
+            try {
+                const parsed = new URL(/^https?:\/\//i.test(link) ? link : `https://${link}`);
+                if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("invalid protocol");
+                link = parsed.toString();
+            } catch {
+                return res.status(400).json({ error: "Düzgün veb linki daxil et." });
+            }
+        }
+    }
     const list = users();
     const user = list.find(u => u.username === currentUser(req));
     if (!user) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
-    user.bio = bio.trim();
+    if (body.bio !== undefined) user.bio = body.bio.trim();
+    if (body.displayName !== undefined) user.displayName = body.displayName.trim();
+    if (body.link !== undefined) user.link = link;
     saveUsers(list);
     res.json(publicUser(user));
 });
-app.post("/api/profile/avatar", requireAuth, upload.single("file"), (req, res) => {
-    if (!req.file || !req.file.mimetype.startsWith("image/"))
+app.post("/api/profile/avatar", requireAuth, socialUpload.single("file"), (req, res) => {
+    if (!req.file || !req.file.mimetype.startsWith("image/")) {
+        if (req.file) removeLocalUpload(`/uploads/${req.file.filename}`);
         return res.status(400).json({ error: "Profil şəkli üçün şəkil faylı seç." });
+    }
+    if (req.file.size > 12 * 1024 * 1024) {
+        removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(400).json({ error: "Şəkil maksimum 12 MB ola bilər." });
+    }
     const list = users();
     const user = list.find(u => u.username === currentUser(req));
+    if (!user) {
+        removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    }
+    removeLocalUpload(user.avatar);
     user.avatar = `/uploads/${req.file.filename}`;
     saveUsers(list);
     res.json({ avatar: user.avatar });
@@ -678,11 +750,34 @@ app.get("/api/feed", requireAuth, (req, res) => {
     const self = users().find(u => u.username === me);
     if (!self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     const following = self.following || [];
-    let list = posts();
+    let list = posts().filter(p => p.kind !== "reel");
     if (scope === "following") list = list.filter(p => p.username === self.username || following.includes(p.username));
-    res.json(list.slice().sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 100));
+    const userList = users();
+    res.json(list.slice().sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 100).map(p => publicPost(p, userList)));
 });
-app.post("/api/posts", requireAuth, upload.single("media"), (req, res) => {
+app.get("/api/reels", requireAuth, (req, res) => {
+    const userList = users();
+    const list = posts().filter(p => p.kind === "reel")
+        .sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+        .slice(0, 100);
+    res.json(list.map(p => publicPost(p, userList)));
+});
+app.get("/api/profile/posts", requireAuth, (req, res) => {
+    const userList = users();
+    res.json(posts().filter(p => p.username === currentUser(req))
+        .sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+        .slice(0, 100).map(p => publicPost(p, userList)));
+});
+app.get("/api/users/:username/posts", requireAuth, (req, res) => {
+    const name = req.params.username.replace(/^@/, "");
+    const userList = users();
+    const author = userList.find(u => u.username.toLowerCase() === name.toLowerCase());
+    if (!author) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    res.json(posts().filter(p => p.username === author.username)
+        .sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+        .slice(0, 100).map(p => publicPost(p, userList)));
+});
+app.post("/api/posts", requireAuth, socialUpload.single("media"), (req, res) => {
     const text = String(req.body.text || "").trim().slice(0, 1000);
     if (!text && !req.file) return res.status(400).json({ error: "Mətn və ya media əlavə et." });
     let mediaType = "";
@@ -690,15 +785,36 @@ app.post("/api/posts", requireAuth, upload.single("media"), (req, res) => {
         if (req.file.mimetype.startsWith("image/")) mediaType = "image";
         else if (req.file.mimetype.startsWith("video/")) mediaType = "video";
         else return res.status(400).json({ error: "Paylaşım üçün yalnız şəkil və video seç." });
+        if (mediaType === "image" && req.file.size > 12 * 1024 * 1024) {
+            removeLocalUpload(`/uploads/${req.file.filename}`);
+            return res.status(400).json({ error: "Şəkil maksimum 12 MB ola bilər." });
+        }
     }
     const list = posts();
     const post = {
         id: crypto.randomUUID(), username: currentUser(req), text,
         media: req.file ? `/uploads/${req.file.filename}` : "",
-        mediaType, likes: [], comments: [], createdAt: new Date().toISOString()
+        mediaType, kind: "post", likes: [], comments: [], createdAt: new Date().toISOString()
     };
     list.unshift(post); savePosts(list);
-    res.json(post);
+    res.json(publicPost(post));
+});
+app.post("/api/reels", requireAuth, socialUpload.single("media"), (req, res) => {
+    const caption = String(req.body.text || "").trim().slice(0, 500);
+    if (!req.file) return res.status(400).json({ error: "Reels üçün video seç." });
+    if (!["video/mp4", "video/webm"].includes(req.file.mimetype)) {
+        removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(400).json({ error: "Reels yalnız MP4 və ya WebM videoları qəbul edir." });
+    }
+    const reel = {
+        id: crypto.randomUUID(), username: currentUser(req), text: caption,
+        media: `/uploads/${req.file.filename}`, mediaType: "video", kind: "reel",
+        likes: [], comments: [], createdAt: new Date().toISOString()
+    };
+    const list = posts();
+    list.unshift(reel);
+    savePosts(list);
+    res.status(201).json(publicPost(reel));
 });
 app.post("/api/posts/:id/like", requireAuth, (req, res) => {
     const list = posts(), post = list.find(p => p.id === req.params.id);
@@ -723,6 +839,79 @@ app.post("/api/posts/:id/comments", requireAuth, (req, res) => {
     post.comments.push(comment); savePosts(list);
     addNotification(post.username, currentUser(req), "comment", { postId: post.id });
     res.json(comment);
+});
+app.put("/api/posts/:id", requireAuth, (req, res) => {
+    const text = String((req.body || {}).text || "").trim().slice(0, 1000);
+    const list = posts();
+    const post = list.find(p => p.id === req.params.id);
+    if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+    if (post.username !== currentUser(req)) return res.status(403).json({ error: "Yalnız öz paylaşımını redaktə edə bilərsən." });
+    if (!text && !post.media) return res.status(400).json({ error: "Mətn boş ola bilməz." });
+    post.text = text;
+    post.updatedAt = new Date().toISOString();
+    savePosts(list);
+    res.json(publicPost(post));
+});
+app.delete("/api/posts/:id", requireAuth, (req, res) => {
+    const list = posts();
+    const post = list.find(p => p.id === req.params.id);
+    if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+    if (post.username !== currentUser(req)) return res.status(403).json({ error: "Yalnız öz paylaşımını silə bilərsən." });
+    removeLocalUpload(post.media);
+    savePosts(list.filter(p => p.id !== post.id));
+    res.json({ ok: true });
+});
+app.post("/api/posts/:id/report", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const post = posts().find(p => p.id === req.params.id);
+    if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+    if (post.username === me) return res.status(400).json({ error: "Öz paylaşımını şikayət edə bilməzsən." });
+    const list = reports();
+    if (list.some(report => report.postId === post.id && report.reporter === me))
+        return res.status(409).json({ error: "Bu paylaşımı artıq şikayət etmisən." });
+    const reason = String((req.body || {}).reason || "").trim().slice(0, 200);
+    list.unshift({
+        id: crypto.randomUUID(), postId: post.id, owner: post.username,
+        reporter: me, reason, createdAt: new Date().toISOString()
+    });
+    saveReports(list.slice(0, 5000));
+    res.status(201).json({ ok: true });
+});
+app.post("/api/posts/:id/share", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const name = String((req.body || {}).username || "").trim().replace(/^@/, "");
+    const userList = users();
+    const target = userList.find(user => user.username.toLowerCase() === name.toLowerCase());
+    const post = posts().find(p => p.id === req.params.id);
+    if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+    if (!target || target.username === me) return res.status(400).json({ error: "Qəbul edənin istifadəçi adını yoxla." });
+    const conversationList = conversations();
+    let convo = conversationList.find(c => c.type === "direct" &&
+        c.participants.includes(me) && c.participants.includes(target.username));
+    if (!convo) {
+        convo = { id: crypto.randomUUID(), type: "direct", participants: [me, target.username], createdAt: new Date().toISOString() };
+        conversationList.push(convo);
+        saveConversations(conversationList);
+    }
+    const message = {
+        id: crypto.randomUUID(), conversationId: convo.id, from: me, text: "",
+        attachment: "", attachmentName: "", attachmentType: "", sharedPostId: post.id,
+        sharedPost: {
+            id: post.id, username: post.username, authorName: publicPost(post, userList).authorName,
+            text: post.text || "", media: post.media || "", mediaType: post.mediaType || "",
+            kind: post.kind === "reel" ? "reel" : "post"
+        },
+        replyTo: "", deleted: false, deliveredAt: onlineUsers.has(target.username) ? new Date().toISOString() : "",
+        createdAt: new Date().toISOString()
+    };
+    const messageList = messages();
+    messageList.push(message);
+    saveMessages(messageList);
+    io.to(`user:${target.username}`).emit("newMessage", { conversationId: convo.id });
+    io.to(`user:${me}`).emit("messagesChanged", { conversationId: convo.id });
+    addNotification(target.username, me, "message");
+    push.send(target.username, "message", me);
+    res.status(201).json({ ok: true, conversationId: convo.id, message });
 });
 
 app.get("/api/notifications", requireAuth, (req, res) => {
@@ -874,11 +1063,15 @@ app.get("/api/stories", requireAuth, (req, res) => {
     res.json(result);
 });
 
-app.post("/api/stories", requireAuth, upload.single("media"), (req, res) => {
+app.post("/api/stories", requireAuth, socialUpload.single("media"), (req, res) => {
     if (!req.file) return res.status(400).json({error:"Şəkil və ya video seç."});
     if (!req.file.mimetype.startsWith("image/") && !req.file.mimetype.startsWith("video/")) {
-        fs.unlink(req.file.path, () => {});
+        removeLocalUpload(`/uploads/${req.file.filename}`);
         return res.status(400).json({error:"Yalnız şəkil və video paylaşmaq olar."});
+    }
+    if (req.file.mimetype.startsWith("image/") && req.file.size > 12 * 1024 * 1024) {
+        removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(400).json({error:"Şəkil maksimum 12 MB ola bilər."});
     }
     const now = new Date();
     const item = {
