@@ -174,6 +174,12 @@ function getGroupCallConversation(conversationId, username) {
 io.on("connection", socket => {
     const name = socket.request.session.username;
     socket.join(`user:${name}`);
+        function getCallPeer(conversationId) {
+        const c = conversations().find(x =>
+            x.id === conversationId && x.type === "direct" &&
+            Array.isArray(x.participants) && x.participants.includes(name));
+        return c ? (c.participants.find(p => p !== name) || null) : null;
+        }
 
     onlineUsers.set(name, (onlineUsers.get(name) || 0) + 1);
     io.emit("presenceUpdate", { username: name, online: true });
