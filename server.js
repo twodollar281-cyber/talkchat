@@ -18,6 +18,7 @@ const { createCallRegistry } = require("./call-registry");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
+const supa = require("./supabaseStorage");
 
 const app = express();
 const server = http.createServer(app);
@@ -75,7 +76,14 @@ const push = createPush({ readJSON, saveJSON });
 
 
 app.use(helmet({
-    crossOriginResourcePolicy: { policy: "same-site" }
+    crossOriginResourcePolicy: { policy: "same-site" },
+    contentSecurityPolicy: {
+        directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            "img-src": ["'self'", "data:", "blob:", supa.origin].filter(Boolean),
+            "media-src": ["'self'", "blob:", supa.origin].filter(Boolean)
+        }
+    }
 }));
 app.use(express.json({ limit: "1mb" }));
 if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
@@ -444,7 +452,7 @@ const allowedMime = new Set([
     "application/pdf", "text/plain",
     "application/zip", "application/x-zip-compressed"
 ]);
-const storage = multer.diskStorage({
+const storage = supa.enabled ? supa.engine() : multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, UPLOADS),
     filename: (_req, file, cb) => {
         const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 10);
