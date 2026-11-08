@@ -94,3 +94,13 @@
 #tccBox button.tcc-btn.on .tcc-ic { background: #fff; color: #17102a; }
 #tccBox button.tcc-btn.end .tcc-ic { background: #ed4956; border-color: transparent; }
 #tccBox button.tcc-btn.ok .tcc-ic { background: #2ecc71; border-color: transparent; }
+
+#tccBox .tcc-screen-video[hidden],#tccBox .tcc-video[hidden]{display:none!important}
+#tccBox .tcc-video{position:relative;z-index:1}
+#tccBox .tcc-screen-video{position:absolute;inset:0;width:100%;height:100%;z-index:2;object-fit:contain}
+#tccBox .tcc-local-video{position:absolute;right:18px;bottom:126px;z-index:3;width:min(28vw,150px);aspect-ratio:3/4;object-fit:cover;border:2px solid rgba(255,255,255,.8);border-radius:16px;background:#111;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+#tccBox .tcc-local-video[hidden],#tccBox .tcc-btn[hidden]{display:none!important}
+#tccBox.has-video .tcc-mid{position:relative;z-index:4}
+#tccBox.is-sharing .tcc-mid{background:linear-gradient(180deg,rgba(0,0,0,.55),transparent)}
+#tccBox .tcc-bar{position:relative;z-index:5;gap:clamp(8px,2.5vw,24px)}
+@media(max-width:520px){#tccBox .tcc-local-video{right:12px;bottom:116px;width:28vw;max-width:116px;border-radius:12px}#tccBox .tcc-ic{width:54px;height:54px}}

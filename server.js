@@ -14,7 +14,7 @@ const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { createCallRegistry } = require("./call-registry");
+const { createCallRegistry, validateSignal } = require("./call-registry");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
@@ -146,8 +146,23 @@ function deliverPending(name) {
 }
 
 const activeGroupCalls = new Map();
+const activeGroupCallTimers = new Map();
 const directCallRegistry = createCallRegistry();
 const directCallTimers = new Map();
+function clearGroupCallTimer(conversationId) {
+    const timer = activeGroupCallTimers.get(conversationId);
+    if (timer) clearTimeout(timer);
+    activeGroupCallTimers.delete(conversationId);
+}
+function expireDisconnectedGroupCall(conversationId, call) {
+    clearGroupCallTimer(conversationId);
+    const timer = setTimeout(() => {
+        if (activeGroupCalls.get(conversationId) === call && call.participants.length === 0) activeGroupCalls.delete(conversationId);
+        activeGroupCallTimers.delete(conversationId);
+    }, 45000);
+    if (timer && typeof timer.unref === "function") timer.unref();
+    activeGroupCallTimers.set(conversationId, timer);
+}
 
 function clearDirectCallTimer(callId) {
     const timer = directCallTimers.get(callId);
@@ -174,6 +189,14 @@ function getGroupCallConversation(conversationId, username) {
 io.on("connection", socket => {
     const name = socket.request.session.username;
     socket.join(`user:${name}`);
+    const resumedCall = directCallRegistry.findForUser(name);
+    if (resumedCall && resumedCall.status === "active" && directCallTimers.has(resumedCall.id)) {
+        clearDirectCallTimer(resumedCall.id);
+        const peer = resumedCall.caller === name ? resumedCall.callee : resumedCall.caller;
+        const payload = { callId: resumedCall.id, conversationId: resumedCall.conversationId, mediaType: resumedCall.mediaType, peer, reason: "reconnected" };
+        socket.emit("call:resumed", payload);
+        io.to("user:" + peer).emit("call:peer-reconnected", payload);
+    }
         function getCallPeer(conversationId) {
         const c = conversations().find(x =>
             x.id === conversationId && x.type === "direct" &&
@@ -255,19 +278,23 @@ socket.on("call:end", data => {
             return;
         }
 
-        activeGroupCalls.set(convo.id, { participants: [name] });
+        const mediaType = data.mediaType === "video" ? "video" : "audio";
+        clearGroupCallTimer(convo.id);
+        activeGroupCalls.set(convo.id, { participants: [name], mediaType });
 
         socket.emit("group-call:joined", {
             conversationId: convo.id,
-            participants: []
+            participants: [],
+            mediaType
         });
 
         convo.participants.filter(p => p !== name).forEach(p => {
             io.to(`user:${p}`).emit("group-call:incoming", {
                 conversationId: convo.id,
-                from: name
+                from: name,
+                mediaType
             });
-            push.send(p, "group-call", name, { conversationId: convo.id });
+            push.send(p, "group-call", name, { conversationId: convo.id, mediaType });
         });
     });
 
@@ -284,10 +311,12 @@ socket.on("call:end", data => {
             return;
         }
 
+        clearGroupCallTimer(convo.id);
         if (call.participants.includes(name)) {
             socket.emit("group-call:joined", {
                 conversationId: convo.id,
-                participants: call.participants.filter(p => p !== name)
+                participants: call.participants.filter(p => p !== name),
+                mediaType: call.mediaType || "audio"
             });
             return;
         }
@@ -306,13 +335,15 @@ socket.on("call:end", data => {
         previous.forEach(p => {
             io.to(`user:${p}`).emit("group-call:peer-joined", {
                 conversationId: convo.id,
-                username: name
+                username: name,
+                mediaType: call.mediaType || "audio"
             });
         });
 
         socket.emit("group-call:joined", {
             conversationId: convo.id,
-            participants: previous
+            participants: previous,
+            mediaType: call.mediaType || "audio"
         });
     });
 
@@ -324,7 +355,7 @@ socket.on("call:end", data => {
         const convo = getGroupCallConversation(data.conversationId, name);
         const call = convo && activeGroupCalls.get(convo.id);
         if (!call || !call.participants.includes(name) ||
-            !call.participants.includes(data.to)) return;
+            !call.participants.includes(data.to) || !validateSignal(data.signal)) return;
 
         io.to(`user:${data.to}`).emit("group-call:signal", {
             conversationId: convo.id,
@@ -337,7 +368,7 @@ socket.on("call:end", data => {
     socket.on("group-call:leave", data => {
         if (!data || typeof data.conversationId !== "string") return;
         const call = activeGroupCalls.get(data.conversationId);
-        if (!call || !call.participants.includes(name)) return;
+        if (!getGroupCallConversation(data.conversationId, name) || !call || !call.participants.includes(name)) return;
 
         call.participants = call.participants.filter(p => p !== name);
         call.participants.forEach(p => {
@@ -348,6 +379,7 @@ socket.on("call:end", data => {
         });
 
         if (call.participants.length === 0) {
+            clearGroupCallTimer(data.conversationId);
             activeGroupCalls.delete(data.conversationId);
         }
     });
@@ -372,24 +404,29 @@ socket.on("call:end", data => {
         if (count === 0) {
             const activeDirectCall = directCallRegistry.findForUser(name);
             if (activeDirectCall) {
-                const ended = directCallRegistry.end({ callId: activeDirectCall.id, conversationId: activeDirectCall.conversationId, actor: name, reason: "disconnected" });
-                if (ended.ok) { clearDirectCallTimer(ended.call.id); notifyDirectCallEnded(ended.call, "disconnected"); }
+                clearDirectCallTimer(activeDirectCall.id);
+                if (activeDirectCall.status === "active") {
+                    const peer = activeDirectCall.caller === name ? activeDirectCall.callee : activeDirectCall.caller;
+                    io.to("user:" + peer).emit("call:peer-reconnecting", { callId: activeDirectCall.id, conversationId: activeDirectCall.conversationId, peer: name });
+                    const timer = setTimeout(() => {
+                        const ended = directCallRegistry.end({ callId: activeDirectCall.id, conversationId: activeDirectCall.conversationId, actor: name, reason: "disconnected" });
+                        directCallTimers.delete(activeDirectCall.id);
+                        if (ended.ok) notifyDirectCallEnded(ended.call, "disconnected");
+                    }, 45000);
+                    if (timer && typeof timer.unref === "function") timer.unref();
+                    directCallTimers.set(activeDirectCall.id, timer);
+                } else {
+                    const ended = directCallRegistry.end({ callId: activeDirectCall.id, conversationId: activeDirectCall.conversationId, actor: name, reason: "disconnected" });
+                    if (ended.ok) notifyDirectCallEnded(ended.call, "disconnected");
+                }
             }
-            // İstifadəçi tamamilə offline olduqda onu qrup zənglərindən çıxar
+            // Remove offline members; keep an empty room briefly to allow a transient reconnect.
             for (const [conversationId, call] of activeGroupCalls) {
                 if (!call.participants.includes(name)) continue;
                 call.participants = call.participants.filter(p => p !== name);
-                call.participants.forEach(p => {
-                    io.to(`user:${p}`).emit("group-call:peer-left", {
-                        conversationId,
-                        username: name
-                    });
-                });
-                if (call.participants.length === 0) {
-                    activeGroupCalls.delete(conversationId);
-                }
+                call.participants.forEach(p => io.to("user:" + p).emit("group-call:peer-left", { conversationId, username: name }));
+                if (call.participants.length === 0) expireDisconnectedGroupCall(conversationId, call);
             }
-
             onlineUsers.delete(name);
             lastSeenMap.set(name, new Date().toISOString());
             io.emit("presenceUpdate", {
@@ -418,6 +455,19 @@ function requireAuth(req, res, next) {
     if (!currentUser(req)) return res.status(401).json({ error: "Əvvəlcə giriş et." });
     next();
 }
+
+app.get("/api/calls/ice", requireAuth, (req, res) => {
+    const iceServers = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
+    const turnUrls = String(process.env.TURN_URLS || "").split(",").map(x => x.trim()).filter(x => /^turns?:/i.test(x));
+    const sharedSecret = process.env.TURN_SHARED_SECRET;
+    if (turnUrls.length && sharedSecret) {
+        const username = String(Math.floor(Date.now() / 1000) + 3600) + ":" + currentUser(req);
+        const credential = crypto.createHmac("sha1", sharedSecret).update(username).digest("base64");
+        iceServers.push({ urls: turnUrls, username, credential });
+    }
+    res.set("Cache-Control", "private, no-store");
+    res.json({ iceServers });
+});
 function publicUser(user) {
     return {
         username: user.username,

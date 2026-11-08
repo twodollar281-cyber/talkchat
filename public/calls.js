@@ -13,6 +13,36 @@
   const RING_MS = window.TCC_RING_MS || 40000; // arayan bu kadar bekler
   // Farklı ağlar (mobil veri <-> Wi-Fi) için TURN eklemek istersen: window.TC_ICE_SERVERS = [...]
   const ICE = window.TC_ICE_SERVERS || [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
+  let icePromise = null;
+  const getIceServers = () => {
+    if (Array.isArray(window.TC_ICE_SERVERS) && window.TC_ICE_SERVERS.length) return Promise.resolve(window.TC_ICE_SERVERS);
+    if (!icePromise) icePromise = fetch("/api/calls/ice", { credentials: "same-origin", cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => d && Array.isArray(d.iceServers) && d.iceServers.length ? d.iceServers : ICE).catch(() => ICE);
+    return icePromise;
+  };
+  window.TalkChatICE = window.TalkChatICE || { get: getIceServers };
+  window.TalkChatNativeScreen = window.TalkChatNativeScreen || {
+    async start(onStopped) {
+      const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CallService;
+      if (!P || !P.startScreenShare || !P.addListener || !HTMLCanvasElement.prototype.captureStream) throw new Error("Android screen capture is not installed in this app build.");
+      const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { alpha: false });
+      canvas.width = 960; canvas.height = 540;
+      let stopped = false, decoding = false;
+      const frameHandle = await P.addListener("screenFrame", data => {
+        if (stopped || decoding || !data || !data.frame) return;
+        decoding = true;
+        const image = new Image();
+        image.onload = () => { if (!stopped) { canvas.width = image.naturalWidth || canvas.width; canvas.height = image.naturalHeight || canvas.height; ctx.drawImage(image, 0, 0, canvas.width, canvas.height); } decoding = false; };
+        image.onerror = () => { decoding = false; };
+        image.src = "data:image/jpeg;base64," + data.frame;
+      });
+      const stopHandle = await P.addListener("screenCaptureStopped", () => { if (!stopped && onStopped) onStopped(); });
+      const stream = canvas.captureStream(12);
+      try { await P.startScreenShare(); }
+      catch (error) { stopped = true; frameHandle.remove(); stopHandle.remove(); stream.getTracks().forEach(t => t.stop()); throw error; }
+      return { stream, async stop(nativeStopped = false) { if (stopped) return; stopped = true; frameHandle.remove(); stopHandle.remove(); stream.getTracks().forEach(t => t.stop()); if (!nativeStopped && P.stopScreenShare) await P.stopScreenShare(); } };
+    }
+  };
+
 
   /* ---------- metinler (tr / az / en) ---------- */
   const LANG = () => { try { return localStorage.getItem("talkchat-language") || "tr"; } catch { return "tr"; } };
@@ -27,6 +57,12 @@
     share:      { tr: "Ekran paylaş", az: "Ekranı paylaş", en: "Share screen", ru: "Поделиться экраном" },
     stopShare:  { tr: "Paylaşımı durdur", az: "Paylaşımı dayandır", en: "Stop sharing", ru: "Остановить показ" },
     hangup:     { tr: "Bitir", az: "Bitir", en: "End", ru: "Завершить" },
+    videoIncoming:{ tr: "Görüntülü arama", az: "Video zəng", en: "Video call", ru: "Видеозвонок" },
+    cameraOn:   { tr: "Kamerayı kapat", az: "Kameranı bağla", en: "Turn camera off", ru: "Выключить камеру" },
+    cameraOff:  { tr: "Kamerayı aç", az: "Kameranı aç", en: "Turn camera on", ru: "Включить камеру" },
+    switchCamera:{ tr: "Kamerayı değiştir", az: "Kameranı dəyiş", en: "Switch camera", ru: "Переключить камеру" },
+    cameraFail: { tr: "Kamera açılamadı.", az: "Kamera açıla bilmədi.", en: "Could not access the camera.", ru: "Не удалось включить камеру." },
+    reconnecting:{ tr: "Bağlantı yenileniyor…", az: "Bağlantı yenilənir…", en: "Reconnecting…", ru: "Переподключение…" },
     remoteMuted:{ tr: "Karşı taraf mikrofonu kapattı", az: "Qarşı tərəf mikrofonu bağladı", en: "They muted their microphone", ru: "Собеседник выключил микрофон" },
     youShare:   { tr: "Ekranını paylaşıyorsun", az: "Ekranını paylaşırsan", en: "You are sharing your screen", ru: "Вы показываете экран" },
     ended:      { tr: "Arama bitti", az: "Zəng bitdi", en: "Call ended", ru: "Звонок завершён" },
@@ -62,6 +98,9 @@
     hang:  '<svg viewBox="0 0 24 24"><path d="M3 14c5-5 13-5 18 0l-2.5 2.5-3-1.5v-2.5a10 10 0 0 0-7 0V15l-3 1.5z"/></svg>',
     mic:   '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
     micoff:'<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M4 4l16 16"/></svg>',
+    camera:'<svg viewBox="0 0 24 24"><path d="M14 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zM16 10l5-3v10l-5-3"/></svg>',
+    cameraOff:'<svg viewBox="0 0 24 24"><path d="M14 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zM16 10l5-3v10l-5-3M3 3l18 18"/></svg>',
+    switch:'<svg viewBox="0 0 24 24"><path d="M7 7h13l-3-3M17 17H4l3 3M20 7l-3 3M4 17l3-3"/></svg>',
     screen:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M9 11l3-3 3 3M12 8v6"/></svg>',
   };
   const btn = (id, cls) => `<button type="button" id="${id}" class="tcc-btn ${cls}"><span class="tcc-ic"></span><span class="tcc-lb"></span></button>`;
@@ -79,12 +118,20 @@
       <p id="tccNote" class="tcc-note"></p>
     </div>
     <div class="tcc-bar tcc-bar-in">${btn("tccDecline", "end")}${btn("tccAccept", "ok")}</div>
-    <div class="tcc-bar tcc-bar-call">${btn("tccMute", "")}${btn("tccScreen", "")}${btn("tccHang", "end")}</div>
+    <div class="tcc-bar tcc-bar-call">${btn("tccMute", "")}${btn("tccCamera", "")}${btn("tccSwitch", "")}${btn("tccScreen", "")}${btn("tccHang", "end")}</div>
     <audio id="tccAudio" autoplay playsinline></audio>`;
   document.body.appendChild(box);
+  const screenVideo = document.createElement("video");
+  screenVideo.id = "tccScreenVideo"; screenVideo.className = "tcc-video tcc-screen-video";
+  screenVideo.autoplay = true; screenVideo.playsInline = true; screenVideo.muted = true; screenVideo.hidden = true;
+  box.insertBefore(screenVideo, box.querySelector(".tcc-mid"));
+  const localVideo = document.createElement("video");
+  localVideo.id = "tccLocalVideo"; localVideo.className = "tcc-local-video";
+  localVideo.autoplay = true; localVideo.playsInline = true; localVideo.muted = true; localVideo.hidden = true;
+  box.appendChild(localVideo);
   const $ = (id) => document.getElementById(id);
-  const el = { video: $("tccVideo"), avatar: $("tccAvatar"), name: $("tccName"), status: $("tccStatus"), note: $("tccNote"),
-               audio: $("tccAudio"), mute: $("tccMute"), screen: $("tccScreen"), accept: $("tccAccept"), decline: $("tccDecline"), hang: $("tccHang") };
+  const el = { video: $("tccVideo"), screenVideo, localVideo, avatar: $("tccAvatar"), name: $("tccName"), status: $("tccStatus"), note: $("tccNote"),
+               audio: $("tccAudio"), mute: $("tccMute"), camera: $("tccCamera"), switchCamera: $("tccSwitch"), screen: $("tccScreen"), accept: $("tccAccept"), decline: $("tccDecline"), hang: $("tccHang") };
   const setText = (node, t) => { if (node.textContent !== t) node.textContent = t; };
   const setIcon = (b, svg) => { const s = b.querySelector(".tcc-ic"); if (s.dataset.i !== svg) { s.innerHTML = IC[svg]; s.dataset.i = svg; } };
   const label = (b, t) => setText(b.querySelector(".tcc-lb"), t);
@@ -105,35 +152,40 @@
   const sig = (c, signal) => emit("call:signal", c.convo, { signal });
 
   function paint() {
-    const c = cur, i = inc;
-    const who = c ? c.peer : i ? i.peer : "";
-    box.hidden = !who;
-    if (!who) return;
-    const video = !!(c && c.remoteSharing && !c.over);
+    const c = cur, i = inc, who = c ? c.peer : i ? i.peer : "";
+    box.hidden = !who; if (!who) return;
+    const remoteCamera = !!(c && !c.over && c.mediaType === "video" && c.remoteCameraOn && el.video.srcObject);
+    const remoteScreen = !!(c && !c.over && c.remoteSharing && el.screenVideo.srcObject);
+    const localCamera = !!(c && !c.over && c.mediaType === "video" && c.cameraOn && c.local.getVideoTracks().length);
     box.classList.toggle("is-incoming", !c && !!i);
-    box.classList.toggle("has-video", video);
-    el.video.hidden = !video;
-    setText(el.avatar, who[0].toUpperCase());
-    setText(el.name, who);
+    box.classList.toggle("has-video", remoteCamera || remoteScreen);
+    box.classList.toggle("is-sharing", remoteScreen);
+    el.video.hidden = !remoteCamera; el.screenVideo.hidden = !remoteScreen; el.localVideo.hidden = !localCamera;
+    el.avatar.hidden = remoteCamera || remoteScreen;
+    setText(el.avatar, who[0].toUpperCase()); setText(el.name, who);
     let status;
-    if (!c) status = tx("incoming");
+    if (!c) status = tx(i.mediaType === "video" ? "videoIncoming" : "incoming");
     else if (c.over) status = c.endText || tx("ended");
     else if (c.connectedAt) status = c.warn || fmt(Math.floor((Date.now() - c.connectedAt) / 1000));
     else status = tx(c.stage);
     setText(el.status, status);
     const notes = [];
     if (c && c.remoteMuted && !c.over) notes.push(tx("remoteMuted"));
+    if (c && c.remoteCameraOn === false && c.mediaType === "video" && !c.over) notes.push(tx("cameraOff"));
     if (c && c.sharing && !c.over) notes.push(tx("youShare"));
     setText(el.note, notes.join(" · "));
-
     setIcon(el.accept, "phone"); label(el.accept, tx("accept"));
     setIcon(el.decline, "hang"); label(el.decline, tx("decline"));
     setIcon(el.hang, "hang"); label(el.hang, tx("hangup"));
-    setIcon(el.mute, c && c.muted ? "micoff" : "mic");
-    label(el.mute, c && c.muted ? tx("unmute") : tx("mute"));
+    setIcon(el.mute, c && c.muted ? "micoff" : "mic"); label(el.mute, c && c.muted ? tx("unmute") : tx("mute"));
     el.mute.classList.toggle("on", !!(c && c.muted));
-    setIcon(el.screen, "screen");
-    label(el.screen, c && c.sharing ? tx("stopShare") : tx("share"));
+    const hasCamera = !!(c && c.mediaType === "video" && c.local.getVideoTracks().length);
+    el.camera.hidden = !hasCamera; el.switchCamera.hidden = !hasCamera;
+    setIcon(el.camera, c && c.cameraOn ? "camera" : "cameraOff");
+    label(el.camera, c && c.cameraOn ? tx("cameraOn") : tx("cameraOff"));
+    el.camera.classList.toggle("on", !!(c && !c.cameraOn));
+    setIcon(el.switchCamera, "switch"); label(el.switchCamera, tx("switchCamera"));
+    setIcon(el.screen, "screen"); label(el.screen, c && c.sharing ? tx("stopShare") : tx("share"));
     el.screen.classList.toggle("on", !!(c && c.sharing));
   }
 
@@ -174,7 +226,7 @@
     if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return tx("needHttps");
     return "";
   };
-  const getMic = () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
+  const getMedia = (mode, facing = "user") => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: mode === "video" ? { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } } : false });
   const NATIVE_T = { tr: "Arama devam ediyor", az: "Zəng davam edir", en: "Call in progress", ru: "Идёт звонок" };
   const nativeCall = (m, args) => {
     try {
@@ -191,37 +243,35 @@
   const micErrorText = (e) => { const t = MIC_T[LANG()] || MIC_T.tr; return `${t[0]}\n\n${t[1]}: ${e && e.name ? e.name : "UnknownError"}\n${e && e.message ? e.message : t[2]}`; };
 
   async function createPC(c) {
-    const pc = new RTCPeerConnection({ iceServers: ICE });
+    const pc = new RTCPeerConnection({ iceServers: await getIceServers() });
     c.pc = pc;
-    c.local.getTracks().forEach((t) => pc.addTrack(t, c.local));
-    nativeCall("start", { title: "TalkChat", text: NATIVE_T[LANG()] || NATIVE_T.tr });
-    // Ekran paylaşımı için baştan hazır video hattı: paylaşırken yeniden pazarlık gerekmez
-    c.vTrans = pc.addTransceiver("video", { direction: "sendrecv" });
-
+    c.audioTrans = pc.addTransceiver("audio", { direction: "sendrecv" });
+    c.cameraTrans = pc.addTransceiver("video", { direction: "sendrecv" });
+    c.screenTrans = pc.addTransceiver("video", { direction: "sendrecv" });
+    const audioTrack = c.local.getAudioTracks()[0], cameraTrack = c.local.getVideoTracks()[0];
+    if (audioTrack) await c.audioTrans.sender.replaceTrack(audioTrack);
+    if (cameraTrack) await c.cameraTrans.sender.replaceTrack(cameraTrack);
+    c.cameraOn = !!cameraTrack;
+    if (cameraTrack) { el.localVideo.srcObject = new MediaStream([cameraTrack]); el.localVideo.play().catch(() => {}); }
+    nativeCall("start", { title: "TalkChat", text: NATIVE_T[LANG()] || NATIVE_T.tr, camera: c.mediaType === "video" });
     pc.ontrack = (e) => {
       const stream = (e.streams && e.streams[0]) || new MediaStream([e.track]);
       if (e.track.kind === "audio") { el.audio.srcObject = stream; el.audio.play().catch(() => {}); }
-      else { el.video.srcObject = new MediaStream([e.track]); el.video.play().catch(() => {}); }
+      else if (e.transceiver === c.cameraTrans) { el.video.srcObject = stream; el.video.play().catch(() => {}); }
+      else if (e.transceiver === c.screenTrans) { el.screenVideo.srcObject = stream; el.screenVideo.play().catch(() => {}); }
+      paint();
     };
     pc.onicecandidate = (e) => { if (e.candidate) sig(c, { candidate: e.candidate }); };
     pc.onnegotiationneeded = async () => {
-      if (c.role === "callee" && !c.remoteSet) return; // ilk teklifi arayan verir
-      try {
-        c.making = true;
-        await pc.setLocalDescription();
-        sig(c, { description: pc.localDescription });
-      } catch (e) { console.error("Zəng təklifi:", e); } finally { c.making = false; }
+      if (c.role === "callee" && !c.remoteSet) return;
+      try { c.making = true; await pc.setLocalDescription(); sig(c, { description: pc.localDescription }); }
+      catch (e) { console.error("Zəng təklifi:", e); } finally { c.making = false; }
     };
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
-      if (s === "connected") {
-        c.warn = "";
-        if (!c.connectedAt) { c.connectedAt = Date.now(); c.tick = setInterval(paint, 1000); takeWake(); }
-      } else if (s === "disconnected") c.warn = tx("weak");
-      else if (s === "failed") {
-        c.warn = tx("failed");
-        setTimeout(() => { if (cur === c && !c.over) hangUp(tx("failed")); }, 2500);
-      }
+      if (s === "connected") { c.warn = ""; if (!c.connectedAt) { c.connectedAt = Date.now(); c.tick = setInterval(paint, 1000); takeWake(); } }
+      else if (s === "disconnected") c.warn = tx("weak");
+      else if (s === "failed") { c.warn = tx("failed"); setTimeout(() => { if (cur === c && !c.over) hangUp(tx("failed")); }, 2500); }
       paint();
     };
     for (const s of c.pending.splice(0)) await handleSignal(c, s);
@@ -249,6 +299,7 @@
         else await pc.addIceCandidate(s.candidate).catch((e) => { if (!c.ignore) console.warn("ICE:", e); });
       } else if ("muted" in s) { c.remoteMuted = !!s.muted; paint(); }
       else if ("screen" in s) { c.remoteSharing = !!s.screen; paint(); }
+      else if ("camera" in s) { c.remoteCameraOn = !!s.camera; paint(); }
     } catch (e) { console.error("Zəng siqnalı:", e); }
   }
 
@@ -264,10 +315,10 @@
     if (!socket.connected) return alert(tx("offline"));
     askNotify();
     let local;
-    try { local = await getMic(); } catch (e) { console.error("TalkChat microphone error:", e); return alert(micErrorText(e)); }
+    try { local = await getMedia(mode); } catch (e) { console.error("TalkChat media error:", e); return alert(micErrorText(e)); }
     if (busy()) { local.getTracks().forEach((t) => t.stop()); return; }
     const mediaType = mode === "video" ? "video" : "audio";
-    const c = (cur = newCall({ convo: conv.id, peer, role: "caller", local, stage: "calling", mediaType }));
+    const c = (cur = newCall({ convo: conv.id, peer, role: "caller", local, stage: "calling", mediaType, cameraOn: mediaType === "video", remoteCameraOn: true, facing: "user" }));
     paint();
     emit("call:invite", c.convo, { mediaType: c.mediaType });
     c.ringTimer = setTimeout(() => { if (cur === c && !c.accepted && !c.over) hangUp(tx("noAnswer")); }, RING_MS);
@@ -297,11 +348,11 @@
     const p = problem();
     if (p) { alert(p); return declineIncoming(); }
     let local;
-    try { local = await getMic(); } catch (e) { console.error("TalkChat microphone error:", e); alert(micErrorText(e)); return declineIncoming(); }
+    try { local = await getMedia(i.mediaType); } catch (e) { console.error("TalkChat media error:", e); alert(micErrorText(e)); return declineIncoming(); }
     if (inc !== i) { local.getTracks().forEach((t) => t.stop()); return; } // bu arada arama bitti
     inc = null;
     stopRing();
-    const c = (cur = newCall({ callId: i.callId, mediaType: i.mediaType, convo: i.convo, peer: i.peer, role: "callee", local, stage: "connecting", accepted: true }));
+    const c = (cur = newCall({ callId: i.callId, mediaType: i.mediaType, convo: i.convo, peer: i.peer, role: "callee", local, stage: "connecting", accepted: true, cameraOn: i.mediaType === "video", remoteCameraOn: true, facing: "user" }));
     paint();
     try { await createPC(c); } catch (e) { emit("call:end", c.convo); endLocal(c, tx("failed")); return; }
     if (c.over) return;
@@ -310,19 +361,13 @@
 
   function endLocal(c, text) {
     if (c.over) return;
-    c.over = true;
-    c.endText = text || "";
-    clearTimeout(c.ringTimer);
-    clearInterval(c.tick);
-    if (c.sharing) { c.sharing = false; }
+    c.over = true; c.endText = text || ""; clearTimeout(c.ringTimer); clearInterval(c.tick); c.sharing = false;
+    try { if (c.nativeShare) c.nativeShare.stop().catch(() => {}); } catch {}
     try { if (c.screenTrack) c.screenTrack.stop(); } catch {}
-    try { c.local.getTracks().forEach((t) => t.stop()); } catch {}
+    try { if (c.local) c.local.getTracks().forEach((t) => t.stop()); } catch {}
     try { if (c.pc) c.pc.close(); } catch {}
-    el.audio.srcObject = null;
-    el.video.srcObject = null;
-    dropWake();
-    nativeCall("stop");
-    paint();
+    el.audio.srcObject = null; el.video.srcObject = null; el.screenVideo.srcObject = null; el.localVideo.srcObject = null;
+    dropWake(); nativeCall("stop", { camera: c.mediaType === "video" }); paint();
     setTimeout(() => { if (cur === c) { cur = null; paint(); } }, text ? 1400 : 0);
   }
 
@@ -343,35 +388,49 @@
     paint();
   }
 
+  function toggleCamera() {
+    const c = cur, track = c && c.local && c.local.getVideoTracks()[0];
+    if (!c || c.over || c.mediaType !== "video" || !track) return;
+    c.cameraOn = !c.cameraOn; track.enabled = c.cameraOn; sig(c, { camera: c.cameraOn }); paint();
+  }
+  async function switchCamera() {
+    const c = cur; if (!c || c.over || c.mediaType !== "video") return;
+    const facing = c.facing === "environment" ? "user" : "environment";
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); }
+    catch (e) { alert(tx("cameraFail") + " " + (e.message || "")); return; }
+    const next = stream.getVideoTracks()[0], old = c.local.getVideoTracks()[0];
+    try { await c.cameraTrans.sender.replaceTrack(next); } catch (e) { next.stop(); alert(tx("cameraFail")); return; }
+    if (old) { c.local.removeTrack(old); old.stop(); }
+    c.local.addTrack(next); c.facing = facing; next.enabled = c.cameraOn;
+    el.localVideo.srcObject = new MediaStream([next]); el.localVideo.play().catch(() => {}); paint();
+  }
   async function toggleShare() {
-    const c = cur;
-    if (!c || c.over) return;
+    const c = cur; if (!c || c.over || !c.screenTrans) return;
     if (c.sharing) return stopShare(c);
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) return alert(tx("noScreen"));
-    if (!c.vTrans) return;
+    let stream = null, nativeShare = null;
     try {
-      const ds = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
-      const t = ds.getVideoTracks()[0];
-      if ("contentHint" in t) t.contentHint = "detail";
-      await c.vTrans.sender.replaceTrack(t);
-      c.screenTrack = t;
-      c.sharing = true;
-      t.onended = () => stopShare(c); // tarayıcının "Paylaşımı durdur" düğmesi
-      sig(c, { screen: true });
-      paint();
+      if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+      else if (window.TalkChatNativeScreen) { nativeShare = await window.TalkChatNativeScreen.start(() => stopShare(c, true)); stream = nativeShare.stream; }
+      else return alert(tx("noScreen"));
+      if (!cur || cur !== c || c.over) { stream.getTracks().forEach(t => t.stop()); if (nativeShare) await nativeShare.stop(); return; }
+      const track = stream.getVideoTracks()[0]; if (!track) throw new Error("No screen video track");
+      if ("contentHint" in track) track.contentHint = "detail";
+      await c.screenTrans.sender.replaceTrack(track);
+      c.screenStream = stream; c.screenTrack = track; c.nativeShare = nativeShare; c.sharing = true;
+      track.onended = () => stopShare(c, true); sig(c, { screen: true }); paint();
     } catch (e) {
-      if (e && e.name !== "NotAllowedError" && e.name !== "AbortError") alert(tx("shareFail") + e.message);
+      if (nativeShare) await nativeShare.stop().catch(() => {});
+      if (e && e.name !== "NotAllowedError" && e.name !== "AbortError") alert(tx("shareFail") + (e.message || ""));
     }
   }
-  function stopShare(c) {
-    if (!c.sharing) return;
-    c.sharing = false;
-    try { c.screenTrack.stop(); } catch {}
-    c.screenTrack = null;
-    if (!c.over) {
-      c.vTrans.sender.replaceTrack(null).catch(() => {});
-      sig(c, { screen: false });
-    }
+  async function stopShare(c, nativeStopped = false) {
+    if (!c || !c.sharing) return;
+    c.sharing = false; const share = c.nativeShare, track = c.screenTrack;
+    c.nativeShare = null; c.screenTrack = null; c.screenStream = null;
+    try { if (track && track.readyState !== "ended") track.stop(); } catch {}
+    try { if (share) await share.stop(nativeStopped); } catch {}
+    if (!c.over && c.screenTrans) { c.screenTrans.sender.replaceTrack(null).catch(() => {}); sig(c, { screen: false }); }
     paint();
   }
 
@@ -424,28 +483,41 @@
   socket.on("disconnect", () => {
     if (inc) dismissIncoming();
     const c = cur;
-    if (c && !c.over) endLocal(c, tx("dropped"));
+    if (c && !c.over) { c.warn = tx("reconnecting"); paint(); }
+  });
+  socket.on("call:peer-reconnecting", d => {
+    const c = cur; if (!c || c.over || !matchesCall(c, d)) return;
+    c.warn = tx("reconnecting"); paint();
+  });
+  socket.on("call:peer-reconnected", d => {
+    const c = cur; if (!c || c.over || !matchesCall(c, d)) return;
+    c.warn = ""; if (c.pc && c.pc.connectionState !== "connected" && c.pc.restartIce) c.pc.restartIce(); paint();
+  });
+  socket.on("call:resumed", d => {
+    const c = cur; if (!c || c.over || !matchesCall(c, d)) return;
+    c.callId = d.callId || c.callId; c.warn = "";
+    if (c.pc && c.pc.connectionState !== "connected" && c.pc.restartIce) c.pc.restartIce(); paint();
   });
 
   /* ---------- düğmeler ---------- */
   el.accept.onclick = acceptIncoming;
   el.decline.onclick = declineIncoming;
   el.mute.onclick = toggleMute;
+  el.camera.onclick = toggleCamera;
+  el.switchCamera.onclick = switchCamera;
   el.screen.onclick = toggleShare;
   el.hang.onclick = () => hangUp();
   // Sohbet başlığındaki telefon düğmesi (id ile; eski aria-label de çalışır, dil çevirisi aria-label'i değiştirse bile id yeter)
   document.addEventListener("click", (e) => {
-    const btn = e.target.closest('#tcCallBtn, [data-talk-original-aria-label="Səsli zəng"], [aria-label="Səsli zəng"]');
+    const btn = e.target.closest('#tcCallBtn, #tcVideoCallBtn, [data-talk-original-aria-label="Səsli zəng"], [aria-label="Səsli zəng"]');
     if (!btn) return;
+    const mode = btn.id === "tcVideoCallBtn" ? "video" : "audio";
     const conv = conversationsCache.find(x => x.id === activeConversation);
     if (conv && conv.type === "group") {
-      if (window.TalkChatGroupCalls) {
-        e.preventDefault();
-        window.TalkChatGroupCalls.startCall(activeConversation);
-      }
+      if (window.TalkChatGroupCalls) { e.preventDefault(); window.TalkChatGroupCalls.startCall(activeConversation, mode); }
       return;
     }
-    startCall();
+    startCall(mode);
   });
   window.addEventListener("beforeunload", () => { if (cur && !cur.over) emit("call:end", cur.convo); });
 })();
