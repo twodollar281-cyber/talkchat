@@ -437,6 +437,7 @@ function removeLocalUpload(media) {
     if (typeof media !== "string" || !media.startsWith("/uploads/")) return;
     const filename = path.basename(media);
     if (!filename || filename === "." || filename === "..") return;
+    supa.remove(filename);
     fs.unlink(path.join(UPLOADS, filename), () => {});
 }
 function addNotification(to, from, type, extra = {}) {
