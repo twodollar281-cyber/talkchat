@@ -8,6 +8,7 @@
   const ICE = window.TC_ICE_SERVERS || [
     { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }
   ];
+  const getIce = () => window.TalkChatICE && window.TalkChatICE.get ? window.TalkChatICE.get() : Promise.resolve(ICE);
 
   /* ---------- dillər ---------- */
   const LANG = () => { try { return localStorage.getItem("talkchat-language") || "tr"; } catch { return "tr"; } };
@@ -28,6 +29,14 @@
     micFail:    { tr: "Mikrofon açılamadı.", az: "Mikrofon açıla bilmədi.", en: "Could not open the microphone.", ru: "Не удалось включить микрофон." },
     error:      { tr: "Grup araması hatası.", az: "Qrup zəngi xətası.", en: "Group call error.", ru: "Ошибка группового звонка." },
     native:     { tr: "Grup araması devam ediyor", az: "Qrup zəngi davam edir", en: "Group call in progress", ru: "Идёт групповой звонок" },
+    cameraOn:   { tr: "Kamerayı kapat", az: "Kameranı bağla", en: "Turn camera off", ru: "Выключить камеру" },
+    cameraOff:  { tr: "Kamerayı aç", az: "Kameranı aç", en: "Turn camera on", ru: "Включить камеру" },
+    switchCamera:{ tr: "Kamerayı değiştir", az: "Kameranı dəyiş", en: "Switch camera", ru: "Переключить камеру" },
+    share:      { tr: "Ekran paylaş", az: "Ekranı paylaş", en: "Share screen", ru: "Поделиться экраном" },
+    stopShare:  { tr: "Paylaşımı durdur", az: "Paylaşımı dayandır", en: "Stop sharing", ru: "Остановить показ" },
+    sharing:    { tr: "Ekran paylaşıyor", az: "Ekran paylaşır", en: "Sharing screen", ru: "Демонстрирует экран" },
+    cameraFail: { tr: "Kamera açılamadı.", az: "Kamera açıla bilmədi.", en: "Could not access the camera.", ru: "Не удалось включить камеру." },
+    screenFail: { tr: "Ekran paylaşımı başlatılamadı.", az: "Ekran paylaşımı başlatılmadı.", en: "Could not start screen sharing.", ru: "Не удалось начать показ экрана." },
   };
   const tx = (k) => (S[k] && (S[k][LANG()] || S[k].tr)) || k;
 
@@ -81,7 +90,7 @@
   @media (prefers-reduced-motion:reduce){#tcGroupCall *{animation:none!important;transition:none!important}}`;
   const styleEl = document.createElement("style");
   styleEl.id = "tcgStyles";
-  styleEl.textContent = css;
+  styleEl.textContent = css + "\n#tcGroupCall .tcg-tile video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}\n#tcGroupCall .tcg-tile video[hidden]{display:none!important}\n#tcGroupCall .tcg-tile .tcg-camera{z-index:0}\n#tcGroupCall .tcg-tile .tcg-screen{z-index:2;object-fit:contain}\n#tcGroupCall .tcg-share-label{position:absolute;z-index:4;top:8px;left:8px;padding:5px 9px;border-radius:999px;background:rgba(12,10,18,.72);font-size:11px}\n#tcGroupCall .tcg-share-label[hidden]{display:none}\n#tcGroupCall .tcg-av,#tcGroupCall .tcg-nm,#tcGroupCall .tcg-st,#tcGroupCall .tcg-badge{position:relative;z-index:3}\n#tcGroupCall .tcg-tile.has-camera .tcg-av{display:none}\n#tcGroupCall .tcg-tile.has-camera .tcg-nm{align-self:flex-start;margin-top:auto;background:rgba(12,10,18,.62);border-radius:999px;padding:5px 10px}\n#tcGroupCall .tcg-bar{gap:clamp(7px,2vw,22px)}\n@media(max-width:520px){#tcGroupCall .tcg-ic{width:52px;height:52px}#tcGroupCall .tcg-grid{gap:7px;padding:7px}}";
   document.head.appendChild(styleEl);
 
   /* ---------- arayüz ---------- */
@@ -90,8 +99,12 @@
     micoff: '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M4 4l16 16"/></svg>',
     hang:   '<svg viewBox="0 0 24 24"><path d="M3 14c5-5 13-5 18 0l-2.5 2.5-3-1.5v-2.5a10 10 0 0 0-7 0V15l-3 1.5z"/></svg>',
     phone:  '<svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>',
+    camera: '<svg viewBox="0 0 24 24"><path d="M14 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zM16 10l5-3v10l-5-3"/></svg>',
+    cameraOff: '<svg viewBox="0 0 24 24"><path d="M14 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zM16 10l5-3v10l-5-3M3 3l18 18"/></svg>',
+    switch: '<svg viewBox="0 0 24 24"><path d="M7 7h13l-3-3M17 17H4l3 3M20 7l-3 3M4 17l3-3"/></svg>',
+    screen: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M9 11l3-3 3 3M12 8v6"/></svg>'
   };
-  const mkBtn = (cls, icon) => {
+    const mkBtn = (cls, icon) => {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "tcg-btn " + cls;
@@ -119,8 +132,11 @@
   const grid = document.createElement("div"); grid.className = "tcg-grid";
   const barCall = document.createElement("div"); barCall.className = "tcg-bar tcg-bar-call";
   const muteBtn = mkBtn("", IC.mic);
+  const cameraBtn = mkBtn("", IC.camera);
+  const switchBtn = mkBtn("", IC.switch);
+  const screenBtn = mkBtn("", IC.screen);
   const leaveBtn = mkBtn("end", IC.hang);
-  barCall.append(muteBtn, leaveBtn);
+  barCall.append(muteBtn, cameraBtn, switchBtn, screenBtn, leaveBtn);
   const barIn = document.createElement("div"); barIn.className = "tcg-bar tcg-bar-in";
   const declineBtn = mkBtn("end", IC.hang);
   const joinBtn = mkBtn("ok", IC.phone);
@@ -204,66 +220,61 @@
 
   /* ---------- çəkmə ---------- */
   function mkTile(name) {
-    const t = document.createElement("div");
-    t.className = "tcg-tile";
-    t.dataset.name = name;
-    const av = document.createElement("div");
-    av.className = "tcg-av";
-    av.textContent = (String(name)[0] || "?").toUpperCase();
-    const h = hue(name);
-    av.style.background = `linear-gradient(135deg,hsl(${h} 72% 64%),hsl(${(h + 42) % 360} 58% 36%))`;
+    const t = document.createElement("div"); t.className = "tcg-tile"; t.dataset.name = name;
+    const camera = document.createElement("video"); camera.className = "tcg-camera"; camera.autoplay = true; camera.playsInline = true; camera.muted = true; camera.hidden = true;
+    const screen = document.createElement("video"); screen.className = "tcg-screen"; screen.autoplay = true; screen.playsInline = true; screen.muted = true; screen.hidden = true;
+    const shareLabel = document.createElement("span"); shareLabel.className = "tcg-share-label"; shareLabel.hidden = true;
+    const av = document.createElement("div"); av.className = "tcg-av"; av.textContent = (String(name)[0] || "?").toUpperCase();
+    const h = hue(name); av.style.background = "linear-gradient(135deg,hsl(" + h + " 72% 64%),hsl(" + ((h + 42) % 360) + " 58% 36%))";
     const nm = document.createElement("div"); nm.className = "tcg-nm";
     const st = document.createElement("div"); st.className = "tcg-st";
     const badge = document.createElement("span"); badge.className = "tcg-badge"; badge.innerHTML = IC.micoff; badge.hidden = true;
-    t.append(av, nm, st, badge);
-    return t;
+    t.append(camera, screen, shareLabel, av, nm, st, badge); return t;
   }
 
   function paint() {
-    const visible = !!(state || inc);
-    panel.hidden = !visible;
-    panel.classList.toggle("is-incoming", !state && !!inc);
+    const visible = !!(state || inc); panel.hidden = !visible; panel.classList.toggle("is-incoming", !state && !!inc);
     if (!visible) return;
-
-    if (!state && inc) {
-      setText(incAv, (inc.name[0] || "?").toUpperCase());
-      setText(incNm, inc.name);
-      setText(incTx, `${inc.from} ${tx("incoming")}`);
-      setLabel(declineBtn, tx("decline"));
-      setLabel(joinBtn, tx("join"));
-      return;
-    }
-
+    if (!state && inc) { setText(incAv, (inc.name[0] || "?").toUpperCase()); setText(incNm, inc.name); setText(incTx, inc.from + " " + tx("incoming")); setLabel(declineBtn, tx("decline")); setLabel(joinBtn, tx("join")); return; }
     const names = [me, ...state.peers.keys()];
     for (const [n, el] of tiles) if (!names.includes(n)) { el.remove(); tiles.delete(n); }
-    for (const n of names) {
-      if (!tiles.has(n)) tiles.set(n, mkTile(n));
-      grid.appendChild(tiles.get(n)); // sıranı qoruyur
-    }
+    for (const n of names) { if (!tiles.has(n)) tiles.set(n, mkTile(n)); grid.appendChild(tiles.get(n)); }
     grid.dataset.n = String(names.length);
-
+    let anyoneSharing = false;
     for (const n of names) {
-      const t = tiles.get(n);
-      const isMe = n === me;
-      const p = isMe ? null : state.peers.get(n);
-      setText(t.querySelector(".tcg-nm"), isMe ? `${n} (${tx("you")})` : n);
-      const muted = isMe ? state.muted : !!(p && p.muted);
-      t.querySelector(".tcg-badge").hidden = !muted;
-      let st = "";
-      if (!isMe && p) st = p.conn === "connected" ? "" : p.conn === "weak" ? tx("weak") : tx("connecting");
-      setText(t.querySelector(".tcg-st"), st);
-      if (muted) t.classList.remove("speaking");
+      const t = tiles.get(n), isMe = n === me, p = isMe ? null : state.peers.get(n);
+      setText(t.querySelector(".tcg-nm"), isMe ? n + " (" + tx("you") + ")" : n);
+      const cameraTrack = isMe ? state.cameraTrack : p && p.cameraStream && p.cameraStream.getVideoTracks()[0];
+      const cameraStream = isMe ? (state.cameraTrack ? (state.localCameraStream || (state.localCameraStream = new MediaStream([state.cameraTrack]))) : null) : (p && p.cameraStream);
+      const cameraEl = t.querySelector(".tcg-camera");
+      if (cameraEl.srcObject !== cameraStream) cameraEl.srcObject = cameraStream;
+      const cameraOn = isMe ? state.cameraOn : !!(p && p.cameraOn);
+      cameraEl.hidden = !cameraStream || !cameraOn; t.classList.toggle("has-camera", !cameraEl.hidden);
+      const screenStream = isMe ? state.screenStream : p && p.screenStream;
+      const screenEl = t.querySelector(".tcg-screen");
+      if (screenEl.srcObject !== screenStream) screenEl.srcObject = screenStream || null;
+      const sharing = isMe ? state.sharing : !!(p && p.sharing);
+      screenEl.hidden = !sharing || !screenStream; anyoneSharing = anyoneSharing || sharing;
+      const shareLabel = t.querySelector(".tcg-share-label"); shareLabel.hidden = !sharing; setText(shareLabel, (isMe ? tx("you") : n) + " · " + tx("sharing"));
+      const muted = isMe ? state.muted : !!(p && p.muted); t.querySelector(".tcg-badge").hidden = !muted;
+      let status = ""; if (!isMe && p) status = p.conn === "connected" ? (p.sharing ? tx("sharing") : "") : p.conn === "weak" ? tx("weak") : tx("connecting");
+      setText(t.querySelector(".tcg-st"), status); if (muted) t.classList.remove("speaking");
     }
-
+    panel.classList.toggle("is-sharing", anyoneSharing);
     setText(titleEl, state.name || tx("title"));
     const secs = state.startedAt ? Math.floor((Date.now() - state.startedAt) / 1000) : 0;
-    setText(subEl, `${names.length}/${MAX}` + (state.startedAt ? ` · ${fmt(secs)}` : ""));
-    const mic = state.muted;
-    const ic = muteBtn.querySelector(".tcg-ic");
-    const want = mic ? "micoff" : "mic";
-    if (ic.dataset.i !== want) { ic.innerHTML = IC[want]; ic.dataset.i = want; }
-    setLabel(muteBtn, mic ? tx("unmute") : tx("mute"));
-    muteBtn.classList.toggle("on", mic);
+    setText(subEl, names.length + "/" + MAX + (state.startedAt ? " · " + fmt(secs) : ""));
+    const mic = state.muted, micIcon = muteBtn.querySelector(".tcg-ic"), want = mic ? "micoff" : "mic";
+    if (micIcon.dataset.i !== want) { micIcon.innerHTML = IC[want]; micIcon.dataset.i = want; }
+    setLabel(muteBtn, mic ? tx("unmute") : tx("mute")); muteBtn.classList.toggle("on", mic);
+    const hasCamera = !!state.cameraTrack; cameraBtn.hidden = !hasCamera; switchBtn.hidden = !hasCamera;
+    const cameraIcon = cameraBtn.querySelector(".tcg-ic"), cameraWant = state.cameraOn ? "camera" : "cameraOff";
+    if (cameraIcon.dataset.i !== cameraWant) { cameraIcon.innerHTML = IC[cameraWant]; cameraIcon.dataset.i = cameraWant; }
+    setLabel(cameraBtn, state.cameraOn ? tx("cameraOn") : tx("cameraOff")); cameraBtn.classList.toggle("on", !state.cameraOn);
+    const switchIcon = switchBtn.querySelector(".tcg-ic"); if (switchIcon.dataset.i !== "switch") { switchIcon.innerHTML = IC.switch; switchIcon.dataset.i = "switch"; }
+    setLabel(switchBtn, tx("switchCamera"));
+    const screenIcon = screenBtn.querySelector(".tcg-ic"); if (screenIcon.dataset.i !== "screen") { screenIcon.innerHTML = IC.screen; screenIcon.dataset.i = "screen"; }
+    setLabel(screenBtn, state.sharing ? tx("stopShare") : tx("share")); screenBtn.classList.toggle("on", state.sharing);
     setLabel(leaveBtn, tx("leave"));
   }
 
@@ -280,27 +291,21 @@
   }
 
   /* ---------- mikrofon və vəziyyət ---------- */
-  async function getMic() {
+  async function getMedia(mediaType) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error(tx("noMic"));
-    return navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      video: false
-    });
+    return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: mediaType === "video" ? { facingMode: { ideal: "user" }, width: { ideal: 960 }, height: { ideal: 540 } } : false });
   }
 
-  async function ensureState(convo) {
+  async function ensureState(convo, mediaType = "audio") {
     if (state && state.convo === convo) return state;
     if (state) await leave();
     const conv = (typeof conversationsCache !== "undefined" && conversationsCache.find(c => c.id === convo)) || null;
-    const local = await getMic();
-    state = { convo, name: (conv && conv.name) || "", local, peers: new Map(), muted: false, startedAt: 0, tick: null, poll: null, meter: makeMeter(local) };
-    state.tick = setInterval(paint, 1000);
-    state.poll = setInterval(pollSpeaking, 160);
-    nativeCall("start", { title: "TalkChat", text: tx("native") });
-    takeWake();
-    paint();
-    return state;
+    const local = await getMedia(mediaType);
+    state = { convo, name: (conv && conv.name) || "", mediaType, local, cameraTrack: local.getVideoTracks()[0] || null, cameraOn: mediaType === "video", facing: "user", screenTrack: null, screenStream: null, screenHandle: null, sharing: false, peers: new Map(), muted: false, startedAt: 0, tick: null, poll: null, meter: makeMeter(local), rejoining: false };
+    state.tick = setInterval(paint, 1000); state.poll = setInterval(pollSpeaking, 160);
+    nativeCall("start", { title: "TalkChat", text: tx("native"), camera: mediaType === "video" }); takeWake(); paint(); return state;
   }
+
 
   const signal = (to, data) => {
     if (state) socket.emit("group-call:signal", { conversationId: state.convo, to, signal: data });
@@ -308,136 +313,141 @@
 
   async function makePeer(username, offer) {
     if (!state || state.peers.has(username)) return state && state.peers.get(username);
-
-    const pc = new RTCPeerConnection({ iceServers: ICE });
-    const peer = { pc, audio: null, pending: [], muted: earlyMuted.get(username) === true, conn: "connecting", meter: null };
+    const pc = new RTCPeerConnection({ iceServers: await getIce() });
+    const peer = { pc, audio: null, pending: [], muted: earlyMuted.get(username) === true, cameraOn: state.mediaType === "video", sharing: false, cameraStream: null, screenStream: null, conn: "connecting", meter: null };
     earlyMuted.delete(username);
-    state.peers.set(username, peer);
-    state.local.getTracks().forEach(t => pc.addTrack(t, state.local));
-
+    peer.audioTrans = pc.addTransceiver("audio", { direction: "sendrecv" });
+    peer.cameraTrans = pc.addTransceiver("video", { direction: "sendrecv" });
+    peer.screenTrans = pc.addTransceiver("video", { direction: "sendrecv" });
+    state.peers.set(username, peer); paint();
+    const audioTrack = state.local.getAudioTracks()[0];
+    if (audioTrack) await peer.audioTrans.sender.replaceTrack(audioTrack);
+    if (state.cameraTrack) await peer.cameraTrans.sender.replaceTrack(state.cameraTrack);
+    if (state.screenTrack) await peer.screenTrans.sender.replaceTrack(state.screenTrack);
     pc.onicecandidate = e => { if (e.candidate) signal(username, { candidate: e.candidate }); };
-
     pc.ontrack = e => {
       const stream = (e.streams && e.streams[0]) || new MediaStream([e.track]);
-      if (!peer.audio) {
-        peer.audio = document.createElement("audio");
-        peer.audio.autoplay = true;
-        peer.audio.playsInline = true;
-        peer.audio.hidden = true;
-        document.body.appendChild(peer.audio);
-      }
-      peer.audio.srcObject = stream;
-      peer.audio.play().catch(() => {});
-      if (!peer.meter) peer.meter = makeMeter(stream);
+      if (e.track.kind === "audio") {
+        peer.audio = peer.audio || document.createElement("audio"); peer.audio.autoplay = true; peer.audio.playsInline = true; peer.audio.hidden = true;
+        if (!peer.audio.isConnected) document.body.appendChild(peer.audio);
+        peer.audio.srcObject = new MediaStream([e.track]); peer.audio.play().catch(() => {});
+        dropMeter(peer.meter); peer.meter = makeMeter(peer.audio.srcObject);
+      } else if (e.transceiver === peer.cameraTrans) { peer.cameraStream = stream; const tile = tiles.get(username); if (tile) { tile.querySelector(".tcg-camera").srcObject = stream; tile.querySelector(".tcg-camera").play().catch(() => {}); } }
+      else if (e.transceiver === peer.screenTrans) { peer.screenStream = stream; const tile = tiles.get(username); if (tile) { tile.querySelector(".tcg-screen").srcObject = stream; tile.querySelector(".tcg-screen").play().catch(() => {}); } }
+      paint();
     };
-
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
-      if (s === "connected") {
-        peer.conn = "connected";
-        if (state && state.muted) signal(username, { muted: true }); // yeni qoşulana vəziyyətimizi bildir
-      } else if (s === "disconnected") peer.conn = "weak";
+      if (s === "connected") { peer.conn = "connected"; if (state && state.muted) signal(username, { muted: true }); if (state && !state.cameraOn) signal(username, { camera: false }); if (state && state.sharing) signal(username, { screen: true }); }
+      else if (s === "disconnected") peer.conn = "weak";
       else if (s === "failed" || s === "closed") { removePeer(username); return; }
       else peer.conn = "connecting";
       paint();
     };
-
-    if (offer) {
-      const desc = await pc.createOffer();
-      await pc.setLocalDescription(desc);
-      signal(username, { description: pc.localDescription });
-    }
-    paint();
-    return peer;
+    if (offer) { const desc = await pc.createOffer(); await pc.setLocalDescription(desc); signal(username, { description: pc.localDescription }); }
+    paint(); return peer;
   }
 
   async function handleSignal(from, data) {
     if (!state || !from || !data) return;
-
-    if (typeof data.muted === "boolean") {
-      const p = state.peers.get(from);
-      if (p) { p.muted = data.muted; paint(); } else earlyMuted.set(from, data.muted);
-      return;
-    }
-
+    if (typeof data.muted === "boolean") { const p = state.peers.get(from); if (p) { p.muted = data.muted; paint(); } else earlyMuted.set(from, data.muted); return; }
     let peer = state.peers.get(from);
     if (!peer && data.description && data.description.type === "offer") peer = await makePeer(from, false);
-    if (!peer) {
-      const q = queued.get(from) || [];
-      q.push(data);
-      queued.set(from, q);
-      return;
-    }
-
+    if (!peer) { const q = queued.get(from) || []; q.push(data); queued.set(from, q); return; }
+    if (typeof data.camera === "boolean") { peer.cameraOn = data.camera; paint(); return; }
+    if (typeof data.screen === "boolean") { peer.sharing = data.screen; paint(); return; }
     const pc = peer.pc;
     if (data.description) {
       await pc.setRemoteDescription(data.description);
       for (const c of peer.pending.splice(0)) await pc.addIceCandidate(c).catch(() => {});
-      if (data.description.type === "offer") {
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        signal(from, { description: pc.localDescription });
-      }
-    } else if (data.candidate) {
-      if (pc.remoteDescription) await pc.addIceCandidate(data.candidate).catch(() => {});
-      else peer.pending.push(data.candidate);
-    }
+      if (data.description.type === "offer") { const answer = await pc.createAnswer(); await pc.setLocalDescription(answer); signal(from, { description: pc.localDescription }); }
+    } else if (data.candidate) { if (pc.remoteDescription) await pc.addIceCandidate(data.candidate).catch(() => {}); else peer.pending.push(data.candidate); }
   }
 
   function removePeer(name) {
     if (!state) return;
-    const p = state.peers.get(name);
-    if (!p) return;
+    const p = state.peers.get(name); if (!p) return;
     try { p.pc.close(); } catch (_) {}
-    dropMeter(p.meter);
-    if (p.audio) { p.audio.srcObject = null; p.audio.remove(); }
-    state.peers.delete(name);
-    paint();
+    dropMeter(p.meter); if (p.audio) { p.audio.srcObject = null; p.audio.remove(); }
+    const tile = tiles.get(name); if (tile) { tile.querySelector(".tcg-camera").srcObject = null; tile.querySelector(".tcg-screen").srcObject = null; }
+    state.peers.delete(name); paint();
   }
 
   async function leave(notify = true) {
     if (!state) { paint(); return; }
-    const old = state;
-    state = null;
+    const old = state; state = null;
     if (notify) socket.emit("group-call:leave", { conversationId: old.convo });
     clearInterval(old.tick); clearInterval(old.poll);
-    old.peers.forEach(p => {
-      try { p.pc.close(); } catch (_) {}
-      dropMeter(p.meter);
-      if (p.audio) { p.audio.srcObject = null; p.audio.remove(); }
-    });
+    old.peers.forEach(p => { try { p.pc.close(); } catch (_) {} dropMeter(p.meter); if (p.audio) { p.audio.srcObject = null; p.audio.remove(); } });
     dropMeter(old.meter);
-    old.local.getTracks().forEach(t => t.stop());
+    if (old.screenHandle) await old.screenHandle.stop().catch(() => {});
+    if (old.screenTrack && old.screenTrack.readyState !== "ended") old.screenTrack.stop();
+    old.local.getTracks().forEach(t => t.stop()); if (old.cameraTrack && !old.local.getTracks().includes(old.cameraTrack)) old.cameraTrack.stop();
     queued.clear(); earlyMuted.clear();
-    for (const el of tiles.values()) el.remove();
-    tiles.clear();
-    dropWake();
-    nativeCall("stop");
-    paint();
+    for (const el of tiles.values()) { el.querySelector(".tcg-camera").srcObject = null; el.querySelector(".tcg-screen").srcObject = null; el.remove(); }
+    tiles.clear(); dropWake(); nativeCall("stop"); paint();
   }
 
-  async function startCall(conversationId) {
+  async function startCall(conversationId, mediaType = "audio") {
     const conv = conversationsCache.find(c => c.id === conversationId);
     if (!conv || conv.type !== "group") return;
     if (state) return alert(tx("already"));
     if (oneToOneVisible()) return alert(tx("busy1"));
-    try {
-      await ensureState(conversationId);
-      socket.emit("group-call:start", { conversationId });
-    } catch (e) {
-      await leave(false);
-      alert((e && e.message) || tx("micFail"));
-    }
+    try { await ensureState(conversationId, mediaType === "video" ? "video" : "audio"); socket.emit("group-call:start", { conversationId, mediaType: state.mediaType }); }
+    catch (e) { await leave(false); alert((e && e.message) || tx("micFail")); }
   }
 
-  async function joinCall(conversationId) {
+  async function joinCall(conversationId, mediaType = "audio") {
+    try { await ensureState(conversationId, mediaType === "video" ? "video" : "audio"); socket.emit("group-call:join", { conversationId }); }
+    catch (e) { await leave(false); alert((e && e.message) || tx("micFail")); }
+  }
+
+  async function toggleCamera() {
+    if (!state) return;
+    if (!state.cameraTrack) {
+      let stream; try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: state.facing }, width: { ideal: 960 }, height: { ideal: 540 } }, audio: false }); }
+      catch (e) { alert(tx("cameraFail") + " " + (e.message || "")); return; }
+      state.cameraTrack = stream.getVideoTracks()[0]; state.localCameraStream = new MediaStream([state.cameraTrack]); state.cameraOn = true;
+      for (const p of state.peers.values()) await p.cameraTrans.sender.replaceTrack(state.cameraTrack).catch(() => {});
+    } else { state.cameraOn = !state.cameraOn; state.cameraTrack.enabled = state.cameraOn; }
+    for (const name of state.peers.keys()) signal(name, { camera: state.cameraOn }); paint();
+  }
+
+  async function switchCamera() {
+    if (!state || !state.cameraTrack) return;
+    const facing = state.facing === "environment" ? "user" : "environment";
+    let stream; try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 960 }, height: { ideal: 540 } }, audio: false }); }
+    catch (e) { alert(tx("cameraFail") + " " + (e.message || "")); return; }
+    const next = stream.getVideoTracks()[0], old = state.cameraTrack;
+    for (const p of state.peers.values()) await p.cameraTrans.sender.replaceTrack(next).catch(() => {});
+    next.enabled = state.cameraOn; state.cameraTrack = next; state.localCameraStream = new MediaStream([next]); state.facing = facing; old.stop(); paint();
+  }
+
+  async function toggleShare() {
+    if (!state) return;
+    if (state.sharing) return stopShare();
+    let stream = null, handle = null;
     try {
-      await ensureState(conversationId);
-      socket.emit("group-call:join", { conversationId });
-    } catch (e) {
-      await leave(false);
-      alert((e && e.message) || tx("micFail"));
-    }
+      if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+      else if (window.TalkChatNativeScreen) { handle = await window.TalkChatNativeScreen.start(() => stopShare(true)); stream = handle.stream; }
+      else return alert(tx("noScreen"));
+      if (!state) { stream.getTracks().forEach(t => t.stop()); if (handle) await handle.stop(); return; }
+      const track = stream.getVideoTracks()[0]; if (!track) throw new Error("No screen video track");
+      if ("contentHint" in track) track.contentHint = "detail";
+      state.screenStream = stream; state.screenTrack = track; state.screenHandle = handle; state.sharing = true;
+      for (const p of state.peers.values()) await p.screenTrans.sender.replaceTrack(track);
+      for (const name of state.peers.keys()) signal(name, { screen: true });
+      track.onended = () => stopShare(true); paint();
+    } catch (e) { if (handle) await handle.stop().catch(() => {}); if (e && e.name !== "NotAllowedError" && e.name !== "AbortError") alert(tx("screenFail") + " " + (e.message || "")); }
+  }
+
+  async function stopShare(nativeStopped = false) {
+    if (!state || !state.sharing) return;
+    const old = state; old.sharing = false; const handle = old.screenHandle, track = old.screenTrack;
+    old.screenHandle = null; old.screenTrack = null; old.screenStream = null;
+    if (track && track.readyState !== "ended") track.stop(); if (handle) await handle.stop(nativeStopped).catch(() => {});
+    for (const p of old.peers.values()) p.screenTrans.sender.replaceTrack(null).catch(() => {});
+    for (const name of old.peers.keys()) signal(name, { screen: false }); paint();
   }
 
   /* ---------- gələn zəng ---------- */
@@ -455,6 +465,9 @@
     for (const name of state.peers.keys()) signal(name, { muted: state.muted });
     paint();
   };
+  cameraBtn.onclick = toggleCamera;
+  switchBtn.onclick = switchCamera;
+  screenBtn.onclick = toggleShare;
   leaveBtn.onclick = () => leave();
   declineBtn.onclick = () => dismissIncoming();
   joinBtn.onclick = async () => {
@@ -462,13 +475,13 @@
     if (!i) return;
     dismissIncoming();
     audioCtx(); // istifadəçi jestində səs kontekstini aç
-    await joinCall(i.convo);
+    await joinCall(i.convo, i.mediaType);
   };
 
   socket.on("group-call:incoming", d => {
     if (!d || !d.conversationId || state || inc || oneToOneVisible()) return;
     const conv = conversationsCache.find(c => c.id === d.conversationId);
-    inc = { convo: d.conversationId, name: (conv && conv.name) || tx("title"), from: d.from || "?" };
+    inc = { convo: d.conversationId, name: (conv && conv.name) || tx("title"), from: d.from || "?", mediaType: d.mediaType === "video" ? "video" : "audio" };
     paint();
     startRing();
     incTimer = setTimeout(dismissIncoming, 45000);
@@ -476,6 +489,7 @@
 
   socket.on("group-call:joined", async d => {
     if (!state || !d || d.conversationId !== state.convo) return;
+    state.rejoining = false;
     if (!state.startedAt) state.startedAt = Date.now();
     for (const name of (Array.isArray(d.participants) ? d.participants : [])) {
       if (name === me) continue;
@@ -514,7 +528,15 @@
 
   socket.on("disconnect", () => {
     if (inc) dismissIncoming();
-    if (state) leave(false);
+    if (!state) return;
+    state.rejoining = true;
+    for (const name of Array.from(state.peers.keys())) removePeer(name);
+    paint();
+  });
+
+  socket.on("connect", () => {
+    if (!state || !state.rejoining) return;
+    socket.emit("group-call:join", { conversationId: state.convo });
   });
 
   window.TalkChatGroupCalls = { startCall, joinCall, leave };
