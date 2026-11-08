@@ -1033,6 +1033,7 @@ app.delete("/api/conversations/:id/messages/:mid", requireAuth, (req, res) => {
     if (!m) return res.status(404).json({ error: "Mesaj tapılmadı." });
     if (m.from !== me) return res.status(403).json({ error: "Yalnız öz mesajını silə bilərsən." });
     if (m.attachment) fs.unlink(path.join(UPLOADS, path.basename(m.attachment)), () => {});
+    if (m.attachment) supa.remove(path.basename(m.attachment));
     Object.assign(m, { deleted: true, text: "", attachment: "", attachmentName: "", attachmentType: "" });
     saveMessages(list);
     convo.participants.forEach(to => io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
