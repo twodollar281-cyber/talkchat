@@ -917,6 +917,38 @@ async function deleteModeratedContent(type, id, actorUsername, reason) {
         }
         return { status: 404, error: "Şərh tapılmadı." };
     }
+    if (type === "story") {
+        const storyList = stories();
+        const story = storyList.find(item => item.id === id);
+        if (!story) return { status: 404, error: "Story tapılmadı." };
+        const removed = await removeLocalUpload(story.media, story.storagePath);
+        if (!removed.ok) return { status: 503, error: "Fayl Storage-dan silinmədi; Story saxlanıldı." };
+        saveStories(storyList.filter(item => item.id !== id));
+        appendAudit({
+            actorUsername, targetUsername: story.username,
+            actionType: "story_deleted", targetType: "story", targetId: id, reason
+        });
+        return { ok: true, targetUsername: story.username };
+    }
+    if (type === "message") {
+        const messageList = messages();
+        const message = messageList.find(item => item.id === id && !item.deleted);
+        if (!message) return { status: 404, error: "Mesaj tapılmadı." };
+        const removed = await removeLocalUpload(message.attachment, message.attachmentStoragePath);
+        if (!removed.ok) return { status: 503, error: "Fayl Storage-dan silinmədi; mesaj saxlanıldı." };
+        message.deleted = true;
+        message.text = "";
+        message.attachment = "";
+        message.attachmentStoragePath = "";
+        message.attachmentName = "";
+        saveMessages(messageList);
+        appendAudit({
+            actorUsername, targetUsername: message.from,
+            actionType: "message_deleted", targetType: "message", targetId: id, reason
+        });
+        io.to(`user:${message.from}`).emit("messagesChanged", { conversationId: message.conversationId });
+        return { ok: true, targetUsername: message.from };
+    }
     if (type !== "post" && type !== "reel") return { status: 400, error: "Məzmun növü düzgün deyil." };
     const post = list.find(item => item.id === id && (type !== "reel" || item.kind === "reel") && (type !== "post" || item.kind !== "reel"));
     if (!post) return { status: 404, error: "Paylaşım tapılmadı." };
@@ -932,13 +964,37 @@ async function deleteModeratedContent(type, id, actorUsername, reason) {
 }
 function reportContent(report) {
     const type = report.itemType || "post";
+    if (type === "user") {
+        const account = findAccount(report.itemId || report.owner);
+        return account ? {
+            type, id: account.username, owner: account.username,
+            text: "İstifadəçi hesabı", createdAt: report.createdAt || account.createdAt || ""
+        } : report.contentSnapshot || null;
+    }
     if (type === "comment") {
         const post = posts().find(item => item.id === report.postId);
         const comment = post?.comments?.find(item => item.id === (report.itemId || report.commentId));
         return comment ? {
             type, id: comment.id, postId: post.id, owner: comment.username,
             text: comment.text, createdAt: comment.createdAt
-        } : null;
+        } : report.contentSnapshot || null;
+    }
+    if (type === "story") {
+        const story = stories().find(item => item.id === report.itemId &&
+            Date.parse(item.expiresAt) > Date.now());
+        return story ? {
+            type, id: story.id, owner: story.username, text: story.text || "",
+            media: story.media || "", mediaType: story.mediaType || "",
+            createdAt: story.createdAt || ""
+        } : report.contentSnapshot || null;
+    }
+    if (type === "message") {
+        const message = messages().find(item => item.id === report.itemId && !item.deleted);
+        return message ? {
+            type, id: message.id, owner: message.from,
+            text: String(message.text || "").slice(0, 2000),
+            createdAt: message.createdAt || ""
+        } : report.contentSnapshot || null;
     }
     const post = posts().find(item => item.id === (report.itemId || report.postId));
     return post ? {
@@ -946,7 +1002,7 @@ function reportContent(report) {
         id: post.id, owner: post.username, text: post.text || "",
         media: post.media || "", mediaType: post.mediaType || "",
         createdAt: post.createdAt
-    } : null;
+    } : report.contentSnapshot || null;
 }
 function addNotification(to, from, type, extra = {}) {
     if (!to || to === from || isBlockedBetween(to, from)) return;
@@ -1543,11 +1599,13 @@ app.post("/api/posts/:id/report", requireAuth, (req, res) => {
     const reason = String((req.body || {}).reason || "").trim();
     if (!["Spam", "Taciz", "Uygunsuz içerik", "Sahte hesap", "Diğer"].includes(reason))
         return res.status(400).json({ error: "Şikayət səbəbini siyahıdan seç." });
+    const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
+    if (description.length > 1000) return res.status(400).json({ error: "Əlavə izah 1000 simvoldan uzun ola bilməz." });
     list.unshift({
         id: crypto.randomUUID(),
         itemType: post.kind === "reel" ? "reel" : "post",
         itemId: post.id, postId: post.id, owner: post.username,
-        reporter: me, reason, status: "pending", createdAt: new Date().toISOString()
+        reporter: me, reason, description, status: "pending", createdAt: new Date().toISOString()
     });
     saveReports(list.slice(0, 5000));
     res.status(201).json({ ok: true });
@@ -1561,16 +1619,102 @@ app.post("/api/posts/:id/comments/:commentId/report", requireAuth, (req, res) =>
     const reason = String((req.body || {}).reason || "").trim();
     if (!["Spam", "Taciz", "Uygunsuz içerik", "Sahte hesap", "Diğer"].includes(reason))
         return res.status(400).json({ error: "Şikayət səbəbini siyahıdan seç." });
+    const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
+    if (description.length > 1000) return res.status(400).json({ error: "Əlavə izah 1000 simvoldan uzun ola bilməz." });
     const list = reports();
     if (list.some(report => report.reporter === me && report.itemType === "comment" && report.itemId === comment.id))
         return res.status(409).json({ error: "Bu şərhi artıq şikayət etmisən." });
     list.unshift({
         id: crypto.randomUUID(), itemType: "comment", itemId: comment.id,
         postId: post.id, owner: comment.username, reporter: me, reason,
-        status: "pending", createdAt: new Date().toISOString()
+        description, status: "pending", createdAt: new Date().toISOString()
     });
     saveReports(list.slice(0, 5000));
     res.status(201).json({ ok: true });
+});
+app.post("/api/reports", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const body = req.body || {};
+    const type = typeof body.itemType === "string" ? body.itemType.trim() : "";
+    const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    const description = typeof body.description === "string" ? body.description.trim() : "";
+    const allowedTypes = new Set(["user", "post", "reel", "comment", "story", "message"]);
+    const allowedReasons = new Set(["Spam", "Taciz", "Uygunsuz içerik", "Sahte hesap", "Diğer"]);
+    if (!allowedTypes.has(type) || !itemId || itemId.length > 180)
+        return res.status(400).json({ error: "Şikayət edilən məzmun düzgün deyil." });
+    if (!allowedReasons.has(reason))
+        return res.status(400).json({ error: "Şikayət səbəbini siyahıdan seç." });
+    if (description.length > 1000)
+        return res.status(400).json({ error: "Əlavə izah 1000 simvoldan uzun ola bilməz." });
+
+    let owner = "";
+    let canonicalItemId = itemId;
+    let parentPostId = "";
+    let contentSnapshot = null;
+    if (type === "user") {
+        const target = findAccount(itemId);
+        if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+        owner = target.username;
+        canonicalItemId = target.username;
+        contentSnapshot = { type, id: target.username, owner: target.username, text: "İstifadəçi hesabı" };
+    } else if (type === "post" || type === "reel") {
+        const post = posts().find(item => item.id === itemId &&
+            (type !== "reel" || item.kind === "reel") &&
+            (type !== "post" || item.kind !== "reel"));
+        if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+        owner = post.username;
+        contentSnapshot = {
+            type: post.kind === "reel" ? "reel" : "post", id: post.id, owner: post.username,
+            text: post.text || "", media: post.media || "", mediaType: post.mediaType || "",
+            createdAt: post.createdAt || ""
+        };
+    } else if (type === "comment") {
+        const post = posts().find(item => (item.comments || []).some(comment => comment.id === itemId));
+        const comment = post?.comments?.find(item => item.id === itemId);
+        if (!comment) return res.status(404).json({ error: "Şərh tapılmadı." });
+        owner = comment.username;
+        parentPostId = post.id;
+        contentSnapshot = {
+            type, id: comment.id, postId: post.id, owner: comment.username,
+            text: comment.text || "", createdAt: comment.createdAt || ""
+        };
+    } else if (type === "story") {
+        const story = stories().find(item => item.id === itemId && Date.parse(item.expiresAt) > Date.now());
+        if (!story) return res.status(404).json({ error: "Aktiv Story tapılmadı." });
+        owner = story.username;
+        contentSnapshot = {
+            type, id: story.id, owner: story.username, text: story.text || "",
+            media: story.media || "", mediaType: story.mediaType || "", createdAt: story.createdAt || ""
+        };
+    } else if (type === "message") {
+        const message = messages().find(item => item.id === itemId && !item.deleted);
+        const conversation = message && conversations().find(item =>
+            item.id === message.conversationId && item.participants.includes(me));
+        if (!message || !conversation || isBlockedBetween(me, message.from))
+            return res.status(404).json({ error: "Mesaj tapılmadı." });
+        owner = message.from;
+        contentSnapshot = {
+            type, id: message.id, owner: message.from,
+            text: String(message.text || "").slice(0, 2000), createdAt: message.createdAt || ""
+        };
+    }
+    if (!owner || owner === me) return res.status(400).json({ error: "Öz məzmununu şikayət edə bilməzsən." });
+    if (isBlockedBetween(me, owner)) return res.status(404).json({ error: "Məzmun tapılmadı." });
+
+    const list = reports();
+    const duplicate = list.some(report => report.reporter === me && report.itemId === canonicalItemId &&
+        (report.itemType === type ||
+            ((type === "post" || type === "reel") && (report.itemType === "post" || report.itemType === "reel"))));
+    if (duplicate) return res.status(409).json({ error: "Bu məzmunu artıq şikayət etmisən." });
+    list.unshift({
+        id: crypto.randomUUID(), itemType: type, itemId: canonicalItemId,
+        ...(parentPostId ? { postId: parentPostId } : {}),
+        owner, reporter: me, reason, description, contentSnapshot, status: "pending",
+        createdAt: new Date().toISOString()
+    });
+    saveReports(list.slice(0, 5000));
+    res.status(201).json({ ok: true, status: "pending" });
 });
 app.get("/api/admin/summary", requireAuth, requireRole("moderator"), (_req, res) => {
     expireBans();
@@ -1606,9 +1750,13 @@ app.get("/api/admin/users", requireAuth, requireRole("moderator"), (req, res) =>
 });
 app.get("/api/admin/reports", requireAuth, requireRole("moderator"), (req, res) => {
     const status = String(req.query.status || "pending");
-    const list = reports().filter(report => status === "all"
-        ? true
-        : (report.status || "pending") === status)
+    const type = String(req.query.type || "all");
+    const query = String(req.query.q || "").trim().toLowerCase().slice(0, 100);
+    const list = reports().filter(report =>
+        (status === "all" || (report.status || "pending") === status) &&
+        (type === "all" || report.itemType === type) &&
+        (!query || [report.owner, report.reporter, report.reason, report.description]
+            .some(value => String(value || "").toLowerCase().includes(query))))
         .slice(0, 200)
         .map(report => ({ ...report, content: reportContent(report) }));
     res.json(list);

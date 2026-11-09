@@ -303,7 +303,7 @@ async function openPublicProfile(name){
     const outgoing = friendRequests.outgoing.some(x => x.username === u.username);
     $("homePage").hidden=true;$("discoverPage").hidden=true;$("messagesPage").hidden=true;$("notificationsPage").hidden=true;$("profilePage").hidden=true;$("publicProfilePage").hidden=false;
     const profileLink=u.link?`<a class="profile-link" href="${esc(u.link)}" target="_blank" rel="noopener noreferrer">${esc(u.link.replace(/^https?:\/\//i,""))}</a>`:"";
-    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)} ${u.verified?verifiedBadge():""}</h2><p class="public-username">@${esc(u.username)} ${roleBadge(u.role)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button><button type="button" id="blockUserButton" class="tc-block-button">${u.blockedByMe?"Blokdan çıxar":"Blokla"}</button>`}`;
+    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)} ${u.verified?verifiedBadge():""}</h2><p class="public-username">@${esc(u.username)} ${roleBadge(u.role)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button><button type="button" id="blockUserButton" class="tc-block-button">${u.blockedByMe?"Blokdan çıxar":"Blokla"}</button><button type="button" class="tc-report-button" data-report-user="${esc(u.username)}">Hesabı şikayət et</button>`}`;
     applyProfileCustomization($("publicProfile"),u);
     $("blockUserButton")?.addEventListener("click",async()=>{
       const blocked=u.blockedByMe;
@@ -416,13 +416,14 @@ async function loadTalkChatExtras() {
             dlg.className = "tc-story-dialog";
             document.body.appendChild(dlg);
           }
-          dlg.innerHTML = `<button class="tc-dialog-close" type="button">✕</button>
+          dlg.innerHTML = `<button class="tc-dialog-close" type="button" aria-label="Bağla">✕</button>
             <h3>@${esc(item.username)}</h3>
             ${item.mediaType === "video"
               ? `<video src="${esc(item.media)}" controls autoplay playsinline></video>`
               : `<img src="${esc(item.media)}" alt="Story">`}
             <p>${esc(item.text || "")}</p>
-            <small>${item.viewsCount || 0} baxış · 24 saatlıq Story</small>`;
+            <small>${item.viewsCount || 0} baxış · 24 saatlıq Story</small>
+            ${item.username !== me ? `<button type="button" class="tc-report-button" data-report-story="${esc(item.id)}">Story-ni şikayət et</button>` : ""}`;
           dlg.querySelector("button").onclick = () => dlg.close();
           dlg.showModal();
         }
@@ -1752,7 +1753,10 @@ function igBubble(m, byId) {
   }
   if (m.text) body += `<span class="ig-t">${esc(m.text)}</span>${m.editedAt ? `<small class="ig-edited">redaktə edildi</small>` : ""}`;
   const cls = m.attachment && isImg && !m.text ? " img" : "";
-  return `<span class="ig-bub${cls}">${quote}${body}</span>`;
+  const reportButton = m.from !== me
+    ? `<button type="button" class="ig-report-message" data-report-message="${esc(m.id)}">Şikayət et</button>`
+    : "";
+  return `<span class="ig-bub${cls}">${quote}${body}${reportButton}</span>`;
 }
 
 function igRenderMsgs() {
