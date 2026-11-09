@@ -14,6 +14,7 @@ const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { redactReplyPreviews, removeBlockedFollower, prepareForwardMedia } = require("./review-fixes");
 const { createCallRegistry, validateSignal } = require("./call-registry");
 const {
     OWNER_USERNAME, ROLE_LEVEL, roleOf, canAssignRole,
@@ -1033,6 +1034,7 @@ async function deleteModeratedContent(type, id, actorUsername, reason) {
         message.attachment = "";
         message.attachmentStoragePath = "";
         message.attachmentName = "";
+        redactReplyPreviews(messageList, message);
         saveMessages(messageList);
         appendAudit({
             actorUsername, targetUsername: message.from,
@@ -1412,6 +1414,7 @@ app.post("/api/users/:username/block", requireAuth, (req, res) => {
     const blockedUser = allUsers.find(user => user.username === target.username);
     if (self && blockedUser) {
         self.following = (self.following || []).filter(name => name !== blockedUser.username);
+        removeBlockedFollower(self, blockedUser.username);
         self.friends = (self.friends || []).filter(name => name !== blockedUser.username);
         blockedUser.followers = (blockedUser.followers || []).filter(name => name !== me);
         blockedUser.following = (blockedUser.following || []).filter(name => name !== me);
@@ -1741,7 +1744,7 @@ app.delete("/api/posts/:id", requireAuth, async (req, res) => {
     savePosts(list.filter(p => p.id !== post.id));
     res.json({ ok: true });
 });
-app.post("/api/posts/:id/report", requireAuth, (req, res) => {
+app.post("/api/posts/:id/report", requireAuth, reportLimiter, (req, res) => {
     const me = currentUser(req);
     const post = posts().find(p => p.id === req.params.id);
     if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
@@ -1766,7 +1769,7 @@ app.post("/api/posts/:id/report", requireAuth, (req, res) => {
     saveReports(list.slice(0, 5000));
     res.status(201).json({ ok: true });
 });
-app.post("/api/posts/:id/comments/:commentId/report", requireAuth, (req, res) => {
+app.post("/api/posts/:id/comments/:commentId/report", requireAuth, reportLimiter, (req, res) => {
     const me = currentUser(req);
     const post = posts().find(item => item.id === req.params.id);
     const comment = post?.comments?.find(item => item.id === req.params.commentId);
@@ -2449,8 +2452,13 @@ app.post("/api/conversations/:id/messages/:mid/forward", requireAuth, async (req
         return res.status(403).json({ error: "Hədəf söhbətin iştirakçısı bu paylaşımı görə bilmir." });
     const text = typeof source.text === "string" ? source.text.slice(0, 2000) : "";
     const hasSharedPost = !!source.sharedPost && typeof source.sharedPost === "object";
-    const rawPath = source.attachmentStoragePath || (typeof source.attachment === "string" && source.attachment.startsWith("/uploads/") ? source.attachment.slice("/uploads/".length) : "");
-    if (!text && !hasSharedPost && !rawPath) return res.status(400).json({ error: "Bu mesaj ötürülə bilməz." });
+    const media = prepareForwardMedia(source, { normalizeGifPayload, findSticker });
+    if (media.error === "gif") return res.status(400).json({ error: "GIF məlumatı düzgün deyil." });
+    if (media.error === "sticker") return res.status(400).json({ error: "Sticker məlumatı düzgün deyil." });
+    if (media.error === "multiple-media") return res.status(400).json({ error: "Eyni mesajda yalnız bir media göndərmək olar." });
+    const { gif, sticker, rawPath } = media;
+    if (!text && !hasSharedPost && !rawPath && !gif && !sticker)
+        return res.status(400).json({ error: "Bu mesaj ötürülə bilməz." });
     if (rawPath && (path.basename(rawPath) !== rawPath || rawPath === "." || rawPath === "..")) return res.status(400).json({ error: "Fayl yolu etibarsızdır." });
     let copiedPath = "";
     if (rawPath) {
@@ -2460,10 +2468,12 @@ app.post("/api/conversations/:id/messages/:mid/forward", requireAuth, async (req
     const recipients = target.participants.filter(user => user !== me);
     const forwarded = {
         id: crypto.randomUUID(), conversationId: target.id, from: me, text,
-        attachment: copiedPath ? `/uploads/${copiedPath}` : "",
+        attachment: gif ? gif.url : copiedPath ? `/uploads/${copiedPath}` : "",
         attachmentStoragePath: copiedPath,
-        attachmentName: copiedPath ? String(source.attachmentName || "Fayl").slice(0, 100) : "",
-        attachmentType: copiedPath ? String(source.attachmentType || "") : "",
+        attachmentName: gif ? gif.title : copiedPath ? String(source.attachmentName || "Fayl").slice(0, 100) : "",
+        attachmentType: gif ? "image/gif" : copiedPath ? String(source.attachmentType || "") : "",
+        ...(gif ? { gif } : {}),
+        ...(sticker ? { sticker: { id: sticker.id, category: sticker.category, emoji: sticker.emoji, label: sticker.label } } : {}),
         replyTo: "", forwardedFrom: source.forwardedFrom || source.from,
         sharedPostId: source.sharedPostId || (hasSharedPost ? source.sharedPost.id : ""),
         sharedPost: hasSharedPost ? JSON.parse(JSON.stringify(source.sharedPost)) : null,
@@ -2523,9 +2533,7 @@ app.delete("/api/conversations/:id/messages/:mid", requireAuth, async (req, res)
     }
     Object.assign(m, { deleted: true, text: "", attachment: "", attachmentName: "", attachmentType: "" });
     m.attachmentStoragePath = "";
-    for (const reply of list) {
-        if (reply.replyTo === m.id) reply.replyPreview = { from: m.from, text: "Mesaj silindi" };
-    }
+    redactReplyPreviews(list, m);
     saveMessages(list);
     convo.participants.forEach(to => io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
     res.json({ ok: true });
