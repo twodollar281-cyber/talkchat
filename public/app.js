@@ -244,6 +244,12 @@ async function loadMyProfile(){
     $("profileColor").value=/^#[0-9a-fA-F]{6}$/.test(String(u.profileColor||""))?u.profileColor:"#8257ff";
     $("onlineVisibility").value=["everyone","friends","nobody"].includes(u.onlineVisibility)?u.onlineVisibility:"everyone";
     $("lastSeenVisibility").value=["everyone","friends","nobody"].includes(u.lastSeenVisibility)?u.lastSeenVisibility:"everyone";
+    const privacy=u.privacySettings||{};
+    $("privacyProfile").value=["everyone","followers","friends","nobody"].includes(privacy.profile)?privacy.profile:"everyone";
+    $("privacyPosts").value=["everyone","followers","friends","nobody"].includes(privacy.posts)?privacy.posts:"everyone";
+    $("privacyStories").value=["everyone","followers","friends","nobody"].includes(privacy.stories)?privacy.stories:"everyone";
+    $("privacyMessages").value=["everyone","followers","friends","nobody"].includes(privacy.messageRequests)?privacy.messageRequests:"everyone";
+    $("privacyFriends").value=["everyone","followers","friends","nobody"].includes(privacy.friendRequests)?privacy.friendRequests:"everyone";
     applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
     $("myDisplayName").value=u.displayName||"";
@@ -272,7 +278,7 @@ async function loadMyPosts(){
 }
 $("saveBio").onclick=async()=>{
   try{
-    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value,profileTheme:$("profileTheme").value,profileColor:$("profileColor").value,onlineVisibility:$("onlineVisibility").value,lastSeenVisibility:$("lastSeenVisibility").value})});
+    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value,profileTheme:$("profileTheme").value,profileColor:$("profileColor").value,onlineVisibility:$("onlineVisibility").value,lastSeenVisibility:$("lastSeenVisibility").value,privacySettings:{profile:$("privacyProfile").value,posts:$("privacyPosts").value,stories:$("privacyStories").value,messageRequests:$("privacyMessages").value,friendRequests:$("privacyFriends").value}})});
     $("profileStatus").textContent="Profil yadda saxlanıldı!";
     applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
