@@ -4,9 +4,11 @@ window.addEventListener("error", e => {
 });
 const $ = id => document.getElementById(id);
 const socket = io();
+window.TalkChatSocket = socket;
 let me = "";
 let scope = "all";
 let activeConversation = null;
+Object.defineProperty(window, "TalkChatActiveConversationId", { get: () => activeConversation });
 let conversationsCache = [];
 
 function esc(value="") {
@@ -39,6 +41,9 @@ function showPage(name) {
   if (name === "reels") window.TalkChatSocial?.loadReels();
   if (name === "profile") loadMyPosts();
   if (name === "admin") window.TalkChatAdmin?.load();
+  if (name === "live") window.TalkChatLive?.load();
+  if (name === "ai") window.TalkChatAI?.load();
+  if (name === "profile") window.TalkChatCollections?.load();
 }
 document.querySelectorAll("[data-page]").forEach(b => b.addEventListener("click", () => showPage(b.dataset.page)));
 $("loginTab").onclick = () => setAuthMode("login");
@@ -82,6 +87,7 @@ function updateOwnerBootstrapField() {
 $("authUsername").addEventListener("input", updateOwnerBootstrapField);
 $("authUsername").addEventListener("change", updateOwnerBootstrapField);
 function enterApp() {
+  window.TalkChatCurrentUsername = me;
   $("authPage").hidden = true; $("app").hidden = false;
   socket.connect(); showPage("home");
   window.TalkChatSocial?.refreshMenuProfile?.();
@@ -156,6 +162,13 @@ function verifiedBadge() {
   return '<span class="tc-verified-badge" role="img" aria-label="Təsdiqlənmiş hesab" title="Təsdiqlənmiş hesab">✓</span>';
 }
 window.TalkChatVerifiedBadge = verifiedBadge;
+const profileThemeNames = new Set(["violet", "ocean", "sunset", "forest"]);
+function applyProfileCustomization(node, profile) {
+  if (!node) return;
+  node.dataset.profileTheme = profileThemeNames.has(profile.profileTheme) ? profile.profileTheme : "violet";
+  const color = /^#[0-9a-fA-F]{6}$/.test(String(profile.profileColor || "")) ? profile.profileColor : "#8257ff";
+  node.style.setProperty("--profile-accent", color);
+}
 function postHTML(p) {
   const liked=(p.likes||[]).includes(me);
   const isReel=p.kind==="reel";
@@ -178,7 +191,7 @@ function postHTML(p) {
     </div>
     ${isReel?`<span class="post-kind-badge">▶ REELS</span>`:""}
     ${p.text?`<div class="post-text">${esc(p.text)}</div>`:""}${media}
-    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button><button type="button" data-share-post="${esc(p.id)}">Göndər</button></div>
+    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button><button type="button" data-share-post="${esc(p.id)}">Göndər</button><button type="button" data-save-post="${esc(p.id)}">Yadda saxla</button></div>
     <div class="comment-list">${comments}</div>
     <form class="comment-form" data-comment="${esc(p.id)}"><input name="text" placeholder="Şərh yaz..." maxlength="500" required><button class="primary">Göndər</button></form>
   </article>`;
@@ -233,6 +246,17 @@ async function loadMyProfile(){
     window.talkChatRole=u.role||"member";
     window.TalkChatAdmin?.syncRole(window.talkChatRole);
     $("myUsername").innerHTML="@"+esc(u.username)+(u.verified?verifiedBadge():"");
+    $("profileTheme").value=profileThemeNames.has(u.profileTheme)?u.profileTheme:"violet";
+    $("profileColor").value=/^#[0-9a-fA-F]{6}$/.test(String(u.profileColor||""))?u.profileColor:"#8257ff";
+    $("onlineVisibility").value=["everyone","friends","nobody"].includes(u.onlineVisibility)?u.onlineVisibility:"everyone";
+    $("lastSeenVisibility").value=["everyone","friends","nobody"].includes(u.lastSeenVisibility)?u.lastSeenVisibility:"everyone";
+    const privacy=u.privacySettings||{};
+    $("privacyProfile").value=["everyone","followers","friends","nobody"].includes(privacy.profile)?privacy.profile:"everyone";
+    $("privacyPosts").value=["everyone","followers","friends","nobody"].includes(privacy.posts)?privacy.posts:"everyone";
+    $("privacyStories").value=["everyone","followers","friends","nobody"].includes(privacy.stories)?privacy.stories:"everyone";
+    $("privacyMessages").value=["everyone","followers","friends","nobody"].includes(privacy.messageRequests)?privacy.messageRequests:"everyone";
+    $("privacyFriends").value=["everyone","followers","friends","nobody"].includes(privacy.friendRequests)?privacy.friendRequests:"everyone";
+    applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
     $("myDisplayName").value=u.displayName||"";
     $("myLink").value=u.link||"";
@@ -260,8 +284,9 @@ async function loadMyPosts(){
 }
 $("saveBio").onclick=async()=>{
   try{
-    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value})});
+    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value,profileTheme:$("profileTheme").value,profileColor:$("profileColor").value,onlineVisibility:$("onlineVisibility").value,lastSeenVisibility:$("lastSeenVisibility").value,privacySettings:{profile:$("privacyProfile").value,posts:$("privacyPosts").value,stories:$("privacyStories").value,messageRequests:$("privacyMessages").value,friendRequests:$("privacyFriends").value}})});
     $("profileStatus").textContent="Profil yadda saxlanıldı!";
+    applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
     $("myProfileLink").href=u.link||"";
     $("myProfileLink").textContent=u.link?u.link.replace(/^https?:\/\//i,""):"";
@@ -290,7 +315,16 @@ async function openPublicProfile(name){
     const outgoing = friendRequests.outgoing.some(x => x.username === u.username);
     $("homePage").hidden=true;$("discoverPage").hidden=true;$("messagesPage").hidden=true;$("notificationsPage").hidden=true;$("profilePage").hidden=true;$("publicProfilePage").hidden=false;
     const profileLink=u.link?`<a class="profile-link" href="${esc(u.link)}" target="_blank" rel="noopener noreferrer">${esc(u.link.replace(/^https?:\/\//i,""))}</a>`:"";
-    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)} ${u.verified?verifiedBadge():""}</h2><p class="public-username">@${esc(u.username)} ${roleBadge(u.role)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button>`}`;
+    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)} ${u.verified?verifiedBadge():""}</h2><p class="public-username">@${esc(u.username)} ${roleBadge(u.role)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button><button type="button" id="blockUserButton" class="tc-block-button">${u.blockedByMe?"Blokdan çıxar":"Blokla"}</button><button type="button" class="tc-report-button" data-report-user="${esc(u.username)}">Hesabı şikayət et</button>`}`;
+    applyProfileCustomization($("publicProfile"),u);
+    $("blockUserButton")?.addEventListener("click",async()=>{
+      const blocked=u.blockedByMe;
+      if(!blocked&&!confirm(`@${u.username} hesabını bloklamaq istəyirsən?`))return;
+      try{
+        await api(`/api/users/${encodeURIComponent(u.username)}/block`,{method:blocked?"DELETE":"POST"});
+        await Promise.all([openPublicProfile(u.username),loadConversations()]);
+      }catch(e){alert(e.message);}
+    });
     $("friendButton")?.addEventListener("click", async()=>{
       try {
         if(incoming) {
@@ -394,13 +428,14 @@ async function loadTalkChatExtras() {
             dlg.className = "tc-story-dialog";
             document.body.appendChild(dlg);
           }
-          dlg.innerHTML = `<button class="tc-dialog-close" type="button">✕</button>
+          dlg.innerHTML = `<button class="tc-dialog-close" type="button" aria-label="Bağla">✕</button>
             <h3>@${esc(item.username)}</h3>
             ${item.mediaType === "video"
               ? `<video src="${esc(item.media)}" controls autoplay playsinline></video>`
               : `<img src="${esc(item.media)}" alt="Story">`}
             <p>${esc(item.text || "")}</p>
-            <small>${item.viewsCount || 0} baxış · 24 saatlıq Story</small>`;
+            <small>${item.viewsCount || 0} baxış · 24 saatlıq Story</small>
+            ${item.username !== me ? `<button type="button" class="tc-report-button" data-report-story="${esc(item.id)}">Story-ni şikayət et</button>` : ""}`;
           dlg.querySelector("button").onclick = () => dlg.close();
           dlg.showModal();
         }
@@ -1530,6 +1565,16 @@ const talkchatPresence = new Map();
 
 socket.on("presenceUpdate", data => {
   if (!data || !data.username) return;
+  if (data.hidden) {
+    talkchatPresence.delete(data.username);
+    document.querySelectorAll("[data-presence-user]").forEach(el => {
+      if (el.dataset.presenceUser === data.username) {
+        el.textContent = "";
+        el.classList.remove("online");
+      }
+    });
+    return;
+  }
   talkchatPresence.set(data.username, data);
   document.querySelectorAll("[data-presence-user]").forEach(el => {
     if (el.dataset.presenceUser === data.username) {
@@ -1537,6 +1582,14 @@ socket.on("presenceUpdate", data => {
       el.classList.toggle("online", !!data.online);
     }
   });
+});
+socket.on("blocksChanged", () => {
+  loadFeed();
+  loadConversations();
+  loadDirectStoryRail();
+  window.TalkChatSocial?.loadReels?.();
+  if (!$("profilePage").hidden) loadMyPosts();
+  if (!$("notificationsPage").hidden) loadNotifications();
 });
 
 /* =====================================================================
@@ -1647,6 +1700,9 @@ function igRenderHead() {
   const sub = typing ? "yazır…" : group ? c.participants.length + " iştirakçı" : igStatus(c.name);
   igEl("chatSub").textContent = sub;
   igEl("chatSub").classList.toggle("on", !typing && !group && igIsOnline(c.name));
+  const blocked = !group && !!c.blocked;
+  igEl("igBlockNotice").hidden = !blocked;
+  igEl("dmForm").querySelectorAll("button,input").forEach(control => { control.disabled = blocked; });
 }
 
 /* ---------- mesajlar ---------- */
@@ -1709,7 +1765,10 @@ function igBubble(m, byId) {
   }
   if (m.text) body += `<span class="ig-t">${esc(m.text)}</span>${m.editedAt ? `<small class="ig-edited">redaktə edildi</small>` : ""}`;
   const cls = m.attachment && isImg && !m.text ? " img" : "";
-  return `<span class="ig-bub${cls}">${quote}${body}</span>`;
+  const reportButton = m.from !== me
+    ? `<button type="button" class="ig-report-message" data-report-message="${esc(m.id)}">Şikayət et</button>`
+    : "";
+  return `<span class="ig-bub${cls}">${quote}${body}${reportButton}</span>`;
 }
 
 function igRenderMsgs() {
@@ -1743,6 +1802,7 @@ function igRenderMsgs() {
 
 async function openConversation(id) {
   activeConversation = id;
+  window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id } }));
   IG.replyTo = null;
   IG.pendingFile = null;
   igRenderReply();
@@ -2183,6 +2243,7 @@ async function igStartWith(username) {
   igEl("tcMobileBack").onclick = () => {
     igEl("messagesPage").classList.remove("tc-chat-open");
     activeConversation = null;
+    window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id: null } }));
     igRenderList();
   };
   igEl("igInfo").onclick = () => {
@@ -2341,10 +2402,14 @@ async function igStartWith(username) {
   });
   socket.on("presenceUpdate", d => {
     if (!d || !d.username) return;
-    if (d.online) IG.online.add(d.username);
+    if (d.hidden) {
+      IG.online.delete(d.username);
+      delete IG.lastSeen[d.username];
+    } else if (d.online) IG.online.add(d.username);
     else {
       IG.online.delete(d.username);
       if (d.lastSeen) IG.lastSeen[d.username] = d.lastSeen;
+      else delete IG.lastSeen[d.username];
     }
     igRenderList();
     igRenderHead();

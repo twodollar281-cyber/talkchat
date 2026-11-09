@@ -1,0 +1,40 @@
+.tc-collections-section { margin-top: 26px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,.1); }
+.tc-collections-heading h2 { margin: 5px 0 0; font-size: clamp(19px,4vw,25px); }
+.tc-collection-create { display: flex; gap: 9px; margin: 15px 0; }
+.tc-collection-create input { min-width: 0; flex: 1; margin: 0; }
+.tc-collection-create button { flex: 0 0 auto; min-height: 42px; }
+.tc-collections-list { display: grid; gap: 12px; }
+.tc-collection-card { padding: 15px; border: 1px solid rgba(255,255,255,.1); border-radius: 16px; background: rgba(20,20,34,.75); }
+.tc-collection-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.tc-collection-card-head h3 { margin: 0 0 5px; font-size: 15px; overflow-wrap: anywhere; }
+.tc-collection-card-head small { color: var(--muted,#A4A4B8); font-size: 11px; }
+.tc-collection-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+.tc-collection-actions button, .tc-collection-post button { min-height: 34px; padding: 5px 9px; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; color: #E9E7F4; background: rgba(255,255,255,.045); font-size: 11px; cursor: pointer; }
+.tc-collection-actions .tc-collection-delete { color: #FFC0C8; border-color: rgba(255,104,124,.28); }
+.tc-collection-posts { display: grid; gap: 8px; margin-top: 12px; }
+.tc-collection-post { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 0 0; border-top: 1px solid rgba(255,255,255,.075); }
+.tc-collection-post > div { min-width: 0; }
+.tc-collection-post b { color: #E6E0FA; font-size: 12px; }
+.tc-collection-post p { margin: 4px 0 0; color: #C6C3D3; font-size: 12px; overflow-wrap: anywhere; }
+.tc-collection-post button { flex: 0 0 auto; }
+.tc-collection-empty { margin: 0; color: var(--muted,#A4A4B8); font-size: 12px; }
+.tc-collection-picker { width: min(480px,calc(100vw - 24px)); max-width: 480px; max-height: 88dvh; padding: 0; border: 1px solid rgba(255,255,255,.13); border-radius: 20px; color: #F8F7FC; background: #11111D; box-shadow: 0 24px 90px rgba(0,0,0,.55); overflow: auto; }
+.tc-collection-picker::backdrop { background: rgba(4,4,12,.78); backdrop-filter: blur(7px); }
+.tc-collection-picker-panel { padding: clamp(17px,4vw,24px); }
+.tc-collection-picker-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.tc-collection-picker-panel h2 { margin: 5px 0 0; font-size: 20px; }
+.tc-collection-picker-options { display: grid; gap: 8px; max-height: 38dvh; overflow: auto; }
+.tc-collection-picker-options > button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 45px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.1); border-radius: 11px; color: #F8F7FC; background: rgba(255,255,255,.045); text-align: left; cursor: pointer; }
+.tc-collection-picker-options small { color: var(--muted,#A4A4B8); }
+.tc-collection-picker .tc-collection-create { margin-top: 14px; }
+.tc-collections-section .status, .tc-collection-picker .status { min-height: 18px; margin: 6px 0; font-size: 12px; }
+.tc-collections-section .status.error, .tc-collection-picker .status.error { color: #FFADB8; }
+@media (max-width: 520px) {
+  .tc-collection-create { align-items: stretch; flex-direction: column; }
+  .tc-collection-create button { width: 100%; }
+  .tc-collection-card-head { flex-direction: column; }
+  .tc-collection-actions { width: 100%; }
+  .tc-collection-actions button { flex: 1; }
+  .tc-collection-post { flex-direction: column; }
+  .tc-collection-post button { align-self: flex-start; }
+}
