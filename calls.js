@@ -50,6 +50,7 @@
       console.error("TURN konfiqurasiyası alınmadı:", error);
       throw new Error("TURN_SERVER_UNAVAILABLE");
     }
+  }
 
   /* ---------- metinler (tr / az / en) ---------- */
   const LANG = () => { try { return localStorage.getItem("talkchat-language") || "tr"; } catch { return "tr"; } };
