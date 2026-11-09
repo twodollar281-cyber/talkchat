@@ -335,6 +335,7 @@
         <button type="button" class="reel-action${liked ? " liked" : ""}" data-like="${html(post.id)}" aria-label="Bəyən"><span>${liked ? "♥" : "♡"}</span><small>${(post.likes || []).length}</small></button>
         <button type="button" class="reel-action" data-reel-comments="${html(post.id)}" aria-label="Şərh yaz"><span>▢</span><small>${(post.comments || []).length}</small></button>
         <button type="button" class="reel-action" data-share-post="${html(post.id)}" aria-label="Göndər"><span>➤</span><small>Göndər</small></button>
+        <button type="button" class="reel-action" data-save-post="${html(post.id)}" aria-label="Yadda saxla"><span>▣</span><small>Yadda saxla</small></button>
         <details class="reel-more"><summary aria-label="Əlavə əməliyyatlar">···</summary><div class="post-more-menu">
           ${own ? `<button type="button" data-edit-post="${html(post.id)}">Redaktə et</button><button type="button" data-delete-post="${html(post.id)}">Paylaşımı sil</button>` : canModerate ? `<button type="button" data-admin-delete-post="${html(post.id)}" data-admin-delete-type="reel">Məzmunu sil</button>` : `<button type="button" data-report-post="${html(post.id)}">Şikayət et</button>`}
         </div></details>
