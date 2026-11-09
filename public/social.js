@@ -44,6 +44,19 @@
     const index = Number.parseInt(answer, 10) - 1;
     return options[index] || null;
   }
+  async function submitReport(itemType, itemId) {
+    const reason = chooseReportReason();
+    if (reason === null) return;
+    if (!reason) { toast("Siyahıdan etibarlı səbəb seç.", "error"); return; }
+    const description = window.prompt("Əlavə izah (istəyə bağlı, maksimum 1000 simvol):", "");
+    if (description === null) return;
+    await api("/api/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemType, itemId, reason, description: description.trim() })
+    });
+    toast("Şikayət moderator yoxlaması üçün göndərildi.");
+  }
 
   function openShare(mode = "post") {
     setMenu(false);
@@ -233,24 +246,32 @@
 
     const reportButton = event.target.closest("[data-report-post]");
     if (reportButton) {
-      const reason = chooseReportReason();
-      if (reason === null) return;
-      if (!reason) { toast("Siyahıdan etibarlı səbəb seç.", "error"); return; }
-      api("/api/posts/" + encodeURIComponent(reportButton.dataset.reportPost) + "/report", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason })
-      }).then(() => toast("Paylaşım şikayət üçün göndərildi.")).catch(error => toast(error.message, "error"));
+      const card = reportButton.closest("[data-kind]");
+      submitReport(card?.dataset.kind === "reel" ? "reel" : "post", reportButton.dataset.reportPost)
+        .catch(error => toast(error.message, "error"));
       return;
     }
 
     const reportComment = event.target.closest("[data-report-comment]");
     if (reportComment) {
-      const [postId, commentId] = reportComment.dataset.reportComment.split(":");
-      const reason = chooseReportReason();
-      if (reason === null) return;
-      if (!reason) { toast("Siyahıdan etibarlı səbəb seç.", "error"); return; }
-      api(`/api/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/report`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason })
-      }).then(() => toast("Şərh şikayət üçün göndərildi.")).catch(error => toast(error.message, "error"));
+      const [, commentId] = reportComment.dataset.reportComment.split(":");
+      submitReport("comment", commentId).catch(error => toast(error.message, "error"));
+      return;
+    }
+
+    const reportUser = event.target.closest("[data-report-user]");
+    const reportStory = event.target.closest("[data-report-story]");
+    const reportMessage = event.target.closest("[data-report-message]");
+    if (reportUser) {
+      submitReport("user", reportUser.dataset.reportUser).catch(error => toast(error.message, "error"));
+      return;
+    }
+    if (reportStory) {
+      submitReport("story", reportStory.dataset.reportStory).catch(error => toast(error.message, "error"));
+      return;
+    }
+    if (reportMessage) {
+      submitReport("message", reportMessage.dataset.reportMessage).catch(error => toast(error.message, "error"));
     }
   });
 
@@ -314,6 +335,7 @@
         <button type="button" class="reel-action${liked ? " liked" : ""}" data-like="${html(post.id)}" aria-label="Bəyən"><span>${liked ? "♥" : "♡"}</span><small>${(post.likes || []).length}</small></button>
         <button type="button" class="reel-action" data-reel-comments="${html(post.id)}" aria-label="Şərh yaz"><span>▢</span><small>${(post.comments || []).length}</small></button>
         <button type="button" class="reel-action" data-share-post="${html(post.id)}" aria-label="Göndər"><span>➤</span><small>Göndər</small></button>
+        <button type="button" class="reel-action" data-save-post="${html(post.id)}" aria-label="Yadda saxla"><span>▣</span><small>Yadda saxla</small></button>
         <details class="reel-more"><summary aria-label="Əlavə əməliyyatlar">···</summary><div class="post-more-menu">
           ${own ? `<button type="button" data-edit-post="${html(post.id)}">Redaktə et</button><button type="button" data-delete-post="${html(post.id)}">Paylaşımı sil</button>` : canModerate ? `<button type="button" data-admin-delete-post="${html(post.id)}" data-admin-delete-type="reel">Məzmunu sil</button>` : `<button type="button" data-report-post="${html(post.id)}">Şikayət et</button>`}
         </div></details>

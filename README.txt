@@ -70,3 +70,11 @@ SINIRLAR
 GIF MESSAGING
 -------------
 GIF search uses the official GIPHY API through the TalkChat server. Set the server-side environment variable GIPHY_API_KEY in the host secret store; never add the key to browser code or commit its value. Without the key, search and category endpoints return a clear configuration error; existing messages, favorites, recent GIFs, and sticker messaging remain available. The picker displays the required Powered by GIPHY attribution. Historical Tenor GIF URLs remain supported so previously stored messages and favorites continue to display; no Tenor API calls remain.
+
+LIVE STREAMING
+--------------
+Live streams use peer-to-peer WebRTC without a paid provider or API key. Browser HTTPS, a camera/microphone permission, and a compatible network are required. The current implementation supports up to 10 viewers; see docs/live-streaming.md for limitations and setup details.
+
+TALKCHAT AI ASSISTANT
+---------------------
+The assistant uses Cloudflare Workers AI with @cf/zai-org/glm-4.7-flash. Keep CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in the Render server environment only. AI is disabled unless AI_ENABLED=true and CLOUDFLARE_OWNER_VERIFIED=true are set after an adult account owner verifies the Cloudflare billing settings; both flags default to false. Default caps are 8 requests per account per UTC day and 3 per user per minute; configured values are clamped to 40/day and 6/minute. These request limits do not guarantee a dollar ceiling. Workers Free has a 10,000-Neuron daily allocation; Workers Paid bills usage above it. See docs/ai-assistant.md before enabling.

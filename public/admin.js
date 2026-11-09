@@ -64,7 +64,9 @@
       reel_deleted: "Reels silindi",
       comment_deleted: "Şərh silindi",
       report_rejected: "Şikayət rədd edildi",
-      report_resolved: "Şikayət işlənildi"
+      report_resolved: "Şikayət işlənildi",
+      story_deleted: "Story silindi",
+      message_deleted: "Mesaj silindi"
     };
     return `<article class="tc-admin-audit-row"><span class="tc-admin-audit-mark">•</span><div><b>${escapeHTML(labels[item.actionType] || item.actionType)}</b><small>${escapeHTML(item.actorUsername || "system")} → ${escapeHTML(item.targetUsername || "—")}</small><p>${escapeHTML(item.reason || "—")}</p></div><time>${item.createdAt ? new Date(item.createdAt).toLocaleString() : ""}</time></article>`;
   }
@@ -101,7 +103,8 @@
       <header><span class="tc-admin-report-type">${escapeHTML(content.type || report.itemType || "post")}</span><time>${report.createdAt ? new Date(report.createdAt).toLocaleString() : ""}</time></header>
       <p class="tc-admin-report-copy">${escapeHTML(content.text || "Mətn yoxdur")}</p>${media}
       <div class="tc-admin-report-meta"><span>Hesab: <b>@${escapeHTML(content.owner || report.owner || "—")}</b></span><span>Şikayət edən: @${escapeHTML(report.reporter || "—")}</span><span>Səbəb: <b>${escapeHTML(report.reason || "—")}</b></span></div>
-      ${report.status && report.status !== "pending" ? `<div class="tc-admin-report-closed">${report.status === "resolved" ? "Həll edildi" : "Rədd edildi"} · ${escapeHTML(report.actionBy || "")} · ${escapeHTML(report.actionReason || "")}</div>` : `<textarea data-report-reason="${escapeHTML(report.id)}" maxlength="500" placeholder="Qərar və ya tədbir səbəbi"></textarea><div class="tc-admin-report-actions"><select data-report-duration="${escapeHTML(report.id)}">${durationOptions}</select><button type="button" class="secondary" data-report-action="resolve" data-report-id="${escapeHTML(report.id)}">Həll et</button><button type="button" class="tc-admin-quiet" data-report-action="reject" data-report-id="${escapeHTML(report.id)}">Rədd et</button><button type="button" class="tc-admin-danger" data-report-action="delete" data-report-id="${escapeHTML(report.id)}">Məzmunu sil</button><button type="button" class="tc-admin-danger" data-report-action="ban" data-report-id="${escapeHTML(report.id)}">Ban et</button></div>`}
+      ${report.description ? `<p class="tc-admin-report-description"><b>Əlavə izah:</b> ${escapeHTML(report.description)}</p>` : ""}
+      ${report.status && report.status !== "pending" ? `<div class="tc-admin-report-closed">${report.status === "resolved" ? "Həll edildi" : "Rədd edildi"} · ${escapeHTML(report.actionBy || "")} · ${escapeHTML(report.actionReason || "")}</div>` : `<textarea data-report-reason="${escapeHTML(report.id)}" maxlength="500" placeholder="Qərar və ya tədbir səbəbi"></textarea><div class="tc-admin-report-actions"><select data-report-duration="${escapeHTML(report.id)}">${durationOptions}</select><button type="button" class="secondary" data-report-action="resolve" data-report-id="${escapeHTML(report.id)}">Həll et</button><button type="button" class="tc-admin-quiet" data-report-action="reject" data-report-id="${escapeHTML(report.id)}">Rədd et</button>${content.type !== "user" ? `<button type="button" class="tc-admin-danger" data-report-action="delete" data-report-id="${escapeHTML(report.id)}">Məzmunu sil</button>` : ""}<button type="button" class="tc-admin-danger" data-report-action="ban" data-report-id="${escapeHTML(report.id)}">Ban et</button></div>`}
     </article>`;
   }
 
@@ -113,7 +116,8 @@
 
   async function loadReports() {
     const status = $("adminReportFilter")?.value || "pending";
-    const list = await request("/api/admin/reports?status=" + encodeURIComponent(status));
+    const type = $("adminReportTypeFilter")?.value || "all";
+    const list = await request("/api/admin/reports?status=" + encodeURIComponent(status) + "&type=" + encodeURIComponent(type));
     $("adminReportList").innerHTML = list.map(reportHTML).join("") ||
       `<div class="tc-admin-empty">Bu filtrdə şikayət yoxdur.</div>`;
   }
@@ -158,6 +162,7 @@
     loadUsers().catch(error => showStatus(error.message, true));
   });
   $("adminReportFilter")?.addEventListener("change", () => loadReports().catch(error => showStatus(error.message, true)));
+  $("adminReportTypeFilter")?.addEventListener("change", () => loadReports().catch(error => showStatus(error.message, true)));
 
   document.addEventListener("click", async event => {
     const roleButton = event.target.closest("[data-role-save]");
