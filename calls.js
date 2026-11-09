@@ -1,4 +1,4 @@
-/* TALKCHAT_CALLS_V4
+/* TALKCHAT_CALLS_V5
    Sesli arama: sessize alma + ekran paylaşımı (WebRTC).
    app.js'ten SONRA yüklenir; app.js'teki socket, me, conversationsCache, activeConversation değişkenlerini kullanır.
    Mevcut socket olay adlarıyla uyumludur:
