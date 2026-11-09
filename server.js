@@ -464,6 +464,7 @@ app.get("/api/calls/ice", requireAuth, async (req, res) => {
     const token = process.env.TURNIX_API_TOKEN;
 
     if (!token) {
+        console.error("TURN env adları:", JSON.stringify(Object.keys(process.env).filter(k => /turn/i.test(k))));
         console.error("TURNIX_API_TOKEN is missing");
         return res.status(503).json({
             error: "TURN service is not configured"
