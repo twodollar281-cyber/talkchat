@@ -203,7 +203,11 @@ io.on("connection", socket => {
             Array.isArray(x.participants) && x.participants.includes(name));
         return c ? (c.participants.find(p => p !== name) || null) : null;
         }
-
+       
+    const ringingCall = directCallRegistry.findForUser(name);
+    if (ringingCall && ringingCall.status === "ringing" && ringingCall.callee === name) {
+        socket.emit("call:incoming", { callId: ringingCall.id, conversationId: ringingCall.conversationId, from: ringingCall.caller, to: name, mediaType: ringingCall.mediaType });
+    }
     onlineUsers.set(name, (onlineUsers.get(name) || 0) + 1);
     io.emit("presenceUpdate", { username: name, online: true });
 
