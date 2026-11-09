@@ -69,4 +69,4 @@ SINIRLAR
 
 GIF MESSAGING
 -------------
-GIF search uses the Tenor API from the TalkChat server. Set the server-side environment variable TENOR_API_KEY before enabling GIF search and categories. Keep the key in the host secret store; never add it to browser code or commit its value. Without the key, search and category endpoints return a clear configuration error; existing messages, favorites, and other messaging remain available.
+GIF search uses the official GIPHY API through the TalkChat server. Set the server-side environment variable GIPHY_API_KEY in the host secret store; never add the key to browser code or commit its value. Without the key, search and category endpoints return a clear configuration error; existing messages, favorites, recent GIFs, and sticker messaging remain available. The picker displays the required Powered by GIPHY attribution. Historical Tenor GIF URLs remain supported so previously stored messages and favorites continue to display; no Tenor API calls remain.

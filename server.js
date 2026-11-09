@@ -121,14 +121,16 @@ const gifSearchLimiter = rateLimit({ windowMs: 60 * 1000, limit: 40, standardHea
 function normalizeGifPayload(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const id = String(value.id || "").trim().slice(0, 128);
-    const safeTenorUrl = input => {
+    const safeGiphyUrl = input => {
         try {
             const url = new URL(String(input || ""));
-            return url.protocol === "https:" && url.hostname === "media.tenor.com" && url.pathname.length > 1 ? url.toString() : "";
+            const hostAllowed = /^media\d*\.giphy\.com$/.test(url.hostname) ||
+                url.hostname === "i.giphy.com" || url.hostname === "media.tenor.com";
+            return url.protocol === "https:" && hostAllowed && url.pathname.length > 1 ? url.toString() : "";
         } catch { return ""; }
     };
-    const url = safeTenorUrl(value.url);
-    const previewUrl = safeTenorUrl(value.previewUrl) || url;
+    const url = safeGiphyUrl(value.url);
+    const previewUrl = safeGiphyUrl(value.previewUrl) || url;
     if (!id || !url || !previewUrl) return null;
     const dimension = input => {
         const number = Number(input);
@@ -145,23 +147,23 @@ function rememberGif(username, gif) {
     all[username] = preferences;
     saveGifPreferences(all);
 }
-function normalizeTenorResult(item) {
-    const media = item && item.media_formats && typeof item.media_formats === "object" ? item.media_formats : {};
-    const full = media.gif || media.mediumgif || media.tinygif;
-    const preview = media.tinygif || media.nanogif || full;
+function normalizeGiphyResult(item) {
+    const media = item && item.images && typeof item.images === "object" ? item.images : {};
+    const full = media.original || media.downsized_large || media.downsized || media.fixed_height;
+    const preview = media.fixed_height_small || media.fixed_height_downsampled || media.fixed_width_small || media.fixed_height || full;
     if (!full || !preview) return null;
-    return normalizeGifPayload({ id: item.id, url: full.url, previewUrl: preview.url, title: item.content_description || item.title || "GIF", width: full.dims && full.dims[0], height: full.dims && full.dims[1] });
+    return normalizeGifPayload({ id: item.id, url: full.url, previewUrl: preview.url, title: item.title || item.alt_text || "GIF", width: full.width, height: full.height });
 }
-async function tenorRequest(endpoint, parameters = {}) {
-    const key = String(process.env.TENOR_API_KEY || "").trim();
+async function giphyRequest(endpoint, parameters = {}) {
+    const key = String(process.env.GIPHY_API_KEY || "").trim();
     if (!key) {
-        const error = new Error("GIF axtarışı üçün serverdə TENOR_API_KEY mühit dəyişənini təyin edin.");
+        const error = new Error("GIF axtarışı üçün serverdə GIPHY_API_KEY mühit dəyişənini təyin edin.");
         error.status = 503;
         throw error;
     }
-    const url = new URL("https://tenor.googleapis.com/v2/" + endpoint);
-    url.searchParams.set("key", key);
-    url.searchParams.set("client_key", "talkchat");
+    if (!["categories", "search", "trending"].includes(endpoint)) throw new Error("GIPHY sorğusunun növü düzgün deyil.");
+    const url = new URL("https://api.giphy.com/v1/gifs/" + endpoint);
+    url.searchParams.set("api_key", key);
     for (const [name, value] of Object.entries(parameters)) {
         if (value !== undefined && value !== null && String(value) !== "") url.searchParams.set(name, String(value));
     }
@@ -169,15 +171,27 @@ async function tenorRequest(endpoint, parameters = {}) {
     const timeout = setTimeout(() => controller.abort(), 9000);
     try {
         const response = await fetch(url.toString(), { signal: controller.signal, headers: { Accept: "application/json" } });
+        let data = null;
+        try { data = await response.json(); } catch {}
         if (!response.ok) {
-            const error = new Error("GIF provayderi sorğunu tamamlamadı.");
-            error.status = response.status === 429 ? 503 : 502;
+            const error = new Error(response.status === 429
+                ? "GIPHY sorğu limitinə çatdı. Bir az sonra yenidən cəhd et."
+                : "GIPHY sorğusu tamamlanmadı.");
+            error.status = response.status === 429 ? 429 : 502;
+            if (response.headers.get("Retry-After")) error.retryAfter = response.headers.get("Retry-After");
             throw error;
         }
-        return await response.json();
+        if (data?.meta?.status && data.meta.status >= 400) {
+            const error = new Error(data.meta.status === 429
+                ? "GIPHY sorğu limitinə çatdı. Bir az sonra yenidən cəhd et."
+                : "GIPHY sorğusu tamamlanmadı.");
+            error.status = data.meta.status === 429 ? 429 : 502;
+            throw error;
+        }
+        return data || {};
     } catch (error) {
         if (error.status) throw error;
-        const unavailable = new Error("GIF provayderinə qoşulmaq mümkün olmadı.");
+        const unavailable = new Error("GIPHY xidmətinə qoşulmaq mümkün olmadı.");
         unavailable.status = 502;
         throw unavailable;
     } finally {
@@ -203,7 +217,7 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            "img-src": ["'self'", "data:", "blob:", "https://media.tenor.com", supa.origin].filter(Boolean),
+            "img-src": ["'self'", "data:", "blob:", "https://*.giphy.com", "https://media.tenor.com", supa.origin].filter(Boolean),
             "media-src": ["'self'", "blob:", supa.origin].filter(Boolean)
         }
     }
@@ -1618,21 +1632,36 @@ app.post("/api/conversations/group", requireAuth, (req, res) => {
 });
 app.get("/api/gifs/categories", requireAuth, gifSearchLimiter, async (_req, res) => {
     try {
-        const data = await tenorRequest("categories", { limit: 30, locale: "en_US" });
-        const tags = Array.isArray(data.tags) ? data.tags : [];
-        res.json(tags.map(tag => ({ name: String(tag.name || tag.searchterm || "").slice(0, 60), searchterm: String(tag.searchterm || tag.name || "").slice(0, 100) })).filter(tag => tag.name && tag.searchterm));
+        const data = await giphyRequest("categories");
+        const categories = Array.isArray(data.data) ? data.data : [];
+        res.json(categories.slice(0, 30).map(category => {
+            const name = String(category.name || category.name_encoded || "").replace(/\s+/g, " ").trim().slice(0, 60);
+            const searchterm = String(category.name || category.name_encoded || "").replace(/[-_]+/g, " ").trim().slice(0, 50);
+            return { name, searchterm };
+        }).filter(category => category.name && category.searchterm));
     } catch (error) {
+        if (error.retryAfter) res.set("Retry-After", String(error.retryAfter));
         res.status(error.status || 502).json({ error: error.message || "GIF kateqoriyaları yüklənmədi." });
     }
 });
 app.get("/api/gifs/search", requireAuth, gifSearchLimiter, async (req, res) => {
-    const query = String(req.query.q || "trending").trim().slice(0, 100) || "trending";
-    const next = String(req.query.next || "").slice(0, 500);
+    const query = (typeof req.query.q === "string" ? req.query.q : "trending").trim().slice(0, 50) || "trending";
+    const requestedOffset = typeof req.query.next === "string" && /^\d{1,4}$/.test(req.query.next)
+        ? Number.parseInt(req.query.next, 10) : 0;
+    const offset = Math.min(4999, Math.max(0, requestedOffset));
+    const endpoint = query.toLowerCase() === "trending" ? "trending" : "search";
     try {
-        const data = await tenorRequest("search", { q: query, limit: 24, media_filter: "gif,tinygif", contentfilter: "medium", locale: "en_US", ...(next ? { next } : {}) });
-        const results = (Array.isArray(data.results) ? data.results : []).map(normalizeTenorResult).filter(Boolean);
-        res.json({ results, next: String(data.next || "").slice(0, 500) });
+        const data = await giphyRequest(endpoint, {
+            ...(endpoint === "search" ? { q: query, lang: "en" } : {}),
+            limit: 24, offset, rating: "pg"
+        });
+        const results = (Array.isArray(data.data) ? data.data : []).map(normalizeGiphyResult).filter(Boolean);
+        const pagination = data.pagination || {};
+        const nextOffset = Number(pagination.offset || 0) + Number(pagination.count || results.length);
+        const next = Number(pagination.total_count) > nextOffset && nextOffset <= 4999 ? String(nextOffset) : "";
+        res.json({ results, next });
     } catch (error) {
+        if (error.retryAfter) res.set("Retry-After", String(error.retryAfter));
         res.status(error.status || 502).json({ error: error.message || "GIF-lər yüklənmədi." });
     }
 });
