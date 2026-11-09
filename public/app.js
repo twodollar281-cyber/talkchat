@@ -4,9 +4,11 @@ window.addEventListener("error", e => {
 });
 const $ = id => document.getElementById(id);
 const socket = io();
+window.TalkChatSocket = socket;
 let me = "";
 let scope = "all";
 let activeConversation = null;
+Object.defineProperty(window, "TalkChatActiveConversationId", { get: () => activeConversation });
 let conversationsCache = [];
 
 function esc(value="") {
@@ -39,6 +41,9 @@ function showPage(name) {
   if (name === "reels") window.TalkChatSocial?.loadReels();
   if (name === "profile") loadMyPosts();
   if (name === "admin") window.TalkChatAdmin?.load();
+  if (name === "live") window.TalkChatLive?.load();
+  if (name === "ai") window.TalkChatAI?.load();
+  if (name === "profile") window.TalkChatCollections?.load();
 }
 document.querySelectorAll("[data-page]").forEach(b => b.addEventListener("click", () => showPage(b.dataset.page)));
 $("loginTab").onclick = () => setAuthMode("login");
@@ -82,6 +87,7 @@ function updateOwnerBootstrapField() {
 $("authUsername").addEventListener("input", updateOwnerBootstrapField);
 $("authUsername").addEventListener("change", updateOwnerBootstrapField);
 function enterApp() {
+  window.TalkChatCurrentUsername = me;
   $("authPage").hidden = true; $("app").hidden = false;
   socket.connect(); showPage("home");
   window.TalkChatSocial?.refreshMenuProfile?.();
@@ -152,6 +158,17 @@ function roleBadge(role) {
   return `<span class="tc-role-badge tc-role-${value.toLowerCase()}">[${value}]</span>`;
 }
 window.TalkChatRoleBadge = roleBadge;
+function verifiedBadge() {
+  return '<span class="tc-verified-badge" role="img" aria-label="Təsdiqlənmiş hesab" title="Təsdiqlənmiş hesab">✓</span>';
+}
+window.TalkChatVerifiedBadge = verifiedBadge;
+const profileThemeNames = new Set(["violet", "ocean", "sunset", "forest"]);
+function applyProfileCustomization(node, profile) {
+  if (!node) return;
+  node.dataset.profileTheme = profileThemeNames.has(profile.profileTheme) ? profile.profileTheme : "violet";
+  const color = /^#[0-9a-fA-F]{6}$/.test(String(profile.profileColor || "")) ? profile.profileColor : "#8257ff";
+  node.style.setProperty("--profile-accent", color);
+}
 function postHTML(p) {
   const liked=(p.likes||[]).includes(me);
   const isReel=p.kind==="reel";
@@ -169,12 +186,12 @@ function postHTML(p) {
       ? `<button type="button" data-admin-delete-post="${esc(p.id)}" data-admin-delete-type="${isReel?"reel":"post"}">Məzmunu sil</button>`
       : `<button type="button" data-report-post="${esc(p.id)}">Şikayət et</button>`;
   return `<article class="post-card${isReel?" post-card-reel":""}" data-post="${esc(p.id)}" data-kind="${isReel?"reel":"post"}">
-    <div class="post-head">${avatar}<div class="post-author"><div class="post-user">${esc(authorName)} ${roleBadge(p.authorRole)}</div><small>@${esc(p.username)}</small><div class="post-date">${new Date(p.createdAt).toLocaleString(currentLang()==="en"?"en-US":currentLang()==="ru"?"ru-RU":currentLang()==="tr"?"tr-TR":"az-AZ")}</div></div>
+      <div class="post-head">${avatar}<div class="post-author"><div class="post-user">${esc(authorName)}${p.authorVerified ? verifiedBadge() : ""} ${roleBadge(p.authorRole)}</div><small>@${esc(p.username)}</small><div class="post-date">${new Date(p.createdAt).toLocaleString(currentLang()==="en"?"en-US":currentLang()==="ru"?"ru-RU":currentLang()==="tr"?"tr-TR":"az-AZ")}</div></div>
       <details class="post-more"><summary aria-label="Əlavə əməliyyatlar">···</summary><div class="post-more-menu">${menuActions}</div></details>
     </div>
     ${isReel?`<span class="post-kind-badge">▶ REELS</span>`:""}
     ${p.text?`<div class="post-text">${esc(p.text)}</div>`:""}${media}
-    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button><button type="button" data-share-post="${esc(p.id)}">Göndər</button></div>
+    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button><button type="button" data-share-post="${esc(p.id)}">Göndər</button><button type="button" data-save-post="${esc(p.id)}">Yadda saxla</button></div>
     <div class="comment-list">${comments}</div>
     <form class="comment-form" data-comment="${esc(p.id)}"><input name="text" placeholder="Şərh yaz..." maxlength="500" required><button class="primary">Göndər</button></form>
   </article>`;
@@ -215,7 +232,7 @@ $("searchInput").addEventListener("input",()=>{
     $("searchResults").innerHTML = window.TalkChat2027?.searchSkeleton?.() || "";
     try{
       const list=await api("/api/search?q="+encodeURIComponent(q));
-      $("searchResults").innerHTML=list.map(u=>`<div class="user-row">${avatarHTML(u)}<div class="user-info"><b>@${esc(u.username)} ${roleBadge(u.role)}</b><small>${esc(u.bio||"TalkChat istifadəçisi")}</small></div><button class="primary" data-open-user="${esc(u.username)}">Profil</button></div>`).join("")||"<p class='muted'>İstifadəçi tapılmadı.</p>";
+       $("searchResults").innerHTML=list.map(u=>`<div class="user-row">${avatarHTML(u)}<div class="user-info"><b>@${esc(u.username)} ${u.verified?verifiedBadge():""} ${roleBadge(u.role)}</b><small>${esc(u.bio||"TalkChat istifadəçisi")}</small></div><button class="primary" data-open-user="${esc(u.username)}">Profil</button></div>`).join("")||"<p class='muted'>İstifadəçi tapılmadı.</p>";
     }catch(e){$("searchResults").textContent=e.message;}
     finally{$("searchResults").removeAttribute("aria-busy");}
   },250);
@@ -228,7 +245,18 @@ async function loadMyProfile(){
     const u=await api("/api/profile");
     window.talkChatRole=u.role||"member";
     window.TalkChatAdmin?.syncRole(window.talkChatRole);
-    $("myUsername").textContent="@"+u.username;
+    $("myUsername").innerHTML="@"+esc(u.username)+(u.verified?verifiedBadge():"");
+    $("profileTheme").value=profileThemeNames.has(u.profileTheme)?u.profileTheme:"violet";
+    $("profileColor").value=/^#[0-9a-fA-F]{6}$/.test(String(u.profileColor||""))?u.profileColor:"#8257ff";
+    $("onlineVisibility").value=["everyone","friends","nobody"].includes(u.onlineVisibility)?u.onlineVisibility:"everyone";
+    $("lastSeenVisibility").value=["everyone","friends","nobody"].includes(u.lastSeenVisibility)?u.lastSeenVisibility:"everyone";
+    const privacy=u.privacySettings||{};
+    $("privacyProfile").value=["everyone","followers","friends","nobody"].includes(privacy.profile)?privacy.profile:"everyone";
+    $("privacyPosts").value=["everyone","followers","friends","nobody"].includes(privacy.posts)?privacy.posts:"everyone";
+    $("privacyStories").value=["everyone","followers","friends","nobody"].includes(privacy.stories)?privacy.stories:"everyone";
+    $("privacyMessages").value=["everyone","followers","friends","nobody"].includes(privacy.messageRequests)?privacy.messageRequests:"everyone";
+    $("privacyFriends").value=["everyone","followers","friends","nobody"].includes(privacy.friendRequests)?privacy.friendRequests:"everyone";
+    applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
     $("myDisplayName").value=u.displayName||"";
     $("myLink").value=u.link||"";
@@ -256,8 +284,9 @@ async function loadMyPosts(){
 }
 $("saveBio").onclick=async()=>{
   try{
-    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value})});
+    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value,profileTheme:$("profileTheme").value,profileColor:$("profileColor").value,onlineVisibility:$("onlineVisibility").value,lastSeenVisibility:$("lastSeenVisibility").value,privacySettings:{profile:$("privacyProfile").value,posts:$("privacyPosts").value,stories:$("privacyStories").value,messageRequests:$("privacyMessages").value,friendRequests:$("privacyFriends").value}})});
     $("profileStatus").textContent="Profil yadda saxlanıldı!";
+    applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
     $("myProfileLink").href=u.link||"";
     $("myProfileLink").textContent=u.link?u.link.replace(/^https?:\/\//i,""):"";
@@ -286,7 +315,16 @@ async function openPublicProfile(name){
     const outgoing = friendRequests.outgoing.some(x => x.username === u.username);
     $("homePage").hidden=true;$("discoverPage").hidden=true;$("messagesPage").hidden=true;$("notificationsPage").hidden=true;$("profilePage").hidden=true;$("publicProfilePage").hidden=false;
     const profileLink=u.link?`<a class="profile-link" href="${esc(u.link)}" target="_blank" rel="noopener noreferrer">${esc(u.link.replace(/^https?:\/\//i,""))}</a>`:"";
-    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)}</h2><p class="public-username">@${esc(u.username)} ${roleBadge(u.role)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button>`}`;
+    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)} ${u.verified?verifiedBadge():""}</h2><p class="public-username">@${esc(u.username)} ${roleBadge(u.role)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button><button type="button" id="blockUserButton" class="tc-block-button">${u.blockedByMe?"Blokdan çıxar":"Blokla"}</button><button type="button" class="tc-report-button" data-report-user="${esc(u.username)}">Hesabı şikayət et</button>`}`;
+    applyProfileCustomization($("publicProfile"),u);
+    $("blockUserButton")?.addEventListener("click",async()=>{
+      const blocked=u.blockedByMe;
+      if(!blocked&&!confirm(`@${u.username} hesabını bloklamaq istəyirsən?`))return;
+      try{
+        await api(`/api/users/${encodeURIComponent(u.username)}/block`,{method:blocked?"DELETE":"POST"});
+        await Promise.all([openPublicProfile(u.username),loadConversations()]);
+      }catch(e){alert(e.message);}
+    });
     $("friendButton")?.addEventListener("click", async()=>{
       try {
         if(incoming) {
@@ -390,13 +428,14 @@ async function loadTalkChatExtras() {
             dlg.className = "tc-story-dialog";
             document.body.appendChild(dlg);
           }
-          dlg.innerHTML = `<button class="tc-dialog-close" type="button">✕</button>
+          dlg.innerHTML = `<button class="tc-dialog-close" type="button" aria-label="Bağla">✕</button>
             <h3>@${esc(item.username)}</h3>
             ${item.mediaType === "video"
               ? `<video src="${esc(item.media)}" controls autoplay playsinline></video>`
               : `<img src="${esc(item.media)}" alt="Story">`}
             <p>${esc(item.text || "")}</p>
-            <small>${item.viewsCount || 0} baxış · 24 saatlıq Story</small>`;
+            <small>${item.viewsCount || 0} baxış · 24 saatlıq Story</small>
+            ${item.username !== me ? `<button type="button" class="tc-report-button" data-report-story="${esc(item.id)}">Story-ni şikayət et</button>` : ""}`;
           dlg.querySelector("button").onclick = () => dlg.close();
           dlg.showModal();
         }
@@ -698,6 +737,18 @@ const translations = {
     "Paylaşıldı! 💜": "Paylaşıldı! 💜",
     "Paylaşım menyusundan ilk postunu əlavə et.": "Paylaşım menüsünden ilk gönderini ekle.",
     "Yeni aktivlik olanda burada görünəcək.": "Yeni etkinlik olduğunda burada görünecek.",
+    "Söhbət faylları": "Sohbet dosyaları",
+    "Paylaşılan fayllara bax, yüklə və idarə et": "Paylaşılan dosyalara göz at, indir ve yönet",
+    "Fayl adında axtar...": "Dosya adına göre ara...",
+    "Hələ fayl paylaşılmayıb.": "Henüz dosya paylaşılmadı.",
+    "Uyğun fayl tapılmadı.": "Uygun dosya bulunamadı.",
+    "Fayllar yüklənir…": "Dosyalar yükleniyor…",
+    "Fayllar yüklənə bilmədi.": "Dosyalar yüklenemedi.",
+    "Faylı aç": "Dosyayı aç",
+    "Yüklə": "İndir",
+    "Faylı sil": "Dosyayı sil",
+    "Bu mesajı və paylaşılmış faylı silmək istəyirsən?": "Bu mesajı ve paylaşılan dosyayı silmek istiyor musun?",
+    "Daha köhnə fayllar": "Daha eski dosyalar",
   },
   en: {
     "Ana səhifə": "Home",
@@ -996,6 +1047,18 @@ const translations = {
     "Reels paylaşıldı.": "Reel shared.",
     "Paylaşım menyusundan ilk postunu əlavə et.": "Use the sharing menu to add your first post.",
     "Yeni aktivlik olanda burada görünəcək.": "New activity will appear here.",
+    "Söhbət faylları": "Chat files",
+    "Paylaşılan fayllara bax, yüklə və idarə et": "Browse, download, and manage shared files",
+    "Fayl adında axtar...": "Search file names...",
+    "Hələ fayl paylaşılmayıb.": "No files shared yet.",
+    "Uyğun fayl tapılmadı.": "No matching files found.",
+    "Fayllar yüklənir…": "Loading files…",
+    "Fayllar yüklənə bilmədi.": "Couldn't load files.",
+    "Faylı aç": "Open file",
+    "Yüklə": "Download",
+    "Faylı sil": "Delete file",
+    "Bu mesajı və paylaşılmış faylı silmək istəyirsən?": "Delete this message and its shared file?",
+    "Daha köhnə fayllar": "Older files",
   },
   ru: {
     "Ana səhifə": "Главная",
@@ -1294,6 +1357,18 @@ const translations = {
     "Reels paylaşıldı.": "Reels опубликован.",
     "Paylaşım menyusundan ilk postunu əlavə et.": "Добавьте первую публикацию через меню.",
     "Yeni aktivlik olanda burada görünəcək.": "Новая активность появится здесь.",
+    "Söhbət faylları": "Файлы чата",
+    "Paylaşılan fayllara bax, yüklə və idarə et": "Просмотр, загрузка и управление общими файлами",
+    "Fayl adında axtar...": "Поиск по имени файла...",
+    "Hələ fayl paylaşılmayıb.": "Файлы пока не отправляли.",
+    "Uyğun fayl tapılmadı.": "Подходящие файлы не найдены.",
+    "Fayllar yüklənir…": "Загрузка файлов…",
+    "Fayllar yüklənə bilmədi.": "Не удалось загрузить файлы.",
+    "Faylı aç": "Открыть файл",
+    "Yüklə": "Скачать",
+    "Faylı sil": "Удалить файл",
+    "Bu mesajı və paylaşılmış faylı silmək istəyirsən?": "Удалить это сообщение и общий файл?",
+    "Daha köhnə fayllar": "Более старые файлы",
   },
   az: {}
 };
@@ -1490,6 +1565,16 @@ const talkchatPresence = new Map();
 
 socket.on("presenceUpdate", data => {
   if (!data || !data.username) return;
+  if (data.hidden) {
+    talkchatPresence.delete(data.username);
+    document.querySelectorAll("[data-presence-user]").forEach(el => {
+      if (el.dataset.presenceUser === data.username) {
+        el.textContent = "";
+        el.classList.remove("online");
+      }
+    });
+    return;
+  }
   talkchatPresence.set(data.username, data);
   document.querySelectorAll("[data-presence-user]").forEach(el => {
     if (el.dataset.presenceUser === data.username) {
@@ -1497,6 +1582,14 @@ socket.on("presenceUpdate", data => {
       el.classList.toggle("online", !!data.online);
     }
   });
+});
+socket.on("blocksChanged", () => {
+  loadFeed();
+  loadConversations();
+  loadDirectStoryRail();
+  window.TalkChatSocial?.loadReels?.();
+  if (!$("profilePage").hidden) loadMyPosts();
+  if (!$("notificationsPage").hidden) loadNotifications();
 });
 
 /* =====================================================================
@@ -1545,6 +1638,8 @@ function igShort(m) {
   if (!m) return "Mesaj";
   if (m.deleted) return "Mesaj silindi";
   if (m.text) return m.text.length > 60 ? m.text.slice(0, 60) + "…" : m.text;
+  if (m.sticker) return "◆ " + (m.sticker.label || "Sticker");
+  if (m.gif) return "🎞 GIF";
   if ((m.attachmentType || "").startsWith("image/")) return "📷 Şəkil";
   return "📎 " + (m.attachmentName || "Fayl");
 }
@@ -1585,7 +1680,7 @@ function igRenderList() {
         const prev = c.lastMessage ? (c.lastFrom === me ? "Sən: " : "") + c.lastMessage : (group ? "Qrup söhbəti" : "Söhbətə başla");
         return `<button type="button" class="ig-item${c.unread ? " unread" : ""}${c.id === activeConversation ? " on" : ""}" data-convo="${esc(c.id)}">
           <span class="ig-avw">${group ? igAv("Q") : igAv(name, p && p.avatar)}${on ? '<i class="ig-dot"></i>' : ""}</span>
-          <span class="ig-mid"><span class="ig-name">${esc(name)}</span><span class="ig-prev">${esc(prev)}</span></span>
+          <span class="ig-mid"><span class="ig-name">${esc(name)}${!group && p?.verified ? verifiedBadge() : ""}</span><span class="ig-prev">${esc(prev)}</span></span>
           ${c.unread ? `<span class="ig-badge">${c.unread > 99 ? "99+" : c.unread}</span>` : ""}
         </button>`;
       }).join("")
@@ -1599,12 +1694,15 @@ function igRenderHead() {
   const group = c.type === "group";
   const name = group ? (c.name || "Qrup") : c.name;
   const p = group ? null : IG.profiles.get(c.name);
-  igEl("chatTitle").textContent = name;
+  igEl("chatTitle").innerHTML = esc(name) + (!group && p?.verified ? verifiedBadge() : "");
   igEl("chatAv").innerHTML = group ? igAv("Q") : igAv(name, p && p.avatar, true);
   const typing = IG.typers[c.id] && Date.now() < IG.typers[c.id];
   const sub = typing ? "yazır…" : group ? c.participants.length + " iştirakçı" : igStatus(c.name);
   igEl("chatSub").textContent = sub;
   igEl("chatSub").classList.toggle("on", !typing && !group && igIsOnline(c.name));
+  const blocked = !group && !!c.blocked;
+  igEl("igBlockNotice").hidden = !blocked;
+  igEl("dmForm").querySelectorAll("button,input").forEach(control => { control.disabled = blocked; });
 }
 
 /* ---------- mesajlar ---------- */
@@ -1636,15 +1734,28 @@ function igBubble(m, byId) {
   let quote = "";
   if (m.replyTo) {
     const r = byId.get(m.replyTo);
-    quote = `<span class="ig-quote"><b>${esc(r ? (r.from === me ? "Sən" : "@" + r.from) : "Mesaj")}</b>${esc(igShort(r))}</span>`;
+    const saved = m.replyPreview && typeof m.replyPreview === "object" ? m.replyPreview : null;
+    const author = r?.from || saved?.from || "";
+    const preview = r ? igShort(r) : (saved?.text || "Mesaj");
+    quote = `<span class="ig-quote"><b>${esc(author ? (author === me ? "Sən" : "@" + author) : "Mesaj")}</b>${esc(preview)}</span>`;
   }
   const isImg = (m.attachmentType || "").startsWith("image/");
+  const isAudio = (m.attachmentType || "").startsWith("audio/");
   let body = "";
+  if (m.sticker) body += '<span class="tc-sticker-message" role="img" aria-label="' + esc(m.sticker.label || "Sticker") + '"><span class="tc-sticker-art" data-sticker-category="' + esc(m.sticker.category || "") + '">' + esc(m.sticker.emoji || "✨") + '</span><small>' + esc(m.sticker.label || "Sticker") + '</small></span>';
   if (m.attachment) {
-    body += isImg
-      ? `<a href="${esc(m.attachment)}" target="_blank" rel="noopener"><img src="${esc(m.attachment)}" alt="Şəkil" loading="lazy"></a>`
-      : `<a class="ig-file" href="${esc(m.attachment)}" target="_blank" rel="noopener">📎 ${esc(m.attachmentName || "Fayl")}</a>`;
+    if (m.gif) {
+      const previewUrl = m.gif.previewUrl || m.attachment;
+      body += '<a class="ig-gif-message" href="' + esc(m.attachment) + '" target="_blank" rel="noopener"><img src="' + esc(previewUrl) + '" alt="' + esc(m.gif.title || "GIF") + '" loading="lazy"></a><span class="ig-gif-tag">GIF</span>';
+    } else {
+      body += isImg
+        ? '<a href="' + esc(m.attachment) + '" target="_blank" rel="noopener"><img src="' + esc(m.attachment) + '" alt="Şəkil" loading="lazy"></a>'
+        : isAudio
+          ? '<audio class="ig-audio" controls preload="metadata" src="' + esc(m.attachment) + '" aria-label="Səsli mesaj"></audio>'
+          : '<a class="ig-file" href="' + esc(m.attachment) + '" target="_blank" rel="noopener">📎 ' + esc(m.attachmentName || "Fayl") + '</a>';
+    }
   }
+  if (m.forwardedFrom) body += `<small class="ig-forwarded">Ötürülüb · @${esc(m.forwardedFrom)}</small>`;
   if (m.sharedPost) {
     const shared=m.sharedPost;
     const sharedMedia=shared.mediaType==="video"
@@ -1652,9 +1763,12 @@ function igBubble(m, byId) {
       : shared.media?`<img src="${esc(shared.media)}" alt="" loading="lazy">`:"";
     body+=`<span class="ig-shared-post"><small>${shared.kind==="reel"?"▶ Reels göndərildi":"Post göndərildi"}</small><b>${esc(shared.authorName||shared.username||"TalkChat")}</b>${shared.text?`<span>${esc(shared.text)}</span>`:""}${sharedMedia?`<span class="ig-shared-media">${sharedMedia}</span>`:""}</span>`;
   }
-  if (m.text) body += `<span class="ig-t">${esc(m.text)}</span>`;
+  if (m.text) body += `<span class="ig-t">${esc(m.text)}</span>${m.editedAt ? `<small class="ig-edited">redaktə edildi</small>` : ""}`;
   const cls = m.attachment && isImg && !m.text ? " img" : "";
-  return `<span class="ig-bub${cls}">${quote}${body}</span>`;
+  const reportButton = m.from !== me
+    ? `<button type="button" class="ig-report-message" data-report-message="${esc(m.id)}">Şikayət et</button>`
+    : "";
+  return `<span class="ig-bub${cls}">${quote}${body}${reportButton}</span>`;
 }
 
 function igRenderMsgs() {
@@ -1688,6 +1802,7 @@ function igRenderMsgs() {
 
 async function openConversation(id) {
   activeConversation = id;
+  window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id } }));
   IG.replyTo = null;
   IG.pendingFile = null;
   igRenderReply();
@@ -1717,7 +1832,9 @@ function igOpenSheet(mid) {
   if (!m) return;
   const acts = [["reply", "Cavab ver"]];
   if (m.text) acts.push(["copy", "Mətni kopyala"]);
-  if (m.from === me) acts.push(["del", "Mesajı sil", "danger"]);
+      if (m.from === me && m.text && !m.deleted) acts.push(["edit", "Mesajı redaktə et"]);
+    if (!m.deleted) acts.push(["forward", "Mesajı ötür"]);
+    if (m.from === me) acts.push(["del", "Mesajı sil", "danger"]);
   igEl("igSheetBody").innerHTML =
     acts.map(([a, t, k]) => `<button type="button" class="ig-sheet-btn${k ? " danger" : ""}" data-a="${a}" data-mid="${esc(m.id)}">${t}</button>`).join("") +
     '<button type="button" class="ig-sheet-btn cancel" data-a="close">Bağla</button>';
@@ -1725,6 +1842,261 @@ function igOpenSheet(mid) {
 }
 
 /* ---------- göndərmə ---------- */
+const igGifState = { tab: "search", results: [], categories: [], favorites: [], recent: [], searchTimer: null, request: 0 };
+function igGifEncoded(gif) { return encodeURIComponent(JSON.stringify(gif)); }
+function igGifRenderCategories() {
+  const box = igEl("igGifCategories");
+  box.innerHTML = igGifState.categories.map(category =>
+    '<button type="button" class="ig-gif-category" data-gif-category="' + encodeURIComponent(category.searchterm) + '">' + esc(category.name) + '</button>'
+  ).join("");
+}
+function igGifRender() {
+  const dialog = igEl("igGifDialog");
+  dialog.querySelectorAll("[data-gif-tab]").forEach(button => button.classList.toggle("active", button.dataset.gifTab === igGifState.tab));
+  igEl("igGifSearchControls").hidden = igGifState.tab !== "search";
+  const gifs = igGifState.tab === "favorites" ? igGifState.favorites : igGifState.tab === "recent" ? igGifState.recent : igGifState.results;
+  const empty = igGifState.tab === "favorites" ? "Sevimli GIF yoxdur." : igGifState.tab === "recent" ? "Son istifadə etdiyin GIF yoxdur." : "Nəticə tapılmadı.";
+  igEl("igGifGrid").innerHTML = gifs.length ? gifs.map(gif => {
+    const encoded = igGifEncoded(gif);
+    const favorite = igGifState.favorites.some(item => item.id === gif.id);
+    return '<article class="ig-gif-card"><button type="button" class="ig-gif-send" data-gif-send="' + encoded + '" aria-label="' + esc(gif.title || "GIF göndər") + '"><img src="' + esc(gif.previewUrl || gif.url) + '" alt="' + esc(gif.title || "GIF") + '" loading="lazy"><span>' + esc(gif.title || "GIF") + '</span></button><button type="button" class="ig-gif-favorite' + (favorite ? ' saved' : '') + '" data-gif-favorite="' + encoded + '" aria-label="' + (favorite ? 'Sevimlilərdən çıxar' : 'Sevimlilərə əlavə et') + '">' + (favorite ? '★' : '☆') + '</button></article>';
+  }).join("") : '<p class="ig-gif-empty">' + empty + '</p>';
+}
+async function igGifLoadPreferences() {
+  const data = await api("/api/gifs/preferences");
+  igGifState.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+  igGifState.recent = Array.isArray(data.recent) ? data.recent : [];
+  igGifRender();
+}
+async function igGifLoadCategories() {
+  try {
+    const data = await api("/api/gifs/categories");
+    igGifState.categories = Array.isArray(data) ? data : [];
+    igGifRenderCategories();
+  } catch {
+    igGifState.categories = [];
+    igGifRenderCategories();
+  }
+}
+async function igGifSearch(query) {
+  const request = ++igGifState.request;
+  const status = igEl("igGifStatus");
+  status.textContent = "GIF-lər yüklənir…";
+  try {
+    const data = await api("/api/gifs/search?q=" + encodeURIComponent(query || "trending"));
+    if (request !== igGifState.request) return;
+    igGifState.results = Array.isArray(data.results) ? data.results : [];
+    status.textContent = "";
+    igGifRender();
+  } catch (error) {
+    if (request !== igGifState.request) return;
+    igGifState.results = [];
+    status.textContent = error.message;
+    igGifRender();
+  }
+}
+async function igGifOpen() {
+  if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+  const dialog = igEl("igGifDialog");
+  if (!dialog.open) dialog.showModal();
+  igGifState.tab = "search";
+  igGifRender();
+  await Promise.allSettled([igGifLoadPreferences(), igGifLoadCategories()]);
+  if (!igGifState.results.length) await igGifSearch(igEl("igGifSearch").value.trim());
+  igEl("igGifSearch").focus();
+}
+async function igGifSend(gif) {
+  if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+  const replyTo = IG.replyTo ? IG.replyTo.id : "";
+  try {
+    await api("/api/conversations/" + encodeURIComponent(activeConversation) + "/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "", replyTo, gif })
+    });
+    IG.replyTo = null;
+    igRenderReply();
+    igEl("igGifDialog").close();
+    await Promise.all([igLoadMessages(false), loadConversations(), igGifLoadPreferences()]);
+  } catch (error) {
+    alert(error.message || "GIF göndərilmədi.");
+  }
+}
+async function igGifToggleFavorite(gif) {
+  try {
+    const data = await api("/api/gifs/favorites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gif })
+    });
+    igGifState.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+    igGifRender();
+  } catch (error) {
+    alert(error.message || "Sevimli GIF yenilənmədi.");
+  }
+}
+
+const igStickerState = { tab: "search", stickers: [], categories: [], favorites: [], recent: [], category: "", searchTimer: null, request: 0 };
+function igStickerRenderCategories() {
+  igEl("igStickerCategories").innerHTML = igStickerState.categories.map(category =>
+    '<button type="button" class="tc-sticker-category' + (igStickerState.category === category.id ? ' active' : '') + '" data-sticker-category="' + encodeURIComponent(category.id) + '">' + esc(category.name) + '</button>'
+  ).join("");
+}
+function igStickerRender() {
+  const dialog = igEl("igStickerDialog");
+  dialog.querySelectorAll("[data-sticker-tab]").forEach(button => button.classList.toggle("active", button.dataset.stickerTab === igStickerState.tab));
+  igEl("igStickerSearchControls").hidden = igStickerState.tab !== "search";
+  const list = igStickerState.tab === "favorites" ? igStickerState.favorites : igStickerState.tab === "recent" ? igStickerState.recent : igStickerState.stickers;
+  const empty = igStickerState.tab === "favorites" ? "Sevimli sticker yoxdur." : igStickerState.tab === "recent" ? "Son istifadə etdiyin sticker yoxdur." : "Sticker tapılmadı.";
+  igEl("igStickerGrid").innerHTML = list.length ? list.map(sticker => {
+    const favorite = igStickerState.favorites.some(item => item.id === sticker.id);
+    return '<article class="tc-sticker-card"><button type="button" class="tc-sticker-send" data-sticker-send="' + esc(sticker.id) + '" aria-label="' + esc(sticker.label || "Sticker göndər") + '"><span class="tc-sticker-art" data-sticker-category="' + esc(sticker.category || "") + '">' + esc(sticker.emoji || "✨") + '</span><span class="tc-sticker-label">' + esc(sticker.label || "Sticker") + '</span></button><button type="button" class="tc-sticker-favorite' + (favorite ? ' saved' : '') + '" data-sticker-favorite="' + esc(sticker.id) + '" aria-label="' + (favorite ? 'Sevimlilərdən çıxar' : 'Sevimlilərə əlavə et') + '">' + (favorite ? '★' : '☆') + '</button></article>';
+  }).join("") : '<p class="tc-sticker-empty">' + empty + '</p>';
+}
+async function igStickerLoadPreferences() {
+  const data = await api("/api/stickers/preferences");
+  igStickerState.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+  igStickerState.recent = Array.isArray(data.recent) ? data.recent : [];
+  igStickerRender();
+}
+async function igStickerLoadCategories() {
+  const data = await api("/api/stickers/categories");
+  igStickerState.categories = Array.isArray(data) ? data : [];
+  igStickerRenderCategories();
+}
+async function igStickerSearch(query, category) {
+  const request = ++igStickerState.request;
+  igEl("igStickerStatus").textContent = "Sticker-lər yüklənir…";
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (category) params.set("category", category);
+  try {
+    const data = await api("/api/stickers" + (params.toString() ? "?" + params.toString() : ""));
+    if (request !== igStickerState.request) return;
+    igStickerState.stickers = Array.isArray(data) ? data : [];
+    igEl("igStickerStatus").textContent = "";
+    igStickerRender();
+  } catch (error) {
+    if (request !== igStickerState.request) return;
+    igStickerState.stickers = [];
+    igEl("igStickerStatus").textContent = error.message;
+    igStickerRender();
+  }
+}
+async function igStickerOpen() {
+  if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+  const dialog = igEl("igStickerDialog");
+  if (!dialog.open) dialog.showModal();
+  igStickerState.tab = "search";
+  igStickerState.category = "";
+  igStickerRender();
+  try { await Promise.all([igStickerLoadPreferences(), igStickerLoadCategories()]); }
+  catch (error) { igEl("igStickerStatus").textContent = error.message; }
+  await igStickerSearch(igEl("igStickerSearch").value.trim(), "");
+  igEl("igStickerSearch").focus();
+}
+async function igStickerSend(stickerId) {
+  if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+  const replyTo = IG.replyTo ? IG.replyTo.id : "";
+  try {
+    await api("/api/conversations/" + encodeURIComponent(activeConversation) + "/messages", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "", replyTo, stickerId })
+    });
+    IG.replyTo = null;
+    igRenderReply();
+    igEl("igStickerDialog").close();
+    await Promise.all([igLoadMessages(false), loadConversations(), igStickerLoadPreferences()]);
+  } catch (error) { alert(error.message || "Sticker göndərilmədi."); }
+}
+async function igStickerToggleFavorite(stickerId) {
+  try {
+    const data = await api("/api/stickers/favorites", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stickerId })
+    });
+    igStickerState.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+    igStickerRender();
+  } catch (error) { alert(error.message || "Sevimli sticker yenilənmədi."); }
+}
+
+const igFilesState = { files: [], before: "", request: 0, searchTimer: null };
+function igFilesRender() {
+  const box = igEl("tcSharedFilesList");
+  const query = igEl("tcSharedFilesFilter").value.trim().toLocaleLowerCase();
+  const files = igFilesState.files.filter(file => !query || String(file.name || "").toLocaleLowerCase().includes(query));
+  if (!files.length) {
+    box.innerHTML = '<p class="tc-shared-files-empty">' + (query ? "Uyğun fayl tapılmadı." : "Hələ fayl paylaşılmayıb.") + '</p>';
+    return;
+  }
+  box.innerHTML = files.map(file => {
+    const preview = String(file.type || "").startsWith("image/")
+      ? `<img src="${esc(file.url)}" alt="" loading="lazy">`
+      : String(file.type || "").startsWith("video/") ? "▶" : String(file.type || "").startsWith("audio/") ? "♫" : "📎";
+    const sender = file.from === me ? "Sən" : "@" + file.from;
+    return `<article class="tc-shared-file" role="listitem">
+      <div class="tc-shared-file-thumb">${preview}</div>
+      <div class="tc-shared-file-main"><strong title="${esc(file.name)}">${esc(file.name)}</strong><small>${esc(sender)} · ${esc(igTime(file.createdAt))}</small></div>
+      <div class="tc-shared-file-actions">
+        <a href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">Faylı aç</a>
+        <a href="${esc(file.downloadUrl)}">Yüklə</a>
+        ${file.canDelete ? `<button type="button" data-file-delete="${esc(file.id)}">Faylı sil</button>` : ""}
+      </div>
+    </article>`;
+  }).join("");
+}
+async function igFilesLoad(reset = true) {
+  const conversationId = activeConversation;
+  if (!conversationId) return;
+  const request = ++igFilesState.request;
+  if (reset) {
+    igFilesState.files = [];
+    igFilesState.before = "";
+    igEl("tcSharedFilesStatus").textContent = "Fayllar yüklənir…";
+    igFilesRender();
+  }
+  const params = new URLSearchParams({ limit: "50", q: igEl("tcSharedFilesFilter").value.trim() });
+  if (!reset && igFilesState.before) params.set("before", igFilesState.before);
+  igEl("tcSharedFilesMore").disabled = true;
+  try {
+    const data = await api(`/api/conversations/${encodeURIComponent(conversationId)}/files?${params.toString()}`);
+    if (request !== igFilesState.request || conversationId !== activeConversation) return;
+    const incoming = Array.isArray(data.files) ? data.files : [];
+    const existing = new Set(igFilesState.files.map(file => file.id));
+    igFilesState.files = reset ? incoming : [...igFilesState.files, ...incoming.filter(file => !existing.has(file.id))];
+    igFilesState.before = data.nextCursor || "";
+    igEl("tcSharedFilesStatus").textContent = "";
+    igEl("tcSharedFilesMore").hidden = !igFilesState.before;
+    igFilesRender();
+  } catch (error) {
+    if (request !== igFilesState.request) return;
+    igEl("tcSharedFilesStatus").textContent = error.message || "Fayllar yüklənə bilmədi.";
+    igEl("tcSharedFilesMore").hidden = true;
+  } finally {
+    if (request === igFilesState.request) igEl("tcSharedFilesMore").disabled = false;
+  }
+}
+async function igFilesOpen() {
+  if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+  const dialog = igEl("tcSharedFilesDialog");
+  if (!dialog.open) dialog.showModal();
+  igEl("tcSharedFilesFilter").value = "";
+  igEl("tcSharedFilesMore").hidden = true;
+  await igFilesLoad(true);
+  igEl("tcSharedFilesFilter").focus();
+}
+async function igFilesDelete(messageId) {
+  if (!activeConversation || !confirm("Bu mesajı və paylaşılmış faylı silmək istəyirsən?")) return;
+  try {
+    await api(`/api/conversations/${encodeURIComponent(activeConversation)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" });
+    igFilesState.files = igFilesState.files.filter(file => file.id !== messageId);
+    igFilesRender();
+    await Promise.all([igLoadMessages(false), loadConversations()]);
+  } catch (error) {
+    alert(error.message || "Fayl silinə bilmədi.");
+  }
+}
+
 async function igSendTo(text) {
   const fd = new FormData();
   fd.append("text", text);
@@ -1748,6 +2120,60 @@ async function igStartWith(username) {
     if (b) openConversation(b.dataset.convo);
   });
 
+  let msgSearchQuery = "", msgSearchCursor = "", msgSearchTimer = null, msgSearchSeq = 0;
+  async function loadMessageSearch(reset) {
+    const conversationId = activeConversation;
+    if (!conversationId || !msgSearchQuery || msgSearchQuery.length < 2) return;
+    if (reset) msgSearchCursor = "";
+    const cursor = reset ? "" : msgSearchCursor;
+    const sequence = ++msgSearchSeq;
+    const resultsBox = igEl("tcMessageSearchResults");
+    const moreButton = igEl("tcMessageSearchMore");
+    if (reset) resultsBox.textContent = "Axtarılır…";
+    moreButton.hidden = true;
+    const params = new URLSearchParams({ q: msgSearchQuery, limit: "20" });
+    if (cursor) params.set("before", cursor);
+    try {
+      const data = await api("/api/conversations/" + encodeURIComponent(conversationId) + "/messages/search?" + params.toString());
+      if (sequence !== msgSearchSeq || conversationId !== activeConversation) return;
+      const items = (data.results || []).map(m => `<button type="button" class="tc-msg-search-result" role="listitem" data-search-mid="${esc(m.id)}"><span class="tc-msg-search-meta"><b>${esc(m.from === me ? "Sən" : "@" + m.from)}</b><time>${esc(igTime(m.createdAt))}</time></span><span class="tc-msg-search-text">${esc(m.text)}</span></button>`).join("");
+      if (reset) resultsBox.innerHTML = "";
+      if (items) resultsBox.insertAdjacentHTML("beforeend", items);
+      if (reset && !items) resultsBox.textContent = "Nəticə tapılmadı.";
+      msgSearchCursor = data.nextCursor || "";
+      moreButton.hidden = !msgSearchCursor;
+    } catch (err) {
+      if (sequence !== msgSearchSeq) return;
+      if (reset) resultsBox.textContent = err.message;
+    }
+  }
+  igEl("tcMessageSearchToggle").addEventListener("click", () => {
+    const panel = igEl("tcMessageSearchPanel");
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) igEl("tcMessageSearchInput").focus();
+  });
+  igEl("tcMessageSearchClose").addEventListener("click", () => {
+    msgSearchSeq++; clearTimeout(msgSearchTimer); igEl("tcMessageSearchPanel").hidden = true;
+  });
+  igEl("tcMessageSearchInput").addEventListener("input", e => {
+    msgSearchQuery = e.target.value.trim(); msgSearchSeq++; clearTimeout(msgSearchTimer); msgSearchCursor = "";
+    const resultsBox = igEl("tcMessageSearchResults"); igEl("tcMessageSearchMore").hidden = true;
+    if (msgSearchQuery.length < 2) { resultsBox.textContent = "Axtarış üçün ən azı 2 simvol yaz."; return; }
+    resultsBox.textContent = "Axtarılır…";
+    msgSearchTimer = setTimeout(() => loadMessageSearch(true), 250);
+  });
+  igEl("tcMessageSearchMore").addEventListener("click", () => loadMessageSearch(false));
+  igEl("tcMessageSearchResults").addEventListener("click", async e => {
+    const item = e.target.closest("[data-search-mid]"); if (!item) return;
+    const conversationId = activeConversation, messageId = item.dataset.searchMid;
+    try {
+      const list = await api("/api/conversations/" + encodeURIComponent(conversationId) + "/messages?around=" + encodeURIComponent(messageId));
+      if (conversationId !== activeConversation) return;
+      IG.msgs = list; igRenderMsgs(); igEl("tcMessageSearchPanel").hidden = true;
+      const row = [...igEl("chatMessages").querySelectorAll("[data-mid]")].find(node => node.dataset.mid === messageId);
+      if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (err) { alert(err.message); }
+  });
   igEl("chatMessages").addEventListener("click", e => {
     if (e.target.closest("a")) return;
     const row = e.target.closest("[data-mid]");
@@ -1763,6 +2189,41 @@ async function igStartWith(username) {
     if (a === "close") return;
     const m = IG.msgs.find(x => x.id === b.dataset.mid);
     if (!m) return;
+    if (a === "edit") {
+      if (m.from !== me || !m.text || m.deleted) return;
+      igEl("igSheetBody").innerHTML = `<div class="ig-edit-sheet"><label for="igEditText">Mesajı redaktə et</label><textarea id="igEditText" maxlength="2000">${esc(m.text)}</textarea><div class="ig-edit-actions"><button type="button" class="ig-sheet-btn cancel" data-a="close">Ləğv et</button><button type="button" class="ig-sheet-btn" data-a="save-edit" data-mid="${esc(m.id)}">Yadda saxla</button></div></div>`;
+      igEl("igSheet").hidden = false;
+      igEl("igEditText").focus();
+      return;
+    }
+    if (a === "save-edit") {
+      const text = igEl("igEditText")?.value || "";
+      if (!text.trim()) { alert("Mesaj boş ola bilməz."); return; }
+      try {
+        await api("/api/conversations/" + activeConversation + "/messages/" + m.id, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        await igLoadMessages(false);
+        loadConversations();
+      } catch (err) { alert(err.message); }
+      return;
+    }
+    if (a === "forward") {
+      if (m.deleted) return;
+      const destinations = conversationsCache.filter(c => c.id !== activeConversation);
+      const rows = destinations.map(c => `<button type="button" class="ig-sheet-btn ig-forward-destination" data-a="forward-to" data-mid="${esc(m.id)}" data-target="${esc(c.id)}">${esc(c.type === "group" ? (c.name || "Qrup") : "@" + c.name)}</button>`).join("");
+      igEl("igSheetBody").innerHTML = `<div class="ig-forward-list"><b>Mesajı ötür</b>${rows || "<p class=\"ig-none\">Başqa söhbət yoxdur.</p>"}<button type="button" class="ig-sheet-btn cancel" data-a="close">Ləğv et</button></div>`;
+      igEl("igSheet").hidden = false;
+      return;
+    }
+    if (a === "forward-to") {
+      const targetId = b.dataset.target;
+      if (!targetId) return;
+      try {
+        await api("/api/conversations/" + encodeURIComponent(activeConversation) + "/messages/" + encodeURIComponent(m.id) + "/forward", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetConversationId: targetId }) });
+        await loadConversations();
+        await openConversation(targetId);
+      } catch (err) { alert(err.message); }
+      return;
+    }
     if (a === "reply") { IG.replyTo = m; igRenderReply(); igEl("dmText").focus(); }
     if (a === "copy") { try { await navigator.clipboard.writeText(m.text); } catch { alert(m.text); } }
     if (a === "del") {
@@ -1782,6 +2243,7 @@ async function igStartWith(username) {
   igEl("tcMobileBack").onclick = () => {
     igEl("messagesPage").classList.remove("tc-chat-open");
     activeConversation = null;
+    window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id: null } }));
     igRenderList();
   };
   igEl("igInfo").onclick = () => {
@@ -1836,6 +2298,54 @@ async function igStartWith(username) {
     try { await igStartWith(b.dataset.start); } catch (err) { alert(err.message); }
   });
 
+  let voiceRecorder = null, voiceStream = null, voiceChunks = [], voiceTargetConversation = "", voiceFailed = false;
+  const voiceButton = igEl("tcVoiceRecord");
+  function resetVoiceButton() {
+    voiceButton.disabled = false;
+    voiceButton.classList.remove("recording");
+    voiceButton.setAttribute("aria-pressed", "false");
+    voiceButton.setAttribute("aria-label", "Səsli mesaj yaz");
+    voiceButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"></path></svg>`;
+  }
+  voiceButton.addEventListener("click", async () => {
+    if (voiceRecorder && voiceRecorder.state === "recording") { voiceButton.disabled = true; voiceRecorder.stop(); return; }
+    if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return alert("Bu brauzer səs yazısını dəstəkləmir.");
+    try {
+      voiceTargetConversation = activeConversation; voiceFailed = false;
+      voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeTypes = ["audio/webm", "audio/ogg", "audio/mp4"];
+      const mimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported?.(type));
+      const recorder = new MediaRecorder(voiceStream, mimeType ? { mimeType } : {});
+      voiceRecorder = recorder; voiceChunks = [];
+      recorder.addEventListener("dataavailable", event => { if (event.data?.size) voiceChunks.push(event.data); });
+      recorder.addEventListener("stop", () => {
+        if (voiceFailed) { voiceFailed = false; return; }
+        const type = (recorder.mimeType || voiceChunks[0]?.type || "audio/webm").split(";")[0].toLowerCase();
+        const blob = new Blob(voiceChunks, { type });
+        const target = voiceTargetConversation;
+        voiceStream?.getTracks().forEach(track => track.stop());
+        voiceStream = null; voiceRecorder = null; voiceChunks = []; voiceTargetConversation = "";
+        resetVoiceButton();
+        if (!blob.size) return alert("Səs yazısı boşdur.");
+        if (target !== activeConversation) return alert("Söhbət dəyişdiyi üçün səs yazısı əlavə edilmədi.");
+        if (blob.size > 30 * 1024 * 1024) return alert("Səs yazısı 30 MB-dan böyükdür.");
+        const ext = type === "audio/ogg" ? "ogg" : type === "audio/mp4" ? "m4a" : "webm";
+        IG.pendingFile = new File([blob], `voice-${Date.now()}.${ext}`, { type });
+        igRenderPending();
+      }, { once: true });
+      recorder.addEventListener("error", () => {
+        voiceFailed = true;
+        voiceStream?.getTracks().forEach(track => track.stop()); voiceStream = null; voiceRecorder = null; voiceChunks = []; voiceTargetConversation = ""; resetVoiceButton();
+        alert("Səs yazısı alınmadı.");
+      }, { once: true });
+      recorder.start(250);
+      voiceButton.classList.add("recording"); voiceButton.setAttribute("aria-pressed", "true"); voiceButton.setAttribute("aria-label", "Səs yazısını dayandır"); voiceButton.textContent = "■";
+    } catch (err) {
+      voiceStream?.getTracks().forEach(track => track.stop()); voiceStream = null; voiceRecorder = null; voiceTargetConversation = ""; resetVoiceButton();
+      alert(err.name === "NotAllowedError" ? "Mikrofon icazəsi verilmədi." : (err.message || "Səs yazısı başlatılmadı."));
+    }
+  });
   igEl("dmForm").addEventListener("submit", async e => {
     e.preventDefault();
     if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
@@ -1892,12 +2402,96 @@ async function igStartWith(username) {
   });
   socket.on("presenceUpdate", d => {
     if (!d || !d.username) return;
-    if (d.online) IG.online.add(d.username);
+    if (d.hidden) {
+      IG.online.delete(d.username);
+      delete IG.lastSeen[d.username];
+    } else if (d.online) IG.online.add(d.username);
     else {
       IG.online.delete(d.username);
       if (d.lastSeen) IG.lastSeen[d.username] = d.lastSeen;
+      else delete IG.lastSeen[d.username];
     }
     igRenderList();
     igRenderHead();
   });
+  igEl("tcFilesOpen").addEventListener("click", igFilesOpen);
+  igEl("tcSharedFilesClose").addEventListener("click", () => igEl("tcSharedFilesDialog").close());
+  igEl("tcSharedFilesDialog").addEventListener("click", event => {
+    if (event.target === igEl("tcSharedFilesDialog")) igEl("tcSharedFilesDialog").close();
+    const remove = event.target.closest("[data-file-delete]");
+    if (remove) igFilesDelete(remove.dataset.fileDelete);
+  });
+  igEl("tcSharedFilesFilter").addEventListener("input", () => {
+    clearTimeout(igFilesState.searchTimer);
+    igFilesState.searchTimer = setTimeout(() => igFilesLoad(true), 250);
+    igFilesRender();
+  });
+  igEl("tcSharedFilesMore").addEventListener("click", () => igFilesLoad(false));
+  igEl("igGifButton").addEventListener("click", igGifOpen);
+  igEl("igGifClose").addEventListener("click", () => igEl("igGifDialog").close());
+  igEl("igGifDialog").addEventListener("click", event => {
+    if (event.target === igEl("igGifDialog")) igEl("igGifDialog").close();
+    const tab = event.target.closest("[data-gif-tab]");
+    if (tab) {
+      igGifState.tab = tab.dataset.gifTab;
+      igGifRender();
+      if (igGifState.tab === "search" && !igGifState.results.length) igGifSearch(igEl("igGifSearch").value.trim());
+    }
+  });
+  igEl("igGifSearch").addEventListener("input", () => {
+    clearTimeout(igGifState.searchTimer);
+    igGifState.searchTimer = setTimeout(() => igGifSearch(igEl("igGifSearch").value.trim()), 300);
+  });
+  igEl("igGifCategories").addEventListener("click", event => {
+    const button = event.target.closest("[data-gif-category]");
+    if (!button) return;
+    const query = decodeURIComponent(button.dataset.gifCategory);
+    igEl("igGifSearch").value = query;
+    igGifState.tab = "search";
+    igGifRender();
+    igGifSearch(query);
+  });
+  igEl("igGifGrid").addEventListener("click", event => {
+    const favorite = event.target.closest("[data-gif-favorite]");
+    const send = event.target.closest("[data-gif-send]");
+    const button = favorite || send;
+    if (!button) return;
+    try {
+      const gif = JSON.parse(decodeURIComponent(favorite ? favorite.dataset.gifFavorite : send.dataset.gifSend));
+      if (favorite) igGifToggleFavorite(gif);
+      else igGifSend(gif);
+    } catch { alert("GIF məlumatı oxunmadı."); }
+  });
+
+  igEl("igStickerButton").addEventListener("click", igStickerOpen);
+  igEl("igStickerClose").addEventListener("click", () => igEl("igStickerDialog").close());
+  igEl("igStickerDialog").addEventListener("click", event => {
+    if (event.target === igEl("igStickerDialog")) igEl("igStickerDialog").close();
+    const tab = event.target.closest("[data-sticker-tab]");
+    if (tab) {
+      igStickerState.tab = tab.dataset.stickerTab;
+      igStickerRender();
+      if (igStickerState.tab === "search" && !igStickerState.stickers.length) igStickerSearch(igEl("igStickerSearch").value.trim(), igStickerState.category);
+    }
+  });
+  igEl("igStickerSearch").addEventListener("input", () => {
+    clearTimeout(igStickerState.searchTimer);
+    igStickerState.searchTimer = setTimeout(() => igStickerSearch(igEl("igStickerSearch").value.trim(), igStickerState.category), 180);
+  });
+  igEl("igStickerCategories").addEventListener("click", event => {
+    const button = event.target.closest("[data-sticker-category]");
+    if (!button) return;
+    igStickerState.category = igStickerState.category === decodeURIComponent(button.dataset.stickerCategory) ? "" : decodeURIComponent(button.dataset.stickerCategory);
+    igStickerRenderCategories();
+    igStickerSearch(igEl("igStickerSearch").value.trim(), igStickerState.category);
+  });
+  igEl("igStickerGrid").addEventListener("click", event => {
+    const favorite = event.target.closest("[data-sticker-favorite]");
+    const send = event.target.closest("[data-sticker-send]");
+    const button = favorite || send;
+    if (!button) return;
+    if (favorite) igStickerToggleFavorite(favorite.dataset.stickerFavorite);
+    else igStickerSend(send.dataset.stickerSend);
+  });
+
 })();

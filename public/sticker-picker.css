@@ -1,0 +1,31 @@
+#igStickerButton.tc-sticker-open{flex:0 0 38px;width:38px;height:38px;padding:0;border:1px solid rgba(196,157,255,.34);border-radius:13px;background:linear-gradient(145deg,rgba(181,112,255,.23),rgba(116,65,189,.15));color:#f0dcff;font-size:21px;line-height:1;cursor:pointer}
+.tc-sticker-dialog{position:fixed;inset:0;margin:auto;width:min(640px,calc(100vw - 22px));max-width:none;max-height:min(84dvh,760px);padding:0;border:1px solid rgba(190,150,255,.32);border-radius:24px;background:#111019;color:#f8f3ff;box-shadow:0 24px 90px rgba(0,0,0,.65);overflow:hidden}
+.tc-sticker-dialog::backdrop{background:rgba(5,4,10,.72);backdrop-filter:blur(8px)}
+.tc-sticker-panel{display:flex;flex-direction:column;max-height:min(84dvh,760px);padding:17px;background:radial-gradient(ellipse at top right,rgba(151,91,224,.15),transparent 45%),#111019}
+.tc-sticker-header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:13px;border-bottom:1px solid rgba(200,176,235,.12)}
+.tc-sticker-header h2{margin:0;font-size:20px;letter-spacing:-.02em}.tc-sticker-header p{margin:4px 0 0;color:#aaa2b7;font-size:12px}
+.tc-sticker-close{width:38px;height:38px;border:0;border-radius:50%;background:#25202f;color:#fff;font-size:24px;line-height:1;cursor:pointer}
+.tc-sticker-tabs{display:flex;gap:7px;margin:13px 0 10px;padding:4px;border:1px solid rgba(190,150,255,.13);border-radius:14px;background:rgba(255,255,255,.035)}
+.tc-sticker-tabs button{flex:1;min-height:38px;border:0;border-radius:10px;background:transparent;color:#bcb3ca;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.tc-sticker-tabs button.active{background:linear-gradient(135deg,#8d54d4,#6236ad);color:#fff;box-shadow:0 4px 14px rgba(107,59,180,.25)}
+.tc-sticker-search-controls{display:block}.tc-sticker-search-controls[hidden]{display:none}
+.tc-sticker-search{height:42px;display:flex;align-items:center;gap:9px;padding:0 13px;border:1px solid rgba(190,150,255,.2);border-radius:14px;background:#1a1721;color:#cab7e8}
+.tc-sticker-search span{font-size:21px}.tc-sticker-search input{width:100%;border:0;outline:0;background:transparent;color:#fff;font-family:inherit;font-size:14px}.tc-sticker-search input::placeholder{color:#8f879a}
+.tc-sticker-categories{display:flex;gap:7px;overflow-x:auto;padding:10px 0 4px;scrollbar-width:thin}
+.tc-sticker-category{flex:0 0 auto;padding:7px 11px;border:1px solid rgba(190,150,255,.17);border-radius:999px;background:rgba(255,255,255,.045);color:#d4c4e8;font-family:inherit;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer}
+.tc-sticker-category.active,.tc-sticker-category:hover{background:rgba(152,94,220,.24);border-color:rgba(193,150,255,.42);color:#fff}
+.tc-sticker-status{min-height:18px;margin:8px 2px 0;color:#c8b5dc;font-size:12px}.tc-sticker-status:empty{display:none}
+.tc-sticker-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;overflow-y:auto;overscroll-behavior:contain;padding:4px 2px 6px;min-height:160px}
+.tc-sticker-card{position:relative;min-width:0;overflow:hidden;border:1px solid rgba(255,255,255,.08);border-radius:15px;background:linear-gradient(145deg,rgba(255,255,255,.07),rgba(255,255,255,.025))}
+.tc-sticker-send{display:flex;width:100%;min-height:106px;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:9px 6px 8px;border:0;background:transparent;color:#f5efff;cursor:pointer}
+.tc-sticker-art{display:grid;place-items:center;width:62px;height:62px;border:1px solid rgba(255,255,255,.14);border-radius:20px;background:linear-gradient(145deg,#8052bd,#482d6c);font-size:39px;line-height:1;filter:drop-shadow(0 6px 12px rgba(0,0,0,.2));transition:transform .15s ease}
+.tc-sticker-send:active .tc-sticker-art{transform:scale(.9)}
+.tc-sticker-art[data-sticker-category="Sevgi"]{background:linear-gradient(145deg,#dc6b9d,#783a8c)}.tc-sticker-art[data-sticker-category="Reaksiyalar"]{background:linear-gradient(145deg,#7c67db,#43347f)}.tc-sticker-art[data-sticker-category="Əhval"]{background:linear-gradient(145deg,#4caeab,#275f7b)}.tc-sticker-art[data-sticker-category="Əyləncə"]{background:linear-gradient(145deg,#55a8db,#4561a8)}.tc-sticker-art[data-sticker-category="Bayram"]{background:linear-gradient(145deg,#e7aa4e,#a55356)}.tc-sticker-art[data-sticker-category="Yemək"]{background:linear-gradient(145deg,#e68b4b,#aa4f68)}
+.tc-sticker-label{display:block;max-width:100%;overflow:hidden;color:#c9c1d1;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.tc-sticker-favorite{position:absolute;top:5px;right:5px;width:29px;height:29px;border:1px solid rgba(255,255,255,.18);border-radius:50%;background:rgba(12,10,16,.72);color:#fff;font-size:18px;line-height:1;cursor:pointer;backdrop-filter:blur(8px)}.tc-sticker-favorite.saved{color:#ffd76a}
+.tc-sticker-empty{grid-column:1/-1;margin:20px 0;color:#aaa2b7;text-align:center;font-size:13px}
+.tc-sticker-message{display:inline-flex;flex-direction:column;align-items:center;gap:3px;min-width:74px;padding:7px 9px;border:1px solid rgba(255,255,255,.14);border-radius:18px;background:linear-gradient(145deg,rgba(177,115,235,.25),rgba(65,48,93,.45))}.tc-sticker-message .tc-sticker-art{width:66px;height:66px;border-radius:21px;font-size:43px}.tc-sticker-message small{max-width:120px;overflow:hidden;color:#eee2ff;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:520px){.tc-sticker-dialog{width:calc(100vw - 14px);max-height:86dvh;border-radius:20px}.tc-sticker-panel{max-height:86dvh;padding:12px}.tc-sticker-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.tc-sticker-send{min-height:96px;padding:8px 4px}.tc-sticker-art{width:56px;height:56px;font-size:35px}.tc-sticker-tabs button{font-size:11px}}
+@media(max-width:360px){.tc-sticker-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+@media(max-width:520px){.tc-instagram .ig-compose{gap:4px;margin:7px;padding:5px}.tc-instagram .ig-compose .ig-ibtn,#igGifButton.ig-gif-open,#igStickerButton.tc-sticker-open{flex:0 0 30px;width:30px;min-width:30px;height:30px;padding:0}.tc-instagram .ig-compose .ig-ibtn svg{width:15px;height:15px}.tc-instagram .ig-compose input#dmText{flex:1;min-width:46px;padding:8px 4px;font-size:12px}.tc-instagram .ig-compose button#dmSend{flex:0 0 36px;width:36px;height:36px;min-width:36px}}

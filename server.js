@@ -14,6 +14,7 @@ const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { redactReplyPreviews, removeBlockedFollower, prepareForwardMedia } = require("./review-fixes");
 const { createCallRegistry, validateSignal } = require("./call-registry");
 const {
     OWNER_USERNAME, ROLE_LEVEL, roleOf, canAssignRole,
@@ -27,6 +28,13 @@ const supa = require("./supabaseStorage");
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+const PROFILE_THEMES = new Set(["violet", "ocean", "sunset", "forest"]);
+const ACTIVITY_VISIBILITIES = new Set(["everyone", "friends", "nobody"]);
+const PRIVACY_VISIBILITIES = new Set(["everyone", "followers", "friends", "nobody"]);
+const PRIVACY_SETTING_KEYS = new Set(["profile", "posts", "stories", "messageRequests", "friendRequests"]);
+function normalizeProfileColor(value) {
+    return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : "#8257ff";
+}
 
 const DATA = path.join(__dirname, "data");
 const UPLOADS = path.join(__dirname, "public", "uploads");
@@ -66,6 +74,163 @@ const conversations = () => readJSON("conversations.json");
 const saveConversations = value => saveJSON("conversations.json", value);
 const messages = () => readJSON("messages.json");
 const saveMessages = value => saveJSON("messages.json", value);
+const userBlocks = () => readJSON("blocks.json");
+const saveUserBlocks = value => saveJSON("blocks.json", value);
+function isBlockedBy(blocker, blocked) {
+    const blockerName = String(blocker || "").toLowerCase();
+    const blockedName = String(blocked || "").toLowerCase();
+    return !!blockerName && !!blockedName && userBlocks().some(item =>
+        String(item.blocker || "").toLowerCase() === blockerName &&
+        String(item.blocked || "").toLowerCase() === blockedName);
+}
+function isBlockedBetween(first, second) {
+    return isBlockedBy(first, second) || isBlockedBy(second, first);
+}
+function publishBlockChange(first, second) {
+    publishPresence(first);
+    publishPresence(second);
+    io.to(`user:${first}`).emit("blocksChanged");
+    io.to(`user:${second}`).emit("blocksChanged");
+    conversations().filter(conversation => conversation.type === "direct" &&
+        conversation.participants.includes(first) && conversation.participants.includes(second))
+        .forEach(conversation => {
+            io.to(`user:${first}`).emit("messagesChanged", { conversationId: conversation.id });
+            io.to(`user:${second}`).emit("messagesChanged", { conversationId: conversation.id });
+        });
+}
+const STICKER_PACK = [
+    { id: "love-purple-heart", category: "Sevgi", emoji: "💜", label: "Bənövşəyi ürək", keywords: "love heart sevgi ürək aşk kalp" },
+    { id: "love-sparkling-heart", category: "Sevgi", emoji: "💖", label: "Parlaq ürək", keywords: "love heart sevgi parlaq sparkle" },
+    { id: "love-hug", category: "Sevgi", emoji: "🫶", label: "Qəlbdən qucaq", keywords: "love hug sevgi qucaq əl" },
+    { id: "love-kiss", category: "Sevgi", emoji: "😘", label: "Öpüş", keywords: "kiss love öpüş öpücük" },
+    { id: "love-flowers", category: "Sevgi", emoji: "💐", label: "Gül dəstəsi", keywords: "flower rose love gül çiçək" },
+    { id: "react-laugh", category: "Reaksiyalar", emoji: "😂", label: "Gülməkdən ağlayıram", keywords: "laugh funny gülmək gülməli" },
+    { id: "react-rofl", category: "Reaksiyalar", emoji: "🤣", label: "Daha çox gülüş", keywords: "laugh rofl funny gülüş" },
+    { id: "react-wow", category: "Reaksiyalar", emoji: "😮", label: "Vay!", keywords: "wow surprised təəccüb vay" },
+    { id: "react-cry", category: "Reaksiyalar", emoji: "😭", label: "Çox kövrəldim", keywords: "cry sad ağlamaq kədər" },
+    { id: "react-clap", category: "Reaksiyalar", emoji: "👏", label: "Alqış", keywords: "clap bravo alqış" },
+    { id: "react-thumbs", category: "Reaksiyalar", emoji: "👍", label: "Bəyəndim", keywords: "like yes thumbs bəyənirəm" },
+    { id: "react-dislike", category: "Reaksiyalar", emoji: "👎", label: "Bəyənmədim", keywords: "dislike no thumbs bəyənmədim" },
+    { id: "react-pray", category: "Reaksiyalar", emoji: "🙏", label: "Təşəkkürlər", keywords: "thanks pray please təşəkkür sağol" },
+    { id: "mood-cool", category: "Əhval", emoji: "😎", label: "Hər şey nəzarətdədir", keywords: "cool sunglasses cool əla" },
+    { id: "mood-thinking", category: "Əhval", emoji: "🤔", label: "Fikirləşirəm", keywords: "think thinking hmm düşünürəm" },
+    { id: "mood-sleepy", category: "Əhval", emoji: "😴", label: "Yuxum gəlir", keywords: "sleep tired yuxu yorğun" },
+    { id: "mood-fire", category: "Əhval", emoji: "🔥", label: "Əla alındı", keywords: "fire hot awesome əla super" },
+    { id: "mood-please", category: "Əhval", emoji: "🥺", label: "Xahiş edirəm", keywords: "please cute xahiş rica" },
+    { id: "fun-cat", category: "Əyləncə", emoji: "😹", label: "Gülən pişik", keywords: "cat funny pişik gülməli" },
+    { id: "fun-frog", category: "Əyləncə", emoji: "🐸", label: "Şən qurbağa", keywords: "frog funny qurbağa" },
+    { id: "fun-panda", category: "Əyləncə", emoji: "🐼", label: "Panda", keywords: "panda bear ayı" },
+    { id: "fun-unicorn", category: "Əyləncə", emoji: "🦄", label: "Sehrli təkbuynuz", keywords: "unicorn magic sehrli" },
+    { id: "party-confetti", category: "Bayram", emoji: "🎉", label: "Təbriklər!", keywords: "party celebrate təbrik bayram" },
+    { id: "party-sparkles", category: "Bayram", emoji: "✨", label: "Parıltı", keywords: "sparkle magic parıltı sehr" },
+    { id: "party-balloon", category: "Bayram", emoji: "🎈", label: "Bayram şarı", keywords: "balloon party şar" },
+    { id: "food-pizza", category: "Yemək", emoji: "🍕", label: "Pizza vaxtıdır", keywords: "food pizza yemək" },
+    { id: "food-tea", category: "Yemək", emoji: "🧋", label: "Çay fasiləsi", keywords: "tea drink boba çay içki" },
+    { id: "food-strawberry", category: "Yemək", emoji: "🍓", label: "Çiyələk", keywords: "food fruit strawberry çiyələk meyvə" }
+].map(sticker => Object.freeze(sticker));
+const findSticker = id => STICKER_PACK.find(sticker => sticker.id === String(id || "")) || null;
+const stickerPreferences = () => {
+    const value = readJSON("stickerPreferences.json", {});
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+};
+const saveStickerPreferences = value => saveJSON("stickerPreferences.json", value);
+function rememberSticker(username, sticker) {
+    const all = stickerPreferences();
+    const preferences = all[username] || { favorites: [], recent: [] };
+    const recent = Array.isArray(preferences.recent) ? preferences.recent : [];
+    preferences.recent = [sticker.id, ...recent.filter(id => id !== sticker.id)].slice(0, 30);
+    preferences.favorites = Array.isArray(preferences.favorites) ? preferences.favorites : [];
+    all[username] = preferences;
+    saveStickerPreferences(all);
+}
+
+const gifPreferences = () => {
+    const value = readJSON("gifPreferences.json", {});
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+};
+const saveGifPreferences = value => saveJSON("gifPreferences.json", value);
+const gifSearchLimiter = rateLimit({ windowMs: 60 * 1000, limit: 40, standardHeaders: true, legacyHeaders: false, message: { error: "GIF axtarışı üçün limitə çatdın. Bir az sonra yenidən cəhd et." } });
+function normalizeGifPayload(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const id = String(value.id || "").trim().slice(0, 128);
+    const safeGiphyUrl = input => {
+        try {
+            const url = new URL(String(input || ""));
+            const hostAllowed = /^media\d*\.giphy\.com$/.test(url.hostname) ||
+                url.hostname === "i.giphy.com" || url.hostname === "media.tenor.com";
+            return url.protocol === "https:" && hostAllowed && url.pathname.length > 1 ? url.toString() : "";
+        } catch { return ""; }
+    };
+    const url = safeGiphyUrl(value.url);
+    const previewUrl = safeGiphyUrl(value.previewUrl) || url;
+    if (!id || !url || !previewUrl) return null;
+    const dimension = input => {
+        const number = Number(input);
+        return Number.isInteger(number) && number > 0 && number <= 4096 ? number : 0;
+    };
+    return { id, url, previewUrl, title: String(value.title || "GIF").replace(/\s+/g, " ").trim().slice(0, 120) || "GIF", width: dimension(value.width), height: dimension(value.height) };
+}
+function rememberGif(username, gif) {
+    const all = gifPreferences();
+    const preferences = all[username] || { favorites: [], recent: [] };
+    const recent = Array.isArray(preferences.recent) ? preferences.recent : [];
+    preferences.recent = [gif, ...recent.filter(item => item && item.id !== gif.id)].slice(0, 30);
+    preferences.favorites = Array.isArray(preferences.favorites) ? preferences.favorites : [];
+    all[username] = preferences;
+    saveGifPreferences(all);
+}
+function normalizeGiphyResult(item) {
+    const media = item && item.images && typeof item.images === "object" ? item.images : {};
+    const full = media.original || media.downsized_large || media.downsized || media.fixed_height;
+    const preview = media.fixed_height_small || media.fixed_height_downsampled || media.fixed_width_small || media.fixed_height || full;
+    if (!full || !preview) return null;
+    return normalizeGifPayload({ id: item.id, url: full.url, previewUrl: preview.url, title: item.title || item.alt_text || "GIF", width: full.width, height: full.height });
+}
+async function giphyRequest(endpoint, parameters = {}) {
+    const key = String(process.env.GIPHY_API_KEY || "").trim();
+    if (!key) {
+        const error = new Error("GIF axtarışı üçün serverdə GIPHY_API_KEY mühit dəyişənini təyin edin.");
+        error.status = 503;
+        throw error;
+    }
+    if (!["categories", "search", "trending"].includes(endpoint)) throw new Error("GIPHY sorğusunun növü düzgün deyil.");
+    const url = new URL("https://api.giphy.com/v1/gifs/" + endpoint);
+    url.searchParams.set("api_key", key);
+    for (const [name, value] of Object.entries(parameters)) {
+        if (value !== undefined && value !== null && String(value) !== "") url.searchParams.set(name, String(value));
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 9000);
+    try {
+        const response = await fetch(url.toString(), { signal: controller.signal, headers: { Accept: "application/json" } });
+        let data = null;
+        try { data = await response.json(); } catch {}
+        if (!response.ok) {
+            const error = new Error(response.status === 429
+                ? "GIPHY sorğu limitinə çatdı. Bir az sonra yenidən cəhd et."
+                : "GIPHY sorğusu tamamlanmadı.");
+            error.status = response.status === 429 ? 429 : 502;
+            if (response.headers.get("Retry-After")) error.retryAfter = response.headers.get("Retry-After");
+            throw error;
+        }
+        if (data?.meta?.status && data.meta.status >= 400) {
+            const error = new Error(data.meta.status === 429
+                ? "GIPHY sorğu limitinə çatdı. Bir az sonra yenidən cəhd et."
+                : "GIPHY sorğusu tamamlanmadı.");
+            error.status = data.meta.status === 429 ? 429 : 502;
+            throw error;
+        }
+        return data || {};
+    } catch (error) {
+        if (error.status) throw error;
+        const unavailable = new Error("GIPHY xidmətinə qoşulmaq mümkün olmadı.");
+        unavailable.status = 502;
+        throw unavailable;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
 const friendRequests = () => readJSON("friendRequests.json");
 const saveFriendRequests = value => saveJSON("friendRequests.json", value);
 const stories = () => readJSON("stories.json");
@@ -84,7 +249,7 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            "img-src": ["'self'", "data:", "blob:", supa.origin].filter(Boolean),
+            "img-src": ["'self'", "data:", "blob:", "https://*.giphy.com", "https://media.tenor.com", supa.origin].filter(Boolean),
             "media-src": ["'self'", "blob:", supa.origin].filter(Boolean)
         }
     }
@@ -135,7 +300,74 @@ io.use((socket, next) => {
 });
 // TALKCHAT_PRESENCE_READ_V1
 const onlineUsers = new Map();
-const lastSeenMap = new Map();
+function canSeeActivity(viewerUsername, target, settingName) {
+    if (viewerUsername === target.username) return true;
+    const setting = ACTIVITY_VISIBILITIES.has(target[settingName]) ? target[settingName] : "everyone";
+    if (setting === "nobody") return false;
+    if (setting === "friends") return Array.isArray(target.friends) && target.friends.includes(viewerUsername);
+    return true;
+}
+function privacySettingsFor(user) {
+    const stored = user?.privacySettings && typeof user.privacySettings === "object" ? user.privacySettings : {};
+    return Object.fromEntries(Array.from(PRIVACY_SETTING_KEYS, key => [
+        key,
+        stored[key] === undefined ? "everyone" : PRIVACY_VISIBILITIES.has(stored[key]) ? stored[key] : "nobody"
+    ]));
+}
+function policyAllows(viewerUsername, target, setting) {
+    if (!target) return false;
+    if (viewerUsername === target.username) return true;
+    if (setting === "everyone") return true;
+    if (setting === "followers") return Array.isArray(target.followers) && target.followers.includes(viewerUsername);
+    if (setting === "friends") return Array.isArray(target.friends) && target.friends.includes(viewerUsername);
+    return false;
+}
+function canViewProfile(viewerUsername, target, accountList = users()) {
+    const account = typeof target === "string" ? accountList.find(user => user.username === target) : target;
+    if (!account || isBlockedBetween(viewerUsername, account.username)) return false;
+    return policyAllows(viewerUsername, account, privacySettingsFor(account).profile);
+}
+function canViewContent(viewerUsername, ownerUsername, kind, accountList = users()) {
+    const owner = accountList.find(user => user.username === ownerUsername);
+    if (!owner || isBlockedBetween(viewerUsername, owner.username)) return false;
+    const setting = privacySettingsFor(owner)[kind];
+    return policyAllows(viewerUsername, owner, setting);
+}
+function canReceiveRequest(senderUsername, target, settingKey) {
+    return policyAllows(senderUsername, target, privacySettingsFor(target)[settingKey]);
+}
+function canSendDirectMessage(senderUsername, target, conversation) {
+    if (!target) return false;
+    if (canReceiveRequest(senderUsername, target, "messageRequests")) return true;
+    if (!conversation) return false;
+    const historyExists = messages().some(message =>
+        message.conversationId === conversation.id &&
+        (message.from === senderUsername || message.from === target.username));
+    const acceptedRequest = messageRequests().some(request =>
+        request.status === "accepted" &&
+        ((request.from === senderUsername && request.to === target.username) ||
+         (request.from === target.username && request.to === senderUsername)) &&
+        (!request.conversationId || request.conversationId === conversation.id));
+    return historyExists || acceptedRequest;
+}
+function publishPresence(username) {
+    const accountList = users();
+    const target = accountList.find(user => user.username === username);
+    if (!target) return;
+    const online = onlineUsers.has(username);
+    for (const viewer of accountList) {
+        if (!canViewProfile(viewer.username, target, accountList)) {
+            io.to(`user:${viewer.username}`).emit("presenceUpdate", { username, hidden: true });
+            continue;
+        }
+        const canSeeOnline = canSeeActivity(viewer.username, target, "onlineVisibility");
+        const canSeeLastSeen = canSeeActivity(viewer.username, target, "lastSeenVisibility");
+        const payload = { username, online: canSeeOnline && online };
+        if (canSeeLastSeen && target.lastSeenAt) payload.lastSeen = target.lastSeenAt;
+        if (!canSeeOnline && !canSeeLastSeen) payload.hidden = true;
+        io.to(`user:${viewer.username}`).emit("presenceUpdate", payload);
+    }
+}
 
 // Mesajın önizlemesi (söhbət siyahısında göstərilir)
 function previewOf(m) {
@@ -146,6 +378,17 @@ function previewOf(m) {
     return "📎 " + (m.attachmentName || "Fayl");
 }
 
+function replyPreviewOf(message) {
+    if (!message || message.deleted) return "Mesaj silindi";
+    if (message.text) return String(message.text).replace(/\s+/g, " ").trim().slice(0, 160);
+    if (message.sticker) return "◆ " + String(message.sticker.label || "Sticker").slice(0, 140);
+    if (message.gif) return "🎞 GIF";
+    if (message.sharedPost) return message.sharedPost.kind === "reel" ? "↗ Reels göndərildi" : "↗ Paylaşım göndərildi";
+    if ((message.attachmentType || "").startsWith("image/")) return "📷 Şəkil";
+    if ((message.attachmentType || "").startsWith("audio/")) return "♫ Səsli mesaj";
+    return "📎 " + String(message.attachmentName || "Fayl").replace(/\s+/g, " ").trim().slice(0, 140);
+}
+
 // İstifadəçi qoşulanda ona gələn, hələ çatdırılmamış mesajları "çatdırıldı" edir
 function deliverPending(name) {
     const ids = new Set(conversations().filter(c => c.participants.includes(name)).map(c => c.id));
@@ -153,7 +396,7 @@ function deliverPending(name) {
     const notify = new Map();
     let changed = false;
     for (const m of list) {
-        if (!m.deliveredAt && m.from !== name && ids.has(m.conversationId)) {
+        if (!m.deliveredAt && m.from !== name && ids.has(m.conversationId) && !isBlockedBetween(name, m.from)) {
             m.deliveredAt = new Date().toISOString();
             changed = true;
             notify.set(m.from + "|" + m.conversationId, { to: m.from, conversationId: m.conversationId });
@@ -221,7 +464,8 @@ io.on("connection", socket => {
         const c = conversations().find(x =>
             x.id === conversationId && x.type === "direct" &&
             Array.isArray(x.participants) && x.participants.includes(name));
-        return c ? (c.participants.find(p => p !== name) || null) : null;
+        const peer = c ? (c.participants.find(p => p !== name) || null) : null;
+        return peer && !isBlockedBetween(name, peer) ? peer : null;
     }
 
     const ringingCall = directCallRegistry.findForUser(name);
@@ -229,7 +473,7 @@ io.on("connection", socket => {
         socket.emit("call:incoming", { callId: ringingCall.id, conversationId: ringingCall.conversationId, from: ringingCall.caller, to: name, mediaType: ringingCall.mediaType });
     }
     onlineUsers.set(name, (onlineUsers.get(name) || 0) + 1);
-    io.emit("presenceUpdate", { username: name, online: true });
+    publishPresence(name);
 
 
     
@@ -420,7 +664,7 @@ socket.on("call:end", data => {
         const convo = conversations().find(c => c.id === data.conversationId && c.participants.includes(name));
         if (!convo) return;
         convo.participants.filter(p => p !== name).forEach(p =>
-            io.to(`user:${p}`).emit("typing", { conversationId: convo.id, from: name }));
+            { if (!isBlockedBetween(name, p)) io.to(`user:${p}`).emit("typing", { conversationId: convo.id, from: name }); });
     });
 
     socket.on("disconnect", () => {
@@ -452,12 +696,14 @@ socket.on("call:end", data => {
                 if (call.participants.length === 0) expireDisconnectedGroupCall(conversationId, call);
             }
             onlineUsers.delete(name);
-            lastSeenMap.set(name, new Date().toISOString());
-            io.emit("presenceUpdate", {
-                username: name,
-                online: false,
-                lastSeen: new Date().toISOString()
-            });
+            const disconnectedAt = new Date().toISOString();
+            const accountList = users();
+            const account = accountList.find(user => user.username === name);
+            if (account) {
+                account.lastSeenAt = disconnectedAt;
+                saveUsers(accountList);
+            }
+            publishPresence(name);
         } else {
             onlineUsers.set(name, count);
         }
@@ -488,6 +734,50 @@ function requireAuth(req, res, next) {
     });
     next();
 }
+
+function rateLimitKey(req) {
+    const username = currentUser(req);
+    return username ? `user:${username.toLowerCase()}` : `ip:${req.ip || "unknown"}`;
+}
+function userRateLimit(windowMs, limit, message) {
+    return rateLimit({
+        windowMs, limit, keyGenerator: rateLimitKey,
+        standardHeaders: "draft-7", legacyHeaders: false,
+        message: { error: message }
+    });
+}
+function duplicateText(items, { username, text, scope = "", senderField = "username", windowMs = 30000, minLength = 12 }) {
+    const normalized = String(text || "").trim().normalize("NFKC").replace(/\s+/g, " ").toLowerCase();
+    if (normalized.length < minLength) return false;
+    const now = Date.now();
+    return items.some(item => {
+        if (item[senderField] !== username || (scope && item.scope !== scope)) return false;
+        const createdAt = Date.parse(item.createdAt || "");
+        const previous = String(item.text || "").trim().normalize("NFKC").replace(/\s+/g, " ").toLowerCase();
+        return Number.isFinite(createdAt) && now - createdAt >= 0 && now - createdAt < windowMs && previous === normalized;
+    });
+}
+
+const postMutationLimiter = userRateLimit(15 * 60 * 1000, 60, "Çox tez-tez paylaşım əməliyyatı edirsən. Bir az sonra yenidən cəhd et.");
+const commentLimiter = userRateLimit(60 * 1000, 45, "Şərh limiti dolub. Bir az sonra yenidən cəhd et.");
+const followLimiter = userRateLimit(60 * 1000, 30, "İzləmə əməliyyatı limiti dolub. Bir az sonra yenidən cəhd et.");
+const messageLimiter = userRateLimit(60 * 1000, 120, "Mesaj limiti dolub. Bir az sonra yenidən cəhd et.");
+const reportLimiter = userRateLimit(10 * 60 * 1000, 8, "Şikayət limiti dolub. Bir az sonra yenidən cəhd et.");
+const messageRequestLimiter = userRateLimit(10 * 60 * 1000, 10, "Mesaj sorğusu limiti dolub. Bir az sonra yenidən cəhd et.");
+app.use("/api/posts", (req, res, next) =>
+    ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? postMutationLimiter(req, res, next) : next());
+app.use("/api/reels", (req, res, next) =>
+    ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? postMutationLimiter(req, res, next) : next());
+app.use("/api/follow", (req, res, next) =>
+    ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? followLimiter(req, res, next) : next());
+app.use("/api/conversations", (req, res, next) =>
+    ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? messageLimiter(req, res, next) : next());
+app.use("/api/rooms", (req, res, next) =>
+    ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? messageLimiter(req, res, next) : next());
+app.use("/api/reports", (req, res, next) =>
+    req.method === "POST" ? reportLimiter(req, res, next) : next());
+app.use("/api/message-requests", (req, res, next) =>
+    req.method === "POST" ? messageRequestLimiter(req, res, next) : next());
 
 app.get("/api/calls/ice", requireAuth, async (req, res) => {
     const token = process.env.TURNIX_API_TOKEN;
@@ -565,23 +855,29 @@ function publicUser(user) {
         bio: user.bio || "",
         avatar: user.avatar || "",
         link: user.link || "",
+        profileTheme: PROFILE_THEMES.has(user.profileTheme) ? user.profileTheme : "violet",
+        profileColor: normalizeProfileColor(user.profileColor),
+        verified: user.verified === true,
         followersCount: (user.followers || []).length,
         followingCount: (user.following || []).length,
         isFollowing: false
     };
 }
-function publicPost(post, userList = users()) {
+function publicPost(post, userList = users(), viewerUsername = "") {
     const author = userList.find(user => user.username === post.username);
     return {
         ...post,
         kind: post.kind === "reel" ? "reel" : "post",
-        comments: (post.comments || []).map(comment => ({
+        comments: (post.comments || []).filter(comment =>
+            !viewerUsername || !isBlockedBetween(viewerUsername, comment.username)
+        ).map(comment => ({
             ...comment,
             role: roleOf(userList.find(user => user.username === comment.username))
         })),
         authorName: author?.displayName || "",
         authorAvatar: author?.avatar || "",
-        authorRole: roleOf(author)
+        authorRole: roleOf(author),
+        authorVerified: author?.verified === true
     };
 }
 function activeBan(user) {
@@ -619,13 +915,18 @@ function expireBans() {
 }
 function canAccessUpload(filename, username) {
     const matches = (record, pathField, fallbackField) => objectKey(record, pathField, fallbackField) === filename;
-    if (users().some(user => matches(user, "avatarStoragePath", "avatar"))) return true;
-    if (posts().some(post => matches(post, "storagePath", "media"))) return true;
-    if (stories().some(story => Date.parse(story.expiresAt) > Date.now() && matches(story, "storagePath", "media"))) return true;
+    const accountList = users();
+    if (accountList.some(user => matches(user, "avatarStoragePath", "avatar") &&
+        canViewProfile(username, user, accountList))) return true;
+    if (posts().some(post => matches(post, "storagePath", "media") &&
+        canViewContent(username, post.username, "posts", accountList))) return true;
+    if (stories().some(story => Date.parse(story.expiresAt) > Date.now() &&
+        matches(story, "storagePath", "media") && canViewContent(username, story.username, "stories", accountList))) return true;
     const ownedMessage = messages().some(message => {
         if (!matches(message, "attachmentStoragePath", "attachment")) return false;
         const convo = conversations().find(item => item.id === message.conversationId);
-        return !!convo && Array.isArray(convo.participants) && convo.participants.includes(username);
+        return !!convo && Array.isArray(convo.participants) && convo.participants.includes(username) &&
+            !isBlockedBetween(username, message.from);
     });
     return ownedMessage;
 }
@@ -709,6 +1010,39 @@ async function deleteModeratedContent(type, id, actorUsername, reason) {
         }
         return { status: 404, error: "Şərh tapılmadı." };
     }
+    if (type === "story") {
+        const storyList = stories();
+        const story = storyList.find(item => item.id === id);
+        if (!story) return { status: 404, error: "Story tapılmadı." };
+        const removed = await removeLocalUpload(story.media, story.storagePath);
+        if (!removed.ok) return { status: 503, error: "Fayl Storage-dan silinmədi; Story saxlanıldı." };
+        saveStories(storyList.filter(item => item.id !== id));
+        appendAudit({
+            actorUsername, targetUsername: story.username,
+            actionType: "story_deleted", targetType: "story", targetId: id, reason
+        });
+        return { ok: true, targetUsername: story.username };
+    }
+    if (type === "message") {
+        const messageList = messages();
+        const message = messageList.find(item => item.id === id && !item.deleted);
+        if (!message) return { status: 404, error: "Mesaj tapılmadı." };
+        const removed = await removeLocalUpload(message.attachment, message.attachmentStoragePath);
+        if (!removed.ok) return { status: 503, error: "Fayl Storage-dan silinmədi; mesaj saxlanıldı." };
+        message.deleted = true;
+        message.text = "";
+        message.attachment = "";
+        message.attachmentStoragePath = "";
+        message.attachmentName = "";
+        redactReplyPreviews(messageList, message);
+        saveMessages(messageList);
+        appendAudit({
+            actorUsername, targetUsername: message.from,
+            actionType: "message_deleted", targetType: "message", targetId: id, reason
+        });
+        io.to(`user:${message.from}`).emit("messagesChanged", { conversationId: message.conversationId });
+        return { ok: true, targetUsername: message.from };
+    }
     if (type !== "post" && type !== "reel") return { status: 400, error: "Məzmun növü düzgün deyil." };
     const post = list.find(item => item.id === id && (type !== "reel" || item.kind === "reel") && (type !== "post" || item.kind !== "reel"));
     if (!post) return { status: 404, error: "Paylaşım tapılmadı." };
@@ -724,13 +1058,37 @@ async function deleteModeratedContent(type, id, actorUsername, reason) {
 }
 function reportContent(report) {
     const type = report.itemType || "post";
+    if (type === "user") {
+        const account = findAccount(report.itemId || report.owner);
+        return account ? {
+            type, id: account.username, owner: account.username,
+            text: "İstifadəçi hesabı", createdAt: report.createdAt || account.createdAt || ""
+        } : report.contentSnapshot || null;
+    }
     if (type === "comment") {
         const post = posts().find(item => item.id === report.postId);
         const comment = post?.comments?.find(item => item.id === (report.itemId || report.commentId));
         return comment ? {
             type, id: comment.id, postId: post.id, owner: comment.username,
             text: comment.text, createdAt: comment.createdAt
-        } : null;
+        } : report.contentSnapshot || null;
+    }
+    if (type === "story") {
+        const story = stories().find(item => item.id === report.itemId &&
+            Date.parse(item.expiresAt) > Date.now());
+        return story ? {
+            type, id: story.id, owner: story.username, text: story.text || "",
+            media: story.media || "", mediaType: story.mediaType || "",
+            createdAt: story.createdAt || ""
+        } : report.contentSnapshot || null;
+    }
+    if (type === "message") {
+        const message = messages().find(item => item.id === report.itemId && !item.deleted);
+        return message ? {
+            type, id: message.id, owner: message.from,
+            text: String(message.text || "").slice(0, 2000),
+            createdAt: message.createdAt || ""
+        } : report.contentSnapshot || null;
     }
     const post = posts().find(item => item.id === (report.itemId || report.postId));
     return post ? {
@@ -738,10 +1096,10 @@ function reportContent(report) {
         id: post.id, owner: post.username, text: post.text || "",
         media: post.media || "", mediaType: post.mediaType || "",
         createdAt: post.createdAt
-    } : null;
+    } : report.contentSnapshot || null;
 }
 function addNotification(to, from, type, extra = {}) {
-    if (!to || to === from) return;
+    if (!to || to === from || isBlockedBetween(to, from)) return;
     const list = notifications();
     list.unshift({
         id: crypto.randomUUID(), to, from, type,
@@ -749,6 +1107,22 @@ function addNotification(to, from, type, extra = {}) {
     });
     saveNotifications(list.slice(0, 1000));
 }
+
+require("./liveStreams").install({
+    app, io, users, readJSON, saveJSON, requireAuth, currentUser,
+    canViewProfile, canViewContent, isBlockedBetween,
+    roleOf, canModerateUser, appendAudit
+});
+require("./savedCollections").installSavedCollections({
+    app, posts, readJSON, saveJSON, requireAuth, currentUser,
+    canViewContent, isBlockedBetween, publicPost
+});
+require("./chatThemes").installChatThemes({
+    app, readJSON, saveJSON, conversations, requireAuth, currentUser
+});
+require("./aiAssistant").installAIAssistant({
+    app, readJSON, saveJSON, requireAuth, currentUser, userRateLimit
+});
 
 const allowedMime = new Set([
     "image/jpeg", "image/png", "image/webp", "image/gif",
@@ -823,7 +1197,9 @@ app.post("/api/register", async (req, res) => {
         const user = {
             username: name, password: await bcrypt.hash(password, 12),
             role: "member", displayName: "", bio: "", avatar: "", avatarStoragePath: "",
-            link: "", followers: [], following: [],
+            link: "", profileTheme: "violet", profileColor: "#8257ff", followers: [], following: [],
+            onlineVisibility: "everyone", lastSeenVisibility: "everyone", lastSeenAt: "",
+            privacySettings: { profile: "everyone", posts: "followers", stories: "followers", messageRequests: "everyone", friendRequests: "everyone" },
             createdAt: new Date().toISOString()
         };
         list.push(user);
@@ -836,7 +1212,8 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/login", async (req, res) => {
     try {
         const { username, password } = req.body || {};
-        if (typeof username !== "string" || typeof password !== "string")
+        if (typeof username !== "string" || username.trim().replace(/^@/, "").length > 20 ||
+            typeof password !== "string" || password.length > 72)
             return res.status(400).json({ error: "Məlumatlar düzgün deyil." });
         const user = users().find(u => u.username.toLowerCase() === username.trim().replace(/^@/, "").toLowerCase());
         if (!user || !(await bcrypt.compare(password, user.password)))
@@ -901,7 +1278,12 @@ app.post("/api/owner/bootstrap", requireAuth, (req, res) => {
 app.get("/api/profile", requireAuth, (req, res) => {
     const user = users().find(u => u.username === currentUser(req));
     if (!user) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
-    res.json(publicUser(user));
+    res.json({
+        ...publicUser(user),
+        onlineVisibility: ACTIVITY_VISIBILITIES.has(user.onlineVisibility) ? user.onlineVisibility : "everyone",
+        lastSeenVisibility: ACTIVITY_VISIBILITIES.has(user.lastSeenVisibility) ? user.lastSeenVisibility : "everyone",
+        privacySettings: privacySettingsFor(user)
+    });
 });
 app.put("/api/profile", requireAuth, (req, res) => {
     const body = req.body || {};
@@ -909,6 +1291,20 @@ app.put("/api/profile", requireAuth, (req, res) => {
         return res.status(400).json({ error: "Bio maksimum 160 simvol ola bilər." });
     if (body.displayName !== undefined && (typeof body.displayName !== "string" || body.displayName.length > 50))
         return res.status(400).json({ error: "Ad maksimum 50 simvol ola bilər." });
+    if (body.profileTheme !== undefined && (typeof body.profileTheme !== "string" || !PROFILE_THEMES.has(body.profileTheme)))
+        return res.status(400).json({ error: "Profil mövzusu düzgün deyil." });
+    if (body.profileColor !== undefined && (typeof body.profileColor !== "string" || !/^#[0-9a-fA-F]{6}$/.test(body.profileColor)))
+        return res.status(400).json({ error: "Profil rəngi düzgün hex formatında olmalıdır." });
+    if (body.onlineVisibility !== undefined && !ACTIVITY_VISIBILITIES.has(body.onlineVisibility))
+        return res.status(400).json({ error: "Onlayn status görünürlüğü düzgün deyil." });
+    if (body.lastSeenVisibility !== undefined && !ACTIVITY_VISIBILITIES.has(body.lastSeenVisibility))
+        return res.status(400).json({ error: "Son görülmə görünürlüğü düzgün deyil." });
+    if (body.privacySettings !== undefined) {
+        if (!body.privacySettings || typeof body.privacySettings !== "object" || Array.isArray(body.privacySettings) ||
+            Object.keys(body.privacySettings).some(key => !PRIVACY_SETTING_KEYS.has(key)) ||
+            Object.values(body.privacySettings).some(value => !PRIVACY_VISIBILITIES.has(value)))
+            return res.status(400).json({ error: "Məxfilik seçimləri düzgün deyil." });
+    }
     let link = "";
     if (body.link !== undefined) {
         if (typeof body.link !== "string" || body.link.length > 200)
@@ -927,11 +1323,27 @@ app.put("/api/profile", requireAuth, (req, res) => {
     const list = users();
     const user = list.find(u => u.username === currentUser(req));
     if (!user) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    const previousPrivacy = JSON.stringify(privacySettingsFor(user));
+    const previousActivityVisibility = `${user.onlineVisibility || "everyone"}|${user.lastSeenVisibility || "everyone"}`;
     if (body.bio !== undefined) user.bio = body.bio.trim();
     if (body.displayName !== undefined) user.displayName = body.displayName.trim();
     if (body.link !== undefined) user.link = link;
+    if (body.profileTheme !== undefined) user.profileTheme = body.profileTheme;
+    if (body.profileColor !== undefined) user.profileColor = body.profileColor.toLowerCase();
+    if (body.onlineVisibility !== undefined) user.onlineVisibility = body.onlineVisibility;
+    if (body.lastSeenVisibility !== undefined) user.lastSeenVisibility = body.lastSeenVisibility;
+    if (body.privacySettings !== undefined)
+        user.privacySettings = { ...privacySettingsFor(user), ...body.privacySettings };
     saveUsers(list);
-    res.json(publicUser(user));
+    if (previousActivityVisibility !== `${user.onlineVisibility || "everyone"}|${user.lastSeenVisibility || "everyone"}`)
+        publishPresence(user.username);
+    if (previousPrivacy !== JSON.stringify(privacySettingsFor(user))) publishPresence(user.username);
+    res.json({
+        ...publicUser(user),
+        onlineVisibility: ACTIVITY_VISIBILITIES.has(user.onlineVisibility) ? user.onlineVisibility : "everyone",
+        lastSeenVisibility: ACTIVITY_VISIBILITIES.has(user.lastSeenVisibility) ? user.lastSeenVisibility : "everyone",
+        privacySettings: privacySettingsFor(user)
+    });
 });
 app.post("/api/profile/avatar", requireAuth, socialUpload.single("file"), async (req, res) => {
     if (!req.file || !req.file.mimetype.startsWith("image/")) {
@@ -957,21 +1369,82 @@ app.post("/api/profile/avatar", requireAuth, socialUpload.single("file"), async 
 
 app.get("/api/users/:username", requireAuth, (req, res) => {
     const name = req.params.username.replace(/^@/, "");
-    const user = users().find(u => u.username.toLowerCase() === name.toLowerCase());
+    const accountList = users();
+    const user = accountList.find(u => u.username.toLowerCase() === name.toLowerCase());
     if (!user) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (!canViewProfile(currentUser(req), user, accountList))
+        return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     const result = publicUser(user);
-    result.isFollowing = (users().find(u => u.username === currentUser(req))?.following || []).includes(user.username);
+    result.isFollowing = (accountList.find(u => u.username === currentUser(req))?.following || []).includes(user.username);
+    result.blockedByMe = isBlockedBy(currentUser(req), user.username);
     res.json(result);
 });
 app.get("/api/search", requireAuth, (req, res) => {
     const q = String(req.query.q || "").trim().replace(/^@/, "").toLowerCase();
     if (!q) return res.json([]);
-    res.json(users().filter(u => u.username.toLowerCase().includes(q))
+    const me = currentUser(req);
+    const allUsers = users();
+    const self = allUsers.find(u => u.username === me);
+    res.json(allUsers.filter(u => u.username.toLowerCase().includes(q) && canViewProfile(me, u, allUsers))
         .slice(0, 30).map(u => {
             const result = publicUser(u);
-            result.isFollowing = (users().find(x => x.username === currentUser(req))?.following || []).includes(u.username);
+            result.isFollowing = (self?.following || []).includes(u.username);
+            result.blockedByMe = isBlockedBy(me, u.username);
             return result;
         }));
+});
+app.get("/api/blocks", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    res.set("Cache-Control", "private, no-store");
+    res.json(userBlocks().filter(item => item.blocker === me)
+        .map(item => ({ username: item.blocked, createdAt: item.createdAt || "" })));
+});
+app.post("/api/users/:username/block", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const target = findAccount(req.params.username);
+    if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (target.username === me) return res.status(400).json({ error: "Öz hesabını bloklaya bilməzsən." });
+    if (isBlockedBy(me, target.username)) return res.status(409).json({ error: "Bu hesab artıq bloklanıb." });
+
+    const blockList = userBlocks();
+    blockList.unshift({ id: crypto.randomUUID(), blocker: me, blocked: target.username, createdAt: new Date().toISOString() });
+    saveUserBlocks(blockList);
+    const allUsers = users();
+    const self = allUsers.find(user => user.username === me);
+    const blockedUser = allUsers.find(user => user.username === target.username);
+    if (self && blockedUser) {
+        self.following = (self.following || []).filter(name => name !== blockedUser.username);
+        removeBlockedFollower(self, blockedUser.username);
+        self.friends = (self.friends || []).filter(name => name !== blockedUser.username);
+        blockedUser.followers = (blockedUser.followers || []).filter(name => name !== me);
+        blockedUser.following = (blockedUser.following || []).filter(name => name !== me);
+        blockedUser.friends = (blockedUser.friends || []).filter(name => name !== me);
+        saveUsers(allUsers);
+    }
+    saveFriendRequests(friendRequests().filter(request =>
+        !((request.from === me && request.to === target.username) ||
+          (request.from === target.username && request.to === me))
+    ));
+    saveMessageRequests(messageRequests().filter(request =>
+        !(request.status === "pending" &&
+          ((request.from === me && request.to === target.username) ||
+           (request.from === target.username && request.to === me)))
+    ));
+    publishBlockChange(me, target.username);
+    res.status(201).json({ blocked: true, username: target.username });
+});
+app.delete("/api/users/:username/block", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const target = findAccount(req.params.username);
+    if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    const blockList = userBlocks();
+    const updated = blockList.filter(item =>
+        !(item.blocker === me && item.blocked === target.username)
+    );
+    if (updated.length === blockList.length) return res.status(404).json({ error: "Bloklanmış hesab tapılmadı." });
+    saveUserBlocks(updated);
+    publishBlockChange(me, target.username);
+    res.json({ blocked: false, username: target.username });
 });
 app.post("/api/follow/:username", requireAuth, (req, res) => {
     const me = currentUser(req), targetName = req.params.username.replace(/^@/, "");
@@ -980,6 +1453,7 @@ app.post("/api/follow/:username", requireAuth, (req, res) => {
     const target = list.find(u => u.username.toLowerCase() === targetName.toLowerCase());
     const self = list.find(u => u.username === me);
     if (!target || !self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (isBlockedBetween(me, target.username)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
     self.following ||= []; target.followers ||= [];
     if (!self.following.includes(target.username)) {
         self.following.push(target.username);
@@ -1004,27 +1478,29 @@ app.delete("/api/follow/:username", requireAuth, (req, res) => {
 const friendRequestLimiter = rateLimit({
     windowMs: 60 * 1000,
     limit: 10,
+    keyGenerator: rateLimitKey,
     standardHeaders: "draft-7",
     legacyHeaders: false,
     message: { error: "Çox sorğu göndərdin. Bir az gözlə." }
 });
 
 app.get("/api/friends", requireAuth, (req, res) => {
-    const self = users().find(u => u.username === currentUser(req));
+    const allUsers = users();
+    const self = allUsers.find(u => u.username === currentUser(req));
     if (!self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     const names = self.friends || [];
-    res.json(users().filter(u => names.includes(u.username)).map(publicUser));
+    res.json(allUsers.filter(u => names.includes(u.username) && canViewProfile(currentUser(req), u, allUsers)).map(publicUser));
 });
 
 app.get("/api/friend-requests", requireAuth, (req, res) => {
     const me = currentUser(req);
     const allUsers = users();
     const list = friendRequests();
-    const incoming = list.filter(r => r.to === me).map(r => {
+    const incoming = list.filter(r => r.to === me && !isBlockedBetween(me, r.from)).map(r => {
         const u = allUsers.find(x => x.username === r.from);
         return u ? publicUser(u) : null;
     }).filter(Boolean);
-    const outgoing = list.filter(r => r.from === me).map(r => {
+    const outgoing = list.filter(r => r.from === me && !isBlockedBetween(me, r.to)).map(r => {
         const u = allUsers.find(x => x.username === r.to);
         return u ? publicUser(u) : null;
     }).filter(Boolean);
@@ -1040,6 +1516,9 @@ app.post("/api/friends/request/:username", requireAuth, friendRequestLimiter, (r
 
     if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     if (target.username === me) return res.status(400).json({ error: "Özünə sorğu göndərə bilməzsən." });
+    if (isBlockedBetween(me, target.username)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
+    if (!canReceiveRequest(me, target, "friendRequests"))
+        return res.status(403).json({ error: "Bu hesab yeni dostluq sorğularını qəbul etmir." });
 
     self.friends ||= [];
     target.friends ||= [];
@@ -1070,6 +1549,7 @@ app.post("/api/friends/accept/:username", requireAuth, (req, res) => {
     const self = allUsers.find(u => u.username === me);
     const target = allUsers.find(u => u.username.toLowerCase() === name.toLowerCase());
     if (!target || !self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (isBlockedBetween(me, target.username)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
 
     const list = friendRequests();
     const request = list.find(r => r.from === target.username && r.to === me);
@@ -1120,35 +1600,45 @@ app.get("/api/feed", requireAuth, (req, res) => {
     const self = users().find(u => u.username === me);
     if (!self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     const following = self.following || [];
-    let list = posts().filter(p => p.kind !== "reel");
-    if (scope === "following") list = list.filter(p => p.username === self.username || following.includes(p.username));
     const userList = users();
-    res.json(list.slice().sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 100).map(p => publicPost(p, userList)));
+    let list = posts().filter(p => p.kind !== "reel" && canViewContent(me, p.username, "posts", userList));
+    if (scope === "following") list = list.filter(p => p.username === self.username || following.includes(p.username));
+    res.json(list.slice().sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 100).map(p => publicPost(p, userList, me)));
 });
 app.get("/api/reels", requireAuth, (req, res) => {
+    const me = currentUser(req);
     const userList = users();
-    const list = posts().filter(p => p.kind === "reel")
+    const list = posts().filter(p => p.kind === "reel" && canViewContent(me, p.username, "posts", userList))
         .sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
         .slice(0, 100);
-    res.json(list.map(p => publicPost(p, userList)));
+    res.json(list.map(p => publicPost(p, userList, me)));
 });
 app.get("/api/profile/posts", requireAuth, (req, res) => {
+    const me = currentUser(req);
     const userList = users();
-    res.json(posts().filter(p => p.username === currentUser(req))
+    res.json(posts().filter(p => p.username === me)
         .sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
-        .slice(0, 100).map(p => publicPost(p, userList)));
+        .slice(0, 100).map(p => publicPost(p, userList, me)));
 });
 app.get("/api/users/:username/posts", requireAuth, (req, res) => {
     const name = req.params.username.replace(/^@/, "");
     const userList = users();
     const author = userList.find(u => u.username.toLowerCase() === name.toLowerCase());
     if (!author) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
-    res.json(posts().filter(p => p.username === author.username)
+    const me = currentUser(req);
+    if (!canViewProfile(me, author, userList))
+        return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    res.json(posts().filter(p => p.username === author.username && canViewContent(me, author.username, "posts", userList))
         .sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
-        .slice(0, 100).map(p => publicPost(p, userList)));
+        .slice(0, 100).map(p => publicPost(p, userList, me)));
 });
 app.post("/api/posts", requireAuth, socialUpload.single("media"), (req, res) => {
-    const text = String(req.body.text || "").trim().slice(0, 1000);
+    const rawText = typeof req.body?.text === "string" ? req.body.text : "";
+    if (rawText.length > 1000) {
+        if (req.file) removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(400).json({ error: "Paylaşım mətni 1000 simvoldan çox ola bilməz." });
+    }
+    const text = rawText.trim();
     if (!text && !req.file) return res.status(400).json({ error: "Mətn və ya media əlavə et." });
     let mediaType = "";
     if (req.file) {
@@ -1159,6 +1649,10 @@ app.post("/api/posts", requireAuth, socialUpload.single("media"), (req, res) => 
             removeLocalUpload(`/uploads/${req.file.filename}`);
             return res.status(400).json({ error: "Şəkil maksimum 12 MB ola bilər." });
         }
+    }
+    if (duplicateText(posts(), { username: currentUser(req), text, windowMs: 30000, minLength: 20 })) {
+        if (req.file) removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(429).json({ error: "Eyni paylaşımı qısa müddətdə təkrar göndərmək olmaz." });
     }
     const list = posts();
     const post = {
@@ -1171,11 +1665,20 @@ app.post("/api/posts", requireAuth, socialUpload.single("media"), (req, res) => 
     res.json(publicPost(post));
 });
 app.post("/api/reels", requireAuth, socialUpload.single("media"), (req, res) => {
-    const caption = String(req.body.text || "").trim().slice(0, 500);
+    const rawCaption = typeof req.body?.text === "string" ? req.body.text : "";
+    if (rawCaption.length > 500) {
+        if (req.file) removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(400).json({ error: "Reels açıqlaması 500 simvoldan çox ola bilməz." });
+    }
+    const caption = rawCaption.trim();
     if (!req.file) return res.status(400).json({ error: "Reels üçün video seç." });
     if (!["video/mp4", "video/webm"].includes(req.file.mimetype)) {
         removeLocalUpload(`/uploads/${req.file.filename}`);
         return res.status(400).json({ error: "Reels yalnız MP4 və ya WebM videoları qəbul edir." });
+    }
+    if (duplicateText(posts(), { username: currentUser(req), text: caption, windowMs: 30000, minLength: 20 })) {
+        removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(429).json({ error: "Eyni Reels açıqlamasını qısa müddətdə təkrar göndərmək olmaz." });
     }
     const reel = {
         id: crypto.randomUUID(), username: currentUser(req), text: caption,
@@ -1191,6 +1694,7 @@ app.post("/api/reels", requireAuth, socialUpload.single("media"), (req, res) => 
 app.post("/api/posts/:id/like", requireAuth, (req, res) => {
     const list = posts(), post = list.find(p => p.id === req.params.id);
     if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+    if (!canViewContent(currentUser(req), post.username, "posts")) return res.status(404).json({ error: "Paylaşım mövcud deyil." });
     post.likes ||= [];
     const i = post.likes.indexOf(currentUser(req));
     if (i >= 0) post.likes.splice(i, 1);
@@ -1201,11 +1705,17 @@ app.post("/api/posts/:id/like", requireAuth, (req, res) => {
     savePosts(list);
     res.json({ liked: post.likes.includes(currentUser(req)), likes: post.likes.length });
 });
-app.post("/api/posts/:id/comments", requireAuth, (req, res) => {
-    const text = String((req.body || {}).text || "").trim().slice(0, 500);
+app.post("/api/posts/:id/comments", requireAuth, commentLimiter, (req, res) => {
+    const rawText = typeof req.body?.text === "string" ? req.body.text : "";
+    if (rawText.length > 500) return res.status(400).json({ error: "Şərh 500 simvoldan çox ola bilməz." });
+    const text = rawText.trim();
     if (!text) return res.status(400).json({ error: "Şərh boş ola bilməz." });
     const list = posts(), post = list.find(p => p.id === req.params.id);
     if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+    if (!canViewContent(currentUser(req), post.username, "posts")) return res.status(404).json({ error: "Paylaşım mövcud deyil." });
+    if (duplicateText((post.comments || []).map(comment => ({ ...comment, scope: post.id })), {
+        username: currentUser(req), text, scope: post.id, windowMs: 30000, minLength: 12
+    })) return res.status(429).json({ error: "Eyni şərhi qısa müddətdə təkrar göndərmək olmaz." });
     post.comments ||= [];
     const comment = { id: crypto.randomUUID(), username: currentUser(req), text, createdAt: new Date().toISOString() };
     post.comments.push(comment); savePosts(list);
@@ -1234,10 +1744,11 @@ app.delete("/api/posts/:id", requireAuth, async (req, res) => {
     savePosts(list.filter(p => p.id !== post.id));
     res.json({ ok: true });
 });
-app.post("/api/posts/:id/report", requireAuth, (req, res) => {
+app.post("/api/posts/:id/report", requireAuth, reportLimiter, (req, res) => {
     const me = currentUser(req);
     const post = posts().find(p => p.id === req.params.id);
     if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+    if (!canViewContent(me, post.username, "posts")) return res.status(404).json({ error: "Paylaşım tapılmadı." });
     if (post.username === me) return res.status(400).json({ error: "Öz paylaşımını şikayət edə bilməzsən." });
     const list = reports();
     if (list.some(report => report.reporter === me &&
@@ -1247,34 +1758,127 @@ app.post("/api/posts/:id/report", requireAuth, (req, res) => {
     const reason = String((req.body || {}).reason || "").trim();
     if (!["Spam", "Taciz", "Uygunsuz içerik", "Sahte hesap", "Diğer"].includes(reason))
         return res.status(400).json({ error: "Şikayət səbəbini siyahıdan seç." });
+    const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
+    if (description.length > 1000) return res.status(400).json({ error: "Əlavə izah 1000 simvoldan uzun ola bilməz." });
     list.unshift({
         id: crypto.randomUUID(),
         itemType: post.kind === "reel" ? "reel" : "post",
         itemId: post.id, postId: post.id, owner: post.username,
-        reporter: me, reason, status: "pending", createdAt: new Date().toISOString()
+        reporter: me, reason, description, status: "pending", createdAt: new Date().toISOString()
     });
     saveReports(list.slice(0, 5000));
     res.status(201).json({ ok: true });
 });
-app.post("/api/posts/:id/comments/:commentId/report", requireAuth, (req, res) => {
+app.post("/api/posts/:id/comments/:commentId/report", requireAuth, reportLimiter, (req, res) => {
     const me = currentUser(req);
     const post = posts().find(item => item.id === req.params.id);
     const comment = post?.comments?.find(item => item.id === req.params.commentId);
     if (!comment) return res.status(404).json({ error: "Şərh tapılmadı." });
+    if (!canViewContent(me, post.username, "posts")) return res.status(404).json({ error: "Şərh tapılmadı." });
     if (comment.username === me) return res.status(400).json({ error: "Öz şərhini şikayət edə bilməzsən." });
     const reason = String((req.body || {}).reason || "").trim();
     if (!["Spam", "Taciz", "Uygunsuz içerik", "Sahte hesap", "Diğer"].includes(reason))
         return res.status(400).json({ error: "Şikayət səbəbini siyahıdan seç." });
+    const description = typeof req.body?.description === "string" ? req.body.description.trim() : "";
+    if (description.length > 1000) return res.status(400).json({ error: "Əlavə izah 1000 simvoldan uzun ola bilməz." });
     const list = reports();
     if (list.some(report => report.reporter === me && report.itemType === "comment" && report.itemId === comment.id))
         return res.status(409).json({ error: "Bu şərhi artıq şikayət etmisən." });
     list.unshift({
         id: crypto.randomUUID(), itemType: "comment", itemId: comment.id,
         postId: post.id, owner: comment.username, reporter: me, reason,
-        status: "pending", createdAt: new Date().toISOString()
+        description, status: "pending", createdAt: new Date().toISOString()
     });
     saveReports(list.slice(0, 5000));
     res.status(201).json({ ok: true });
+});
+app.post("/api/reports", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const body = req.body || {};
+    const type = typeof body.itemType === "string" ? body.itemType.trim() : "";
+    const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    const description = typeof body.description === "string" ? body.description.trim() : "";
+    const allowedTypes = new Set(["user", "post", "reel", "comment", "story", "message"]);
+    const allowedReasons = new Set(["Spam", "Taciz", "Uygunsuz içerik", "Sahte hesap", "Diğer"]);
+    if (!allowedTypes.has(type) || !itemId || itemId.length > 180)
+        return res.status(400).json({ error: "Şikayət edilən məzmun düzgün deyil." });
+    if (!allowedReasons.has(reason))
+        return res.status(400).json({ error: "Şikayət səbəbini siyahıdan seç." });
+    if (description.length > 1000)
+        return res.status(400).json({ error: "Əlavə izah 1000 simvoldan uzun ola bilməz." });
+
+    let owner = "";
+    let canonicalItemId = itemId;
+    let parentPostId = "";
+    let contentSnapshot = null;
+    if (type === "user") {
+        const target = findAccount(itemId);
+        if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+        if (!canViewProfile(me, target)) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+        owner = target.username;
+        canonicalItemId = target.username;
+        contentSnapshot = { type, id: target.username, owner: target.username, text: "İstifadəçi hesabı" };
+    } else if (type === "post" || type === "reel") {
+        const post = posts().find(item => item.id === itemId &&
+            (type !== "reel" || item.kind === "reel") &&
+            (type !== "post" || item.kind !== "reel"));
+        if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+        if (!canViewContent(me, post.username, "posts")) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+        owner = post.username;
+        contentSnapshot = {
+            type: post.kind === "reel" ? "reel" : "post", id: post.id, owner: post.username,
+            text: post.text || "", media: post.media || "", mediaType: post.mediaType || "",
+            createdAt: post.createdAt || ""
+        };
+    } else if (type === "comment") {
+        const post = posts().find(item => (item.comments || []).some(comment => comment.id === itemId));
+        const comment = post?.comments?.find(item => item.id === itemId);
+        if (!comment) return res.status(404).json({ error: "Şərh tapılmadı." });
+        if (!canViewContent(me, post.username, "posts")) return res.status(404).json({ error: "Şərh tapılmadı." });
+        owner = comment.username;
+        parentPostId = post.id;
+        contentSnapshot = {
+            type, id: comment.id, postId: post.id, owner: comment.username,
+            text: comment.text || "", createdAt: comment.createdAt || ""
+        };
+    } else if (type === "story") {
+        const story = stories().find(item => item.id === itemId && Date.parse(item.expiresAt) > Date.now());
+        if (!story) return res.status(404).json({ error: "Aktiv Story tapılmadı." });
+        if (!canViewContent(me, story.username, "stories")) return res.status(404).json({ error: "Aktiv Story tapılmadı." });
+        owner = story.username;
+        contentSnapshot = {
+            type, id: story.id, owner: story.username, text: story.text || "",
+            media: story.media || "", mediaType: story.mediaType || "", createdAt: story.createdAt || ""
+        };
+    } else if (type === "message") {
+        const message = messages().find(item => item.id === itemId && !item.deleted);
+        const conversation = message && conversations().find(item =>
+            item.id === message.conversationId && item.participants.includes(me));
+        if (!message || !conversation || isBlockedBetween(me, message.from))
+            return res.status(404).json({ error: "Mesaj tapılmadı." });
+        owner = message.from;
+        contentSnapshot = {
+            type, id: message.id, owner: message.from,
+            text: String(message.text || "").slice(0, 2000), createdAt: message.createdAt || ""
+        };
+    }
+    if (!owner || owner === me) return res.status(400).json({ error: "Öz məzmununu şikayət edə bilməzsən." });
+    if (isBlockedBetween(me, owner)) return res.status(404).json({ error: "Məzmun tapılmadı." });
+
+    const list = reports();
+    const duplicate = list.some(report => report.reporter === me && report.itemId === canonicalItemId &&
+        (report.itemType === type ||
+            ((type === "post" || type === "reel") && (report.itemType === "post" || report.itemType === "reel"))));
+    if (duplicate) return res.status(409).json({ error: "Bu məzmunu artıq şikayət etmisən." });
+    list.unshift({
+        id: crypto.randomUUID(), itemType: type, itemId: canonicalItemId,
+        ...(parentPostId ? { postId: parentPostId } : {}),
+        owner, reporter: me, reason, description, contentSnapshot, status: "pending",
+        createdAt: new Date().toISOString()
+    });
+    saveReports(list.slice(0, 5000));
+    res.status(201).json({ ok: true, status: "pending" });
 });
 app.get("/api/admin/summary", requireAuth, requireRole("moderator"), (_req, res) => {
     expireBans();
@@ -1310,9 +1914,13 @@ app.get("/api/admin/users", requireAuth, requireRole("moderator"), (req, res) =>
 });
 app.get("/api/admin/reports", requireAuth, requireRole("moderator"), (req, res) => {
     const status = String(req.query.status || "pending");
-    const list = reports().filter(report => status === "all"
-        ? true
-        : (report.status || "pending") === status)
+    const type = String(req.query.type || "all");
+    const query = String(req.query.q || "").trim().toLowerCase().slice(0, 100);
+    const list = reports().filter(report =>
+        (status === "all" || (report.status || "pending") === status) &&
+        (type === "all" || report.itemType === type) &&
+        (!query || [report.owner, report.reporter, report.reason, report.description]
+            .some(value => String(value || "").toLowerCase().includes(query))))
         .slice(0, 200)
         .map(report => ({ ...report, content: reportContent(report) }));
     res.json(list);
@@ -1340,6 +1948,31 @@ app.post("/api/admin/users/:username/role", requireAuth, requireRole("owner"), (
         actionType: "role_changed", reason: `${reason} (${roleOf(target)})`
     });
     res.json({ username: target.username, role: roleOf(target) });
+});
+app.post("/api/admin/users/:username/verification", requireAuth, requireRole("owner"), (req, res) => {
+    const target = findAccount(req.params.username);
+    if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (typeof req.body?.verified !== "boolean")
+        return res.status(400).json({ error: "Təsdiq statusu düzgün deyil." });
+    const verified = req.body.verified;
+    const reason = String(req.body?.reason || "").trim().slice(0, 500);
+    if (reason.length < 3) return res.status(400).json({ error: "Səbəb ən azı 3 simvol olmalıdır." });
+    if ((target.verified === true) === verified)
+        return res.status(409).json({ error: "Hesabın təsdiq statusu artıq belədir." });
+
+    const list = users();
+    const account = list.find(user => user.username === target.username);
+    account.verified = verified;
+    account.verifiedAt = verified ? new Date().toISOString() : "";
+    account.verifiedBy = verified ? req.talkchatActor.username : "";
+    saveUsers(list);
+    appendAudit({
+        actorUsername: req.talkchatActor.username,
+        targetUsername: account.username,
+        actionType: verified ? "account_verified" : "account_unverified",
+        reason
+    });
+    res.json({ username: account.username, verified: account.verified });
 });
 app.post("/api/admin/users/:username/ban", requireAuth, requireRole("moderator"), (req, res) => {
     const target = findAccount(req.params.username);
@@ -1417,7 +2050,11 @@ app.post("/api/posts/:id/share", requireAuth, (req, res) => {
     const target = userList.find(user => user.username.toLowerCase() === name.toLowerCase());
     const post = posts().find(p => p.id === req.params.id);
     if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+    if (!canViewContent(me, post.username, "posts", userList) ||
+        (target && !canViewContent(target.username, post.username, "posts", userList)))
+        return res.status(404).json({ error: "Bu paylaşım mövcud deyil." });
     if (!target || target.username === me) return res.status(400).json({ error: "Qəbul edənin istifadəçi adını yoxla." });
+    if (isBlockedBetween(me, target.username)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
     const conversationList = conversations();
     let convo = conversationList.find(c => c.type === "direct" &&
         c.participants.includes(me) && c.participants.includes(target.username));
@@ -1449,7 +2086,7 @@ app.post("/api/posts/:id/share", requireAuth, (req, res) => {
 
 app.get("/api/notifications", requireAuth, (req, res) => {
     const list = notifications();
-    const mine = list.filter(n => n.to === currentUser(req));
+    const mine = list.filter(n => n.to === currentUser(req) && !isBlockedBetween(n.to, n.from));
     mine.forEach(n => n.read = true); saveNotifications(list);
     res.json(mine.slice(0, 100));
 });
@@ -1458,7 +2095,7 @@ app.get("/api/conversations", requireAuth, (req, res) => {
     const me = currentUser(req);
     const allMessages = messages();
     res.json(conversations().filter(c => c.participants.includes(me)).map(c => {
-        const mine = allMessages.filter(m => m.conversationId === c.id);
+        const mine = allMessages.filter(m => m.conversationId === c.id && !isBlockedBetween(me, m.from));
         const last = mine[mine.length - 1] || null;
         const reads = c.reads || {};
         const readAt = reads[me] ? new Date(reads[me]).getTime() : 0;
@@ -1471,16 +2108,22 @@ app.get("/api/conversations", requireAuth, (req, res) => {
             lastMessageAt: last ? last.createdAt : "",
             lastFrom: last ? last.from : "",
             unread,
-            reads
+            reads,
+            blocked: c.type === "direct" && c.participants.some(user => user !== me && isBlockedBetween(me, user))
         };
     }));
 });
 app.post("/api/conversations/direct", requireAuth, (req, res) => {
     const other = String((req.body || {}).username || "").replace(/^@/, "");
-    if (!users().some(u => u.username.toLowerCase() === other.toLowerCase()) || other === currentUser(req))
+    const accountList = users();
+    const target = accountList.find(u => u.username.toLowerCase() === other.toLowerCase());
+    if (!target || other === currentUser(req))
         return res.status(400).json({ error: "İstifadəçi tapılmadı." });
+    if (isBlockedBetween(currentUser(req), other)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
     const list = conversations();
     let convo = list.find(c => c.type === "direct" && c.participants.includes(currentUser(req)) && c.participants.includes(other));
+    if (!canSendDirectMessage(currentUser(req), target, convo))
+        return res.status(403).json({ error: "Bu hesab yeni mesaj sorğularını qəbul etmir." });
     if (!convo) {
         convo = { id: crypto.randomUUID(), type: "direct", participants: [currentUser(req), other], createdAt: new Date().toISOString() };
         list.push(convo); saveConversations(list);
@@ -1493,36 +2136,296 @@ app.post("/api/conversations/group", requireAuth, (req, res) => {
     const valid = users().map(u => u.username);
     const participants = [...new Set([currentUser(req), ...invited.map(x => String(x).replace(/^@/, "")).filter(x => valid.includes(x))])];
     if (!name || participants.length < 2) return res.status(400).json({ error: "Qrup adı və ən azı bir başqa iştirakçı lazımdır." });
+    if (participants.some(user => user !== currentUser(req) && isBlockedBetween(currentUser(req), user)))
+        return res.status(403).json({ error: "Bloklanmış hesabı yeni qrupa əlavə etmək olmaz." });
     const convo = { id: crypto.randomUUID(), type: "group", name, participants, createdAt: new Date().toISOString() };
     const list = conversations(); list.push(convo); saveConversations(list);
     res.json(convo);
 });
-app.get("/api/conversations/:id/messages", requireAuth, (req, res) => {
-    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));
-    if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
-    res.json(messages().filter(m => m.conversationId === convo.id).slice(-200));
+app.get("/api/gifs/categories", requireAuth, gifSearchLimiter, async (_req, res) => {
+    try {
+        const data = await giphyRequest("categories");
+        const categories = Array.isArray(data.data) ? data.data : [];
+        res.json(categories.slice(0, 30).map(category => {
+            const name = String(category.name || category.name_encoded || "").replace(/\s+/g, " ").trim().slice(0, 60);
+            const searchterm = String(category.name || category.name_encoded || "").replace(/[-_]+/g, " ").trim().slice(0, 50);
+            return { name, searchterm };
+        }).filter(category => category.name && category.searchterm));
+    } catch (error) {
+        if (error.retryAfter) res.set("Retry-After", String(error.retryAfter));
+        res.status(error.status || 502).json({ error: error.message || "GIF kateqoriyaları yüklənmədi." });
+    }
 });
-app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), (req, res) => {
+app.get("/api/gifs/search", requireAuth, gifSearchLimiter, async (req, res) => {
+    const query = (typeof req.query.q === "string" ? req.query.q : "trending").trim().slice(0, 50) || "trending";
+    const requestedOffset = typeof req.query.next === "string" && /^\d{1,4}$/.test(req.query.next)
+        ? Number.parseInt(req.query.next, 10) : 0;
+    const offset = Math.min(4999, Math.max(0, requestedOffset));
+    const endpoint = query.toLowerCase() === "trending" ? "trending" : "search";
+    try {
+        const data = await giphyRequest(endpoint, {
+            ...(endpoint === "search" ? { q: query, lang: "en" } : {}),
+            limit: 24, offset, rating: "pg"
+        });
+        const results = (Array.isArray(data.data) ? data.data : []).map(normalizeGiphyResult).filter(Boolean);
+        const pagination = data.pagination || {};
+        const nextOffset = Number(pagination.offset || 0) + Number(pagination.count || results.length);
+        const next = Number(pagination.total_count) > nextOffset && nextOffset <= 4999 ? String(nextOffset) : "";
+        res.json({ results, next });
+    } catch (error) {
+        if (error.retryAfter) res.set("Retry-After", String(error.retryAfter));
+        res.status(error.status || 502).json({ error: error.message || "GIF-lər yüklənmədi." });
+    }
+});
+app.get("/api/gifs/preferences", requireAuth, (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    const preferences = gifPreferences()[currentUser(req)] || {};
+    const safeList = list => (Array.isArray(list) ? list : []).map(normalizeGifPayload).filter(Boolean);
+    res.json({ favorites: safeList(preferences.favorites), recent: safeList(preferences.recent) });
+});
+app.post("/api/gifs/favorites", requireAuth, (req, res) => {
+    const gif = normalizeGifPayload(req.body && req.body.gif);
+    if (!gif) return res.status(400).json({ error: "GIF məlumatı düzgün deyil." });
+    const me = currentUser(req);
+    const all = gifPreferences();
+    const preferences = all[me] || { favorites: [], recent: [] };
+    preferences.favorites = Array.isArray(preferences.favorites) ? preferences.favorites : [];
+    const index = preferences.favorites.findIndex(item => item && item.id === gif.id);
+    if (index >= 0) preferences.favorites.splice(index, 1);
+    else {
+        if (preferences.favorites.length >= 100) return res.status(400).json({ error: "Ən çox 100 GIF-i sevimlilərə əlavə edə bilərsən." });
+        preferences.favorites.unshift(gif);
+    }
+    preferences.recent = Array.isArray(preferences.recent) ? preferences.recent : [];
+    all[me] = preferences;
+    saveGifPreferences(all);
+    res.json({ favorites: preferences.favorites });
+});
+
+app.get("/api/stickers/categories", requireAuth, (_req, res) => {
+    const categories = [...new Set(STICKER_PACK.map(sticker => sticker.category))];
+    res.set("Cache-Control", "private, no-store");
+    res.json(categories.map(name => ({ id: name, name })));
+});
+app.get("/api/stickers", requireAuth, (req, res) => {
+    const query = String(req.query.q || "").trim().normalize("NFKC").toLocaleLowerCase("az").slice(0, 100);
+    const category = String(req.query.category || "").trim().slice(0, 60);
+    const results = STICKER_PACK.filter(sticker => {
+        if (category && sticker.category !== category) return false;
+        if (!query) return true;
+        const searchable = (sticker.label + " " + sticker.category + " " + sticker.emoji + " " + sticker.keywords).normalize("NFKC").toLocaleLowerCase("az");
+        return searchable.includes(query);
+    }).slice(0, 80);
+    res.json(results.map(({ id, category: group, emoji, label }) => ({ id, category: group, emoji, label })));
+});
+app.get("/api/stickers/preferences", requireAuth, (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    const preferences = stickerPreferences()[currentUser(req)] || {};
+    const safeList = ids => (Array.isArray(ids) ? ids : []).map(findSticker).filter(Boolean).map(({ id, category, emoji, label }) => ({ id, category, emoji, label }));
+    res.json({ favorites: safeList(preferences.favorites), recent: safeList(preferences.recent) });
+});
+app.post("/api/stickers/favorites", requireAuth, (req, res) => {
+    const sticker = findSticker(req.body && req.body.stickerId);
+    if (!sticker) return res.status(400).json({ error: "Sticker məlumatı düzgün deyil." });
+    const me = currentUser(req);
+    const all = stickerPreferences();
+    const preferences = all[me] || { favorites: [], recent: [] };
+    preferences.favorites = Array.isArray(preferences.favorites) ? preferences.favorites : [];
+    const index = preferences.favorites.indexOf(sticker.id);
+    if (index >= 0) preferences.favorites.splice(index, 1);
+    else {
+        if (preferences.favorites.length >= 120) return res.status(400).json({ error: "Ən çox 120 sticker-i sevimlilərə əlavə edə bilərsən." });
+        preferences.favorites.unshift(sticker.id);
+    }
+    preferences.recent = Array.isArray(preferences.recent) ? preferences.recent : [];
+    all[me] = preferences;
+    saveStickerPreferences(all);
+    res.json({ favorites: preferences.favorites.map(findSticker).filter(Boolean).map(({ id, category, emoji, label }) => ({ id, category, emoji, label })) });
+});
+
+app.get("/api/conversations/:id/messages", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    const list = messages().filter(m => m.conversationId === convo.id && !isBlockedBetween(me, m.from));
+    const safeMessage = message => {
+        if (!message.sharedPost || canViewContent(me, message.sharedPost.username, "posts")) return message;
+        return { ...message, sharedPost: null, sharedPostId: "", text: "Bu paylaşım artıq görünmür." };
+    };
+    const aroundId = String(req.query.around || "");
+    const aroundIndex = aroundId ? list.findIndex(m => m.id === aroundId) : -1;
+    if (aroundIndex >= 0) {
+        const start = Math.max(0, aroundIndex - 100);
+        return res.json(list.slice(start, start + 200).map(safeMessage));
+    }
+    res.json(list.slice(-200).map(safeMessage));
+});
+
+app.get("/api/conversations/:id/files", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    const cursor = typeof req.query.before === "string" ? req.query.before : "";
+    const split = cursor.indexOf("|");
+    if (cursor && (split < 1 || cursor.length > 250)) return res.status(400).json({ error: "Fayl səhifəsi etibarsızdır." });
+    const beforeAt = split >= 0 ? cursor.slice(0, split) : "";
+    const beforeId = split >= 0 ? cursor.slice(split + 1) : "";
+    const query = typeof req.query.q === "string" ? req.query.q.trim().normalize("NFKC") : "";
+    if (query.length > 100) return res.status(400).json({ error: "Fayl axtarışı 100 simvoldan çox ola bilməz." });
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 50;
+    const files = messages().filter(message => message.conversationId === convo.id && !message.deleted &&
+        !isBlockedBetween(me, message.from))
+        .map(message => {
+            const rawPath = message.attachmentStoragePath ||
+                (typeof message.attachment === "string" && message.attachment.startsWith("/uploads/")
+                    ? message.attachment.slice("/uploads/".length) : "");
+            if (!rawPath || path.basename(rawPath) !== rawPath || rawPath === "." || rawPath === ".." ||
+                !/^[a-zA-Z0-9._-]{1,180}$/.test(rawPath)) return null;
+            return {
+                id: message.id, from: message.from,
+                name: String(message.attachmentName || "Fayl").replace(/\s+/g, " ").trim().slice(0, 120) || "Fayl",
+                type: String(message.attachmentType || "").slice(0, 100),
+                createdAt: message.createdAt || "",
+                url: `/uploads/${encodeURIComponent(rawPath)}`,
+                downloadUrl: `/api/conversations/${encodeURIComponent(convo.id)}/files/${encodeURIComponent(message.id)}/download`,
+                canDelete: message.from === me
+            };
+        }).filter(Boolean)
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)) || String(right.id).localeCompare(String(left.id)))
+        .filter(file => !query || String(file.name).normalize("NFKC").toLocaleLowerCase("az").includes(query.toLocaleLowerCase("az")))
+        .filter(file => !cursor || String(file.createdAt).localeCompare(beforeAt) < 0 ||
+            (String(file.createdAt) === beforeAt && String(file.id).localeCompare(beforeId) < 0));
+    const page = files.slice(0, limit + 1);
+    const hasMore = page.length > limit;
+    const results = page.slice(0, limit);
+    const last = results[results.length - 1];
+    res.set("Cache-Control", "private, no-store");
+    res.json({
+        files: results,
+        nextCursor: hasMore && last ? `${last.createdAt}|${last.id}` : ""
+    });
+});
+
+app.get("/api/conversations/:id/files/:mid/download", requireAuth, async (req, res) => {
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!convo) return res.status(404).json({ error: "Fayl tapılmadı." });
+    const message = messages().find(item => item.id === req.params.mid && item.conversationId === convo.id && !item.deleted);
+    if (!message) return res.status(404).json({ error: "Fayl tapılmadı." });
+    if (isBlockedBetween(me, message.from)) return res.status(404).json({ error: "Fayl tapılmadı." });
+    const rawPath = message.attachmentStoragePath ||
+        (typeof message.attachment === "string" && message.attachment.startsWith("/uploads/")
+            ? message.attachment.slice("/uploads/".length) : "");
+    if (!rawPath || path.basename(rawPath) !== rawPath || rawPath === "." || rawPath === ".." ||
+        !/^[a-zA-Z0-9._-]{1,180}$/.test(rawPath)) return res.status(404).json({ error: "Fayl tapılmadı." });
+    const downloadName = String(message.attachmentName || "download").replace(/[\r\n"]/g, "_").replace(/[\\/]/g, "_").slice(0, 120) || "download";
+    res.set("Cache-Control", "private, no-store");
+    if (supa.enabled) {
+        try {
+            return res.redirect(302, await supa.createSignedUrl(rawPath, 900, { download: downloadName }));
+        } catch (error) {
+            console.error("Supabase fayl yükləmə linki xətası:", error.message);
+            return res.status(503).json({ error: "Faylı hazırda yükləmək mümkün deyil." });
+        }
+    }
+    const filePath = path.join(UPLOADS, rawPath);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Fayl tapılmadı." });
+    return res.download(filePath, downloadName, error => {
+        if (error && !res.headersSent) res.status(404).json({ error: "Fayl tapılmadı." });
+    });
+});
+
+app.get("/api/conversations/:id/messages/search", requireAuth, (req, res) => {
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
-    const text = String(req.body.text || "").trim().slice(0, 2000);
-    if (!text && !req.file) return res.status(400).json({ error: "Mesaj boş ola bilməz." });
+    const query = typeof req.query.q === "string" ? req.query.q.trim().normalize("NFKC") : "";
+    if (query.length < 2 || query.length > 100) return res.status(400).json({ error: "Axtarış 2-100 simvol arasında olmalıdır." });
+    const cursor = String(req.query.before || "");
+    const split = cursor.indexOf("|");
+    if (cursor && split < 1) return res.status(400).json({ error: "Axtarış səhifəsi etibarsızdır." });
+    const beforeAt = split >= 0 ? cursor.slice(0, split) : "";
+    const beforeId = split >= 0 ? cursor.slice(split + 1) : "";
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 50)) : 20;
+    const terms = [...new Set([query.toLowerCase(), query.toLocaleLowerCase("az"), query.toLocaleLowerCase("tr")])];
+    const me = currentUser(req);
+    const found = messages().filter(m => {
+        if (m.conversationId !== convo.id || m.deleted || typeof m.text !== "string") return false;
+        if (isBlockedBetween(me, m.from)) return false;
+        if (beforeAt && !(String(m.createdAt) < beforeAt || (String(m.createdAt) === beforeAt && String(m.id) < beforeId))) return false;
+        const text = m.text.normalize("NFKC");
+        const forms = [text.toLowerCase(), text.toLocaleLowerCase("az"), text.toLocaleLowerCase("tr")];
+        return forms.some(form => terms.some(term => form.includes(term)));
+    }).sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)) || String(right.id).localeCompare(String(left.id)));
+    const page = found.slice(0, limit + 1);
+    const hasMore = page.length > limit;
+    const results = page.slice(0, limit).map(m => ({ id: m.id, conversationId: m.conversationId, from: m.from, text: m.text, createdAt: m.createdAt, editedAt: m.editedAt || "" }));
+    const last = results[results.length - 1];
+    res.json({ results, hasMore, nextCursor: hasMore && last ? `${last.createdAt}|${last.id}` : "" });
+});
+app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), async (req, res) => {
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    if (convo.type === "direct" && convo.participants.some(user => user !== me && isBlockedBetween(me, user))) {
+        if (req.file) await removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(403).json({ error: "Bu söhbətdə blok səbəbindən mesaj göndərmək olmur." });
+    }
+    if (convo.type === "direct") {
+        const target = users().find(user => user.username !== me && convo.participants.includes(user.username));
+        if (!canSendDirectMessage(me, target, convo)) {
+            if (req.file) await removeLocalUpload(`/uploads/${req.file.filename}`);
+            return res.status(403).json({ error: "Bu hesab yeni mesaj sorğularını qəbul etmir." });
+        }
+    }
+    const rawText = typeof req.body?.text === "string" ? req.body.text : "";
+    if (rawText.length > 2000) {
+        if (req.file) await removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(400).json({ error: "Mesaj 2000 simvoldan çox ola bilməz." });
+    }
+    const text = rawText.trim();
+    const gifInput = req.body && req.body.gif;
+    const gif = gifInput ? normalizeGifPayload(gifInput) : null;
+    if (gifInput && !gif) return res.status(400).json({ error: "GIF məlumatı düzgün deyil." });
+    const stickerId = String((req.body && req.body.stickerId) || "").trim();
+    const sticker = stickerId ? findSticker(stickerId) : null;
+    if (stickerId && !sticker) return res.status(400).json({ error: "Sticker tapılmadı." });
+    if ((gif && req.file) || (sticker && (req.file || gif))) return res.status(400).json({ error: "Eyni mesajda yalnız bir media göndərmək olar." });
+    if (!text && !req.file && !gif && !sticker) return res.status(400).json({ error: "Mesaj boş ola bilməz." });
+    if (duplicateText(messages().filter(message => message.conversationId === convo.id), {
+        username: me, text, senderField: "from", windowMs: 15000, minLength: 12
+    })) {
+        if (req.file) await removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(429).json({ error: "Eyni mesajı qısa müddətdə təkrar göndərmək olmaz." });
+    }
     const replyId = String(req.body.replyTo || "");
     const replyTarget = replyId ? messages().find(m => m.id === replyId && m.conversationId === convo.id) : null;
     const recipients = convo.participants.filter(x => x !== currentUser(req));
     const message = {
         id: crypto.randomUUID(), conversationId: convo.id, from: currentUser(req), text,
-        attachment: req.file ? `/uploads/${req.file.filename}` : "",
+        attachment: req.file ? `/uploads/${req.file.filename}` : gif ? gif.url : "",
         attachmentStoragePath: req.file ? req.file.filename : "",
-        attachmentName: req.file ? req.file.originalname.slice(0, 100) : "",
-        attachmentType: req.file ? req.file.mimetype : "",
+        attachmentName: req.file ? req.file.originalname.slice(0, 100) : gif ? gif.title : "",
+        attachmentType: req.file ? req.file.mimetype : gif ? "image/gif" : "",
+        ...(gif ? { gif } : {}),
+        ...(sticker ? { sticker: { id: sticker.id, category: sticker.category, emoji: sticker.emoji, label: sticker.label } } : {}),
         replyTo: replyTarget ? replyTarget.id : "",
+        replyPreview: replyTarget ? { from: replyTarget.from, text: replyPreviewOf(replyTarget) } : null,
         deleted: false,
         deliveredAt: recipients.some(to => onlineUsers.has(to)) ? new Date().toISOString() : "",
         createdAt: new Date().toISOString()
     };
     const list = messages(); list.push(message); saveMessages(list);
-    convo.participants.filter(x => x !== currentUser(req)).forEach(to => {
+    if (gif) {
+        try { rememberGif(currentUser(req), gif); }
+        catch (error) { console.error("GIF recent save failed:", error.message); }
+    }
+    if (sticker) {
+        try { rememberSticker(currentUser(req), sticker); }
+        catch (error) { console.error("Sticker recent save failed:", error.message); }
+    }
+    convo.participants.filter(x => x !== currentUser(req) && !isBlockedBetween(currentUser(req), x)).forEach(to => {
         io.to(`user:${to}`).emit("newMessage", { conversationId: convo.id });
         addNotification(to, currentUser(req), "message");
         console.log("PUSH msg to", to, "online:", onlineUsers.has(to));
@@ -1533,6 +2436,58 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
 
 
 // Söhbəti oxunmuş et (karşı tərəf "Göründü" görür)
+app.post("/api/conversations/:id/messages/:mid/forward", requireAuth, async (req, res) => {
+    const me = currentUser(req);
+    const sourceConvo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!sourceConvo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    const source = messages().find(m => m.id === req.params.mid && m.conversationId === sourceConvo.id);
+    if (!source || source.deleted) return res.status(404).json({ error: "Mesaj tapılmadı." });
+    const targetId = typeof req.body?.targetConversationId === "string" ? req.body.targetConversationId : "";
+    const target = conversations().find(c => c.id === targetId && c.id !== sourceConvo.id && c.participants.includes(me));
+    if (!target) return res.status(404).json({ error: "Hədəf söhbət tapılmadı." });
+    if (target.participants.some(user => user !== me && isBlockedBetween(me, user)))
+        return res.status(403).json({ error: "Bloklanmış hesabla əlaqə qurmaq olmaz." });
+    if (source.sharedPost && target.participants.some(user => user !== me &&
+        !canViewContent(user, source.sharedPost.username, "posts")))
+        return res.status(403).json({ error: "Hədəf söhbətin iştirakçısı bu paylaşımı görə bilmir." });
+    const text = typeof source.text === "string" ? source.text.slice(0, 2000) : "";
+    const hasSharedPost = !!source.sharedPost && typeof source.sharedPost === "object";
+    const media = prepareForwardMedia(source, { normalizeGifPayload, findSticker });
+    if (media.error === "gif") return res.status(400).json({ error: "GIF məlumatı düzgün deyil." });
+    if (media.error === "sticker") return res.status(400).json({ error: "Sticker məlumatı düzgün deyil." });
+    if (media.error === "multiple-media") return res.status(400).json({ error: "Eyni mesajda yalnız bir media göndərmək olar." });
+    const { gif, sticker, rawPath } = media;
+    if (!text && !hasSharedPost && !rawPath && !gif && !sticker)
+        return res.status(400).json({ error: "Bu mesaj ötürülə bilməz." });
+    if (rawPath && (path.basename(rawPath) !== rawPath || rawPath === "." || rawPath === "..")) return res.status(400).json({ error: "Fayl yolu etibarsızdır." });
+    let copiedPath = "";
+    if (rawPath) {
+        try { copiedPath = await supa.copy(rawPath); }
+        catch (error) { console.error("Mesaj faylının surəti yaradılmadı:", error.message); return res.status(503).json({ error: "Əlavə fayl təhlükəsiz surətlənmədi; mesaj ötürülmədi." }); }
+    }
+    const recipients = target.participants.filter(user => user !== me);
+    const forwarded = {
+        id: crypto.randomUUID(), conversationId: target.id, from: me, text,
+        attachment: gif ? gif.url : copiedPath ? `/uploads/${copiedPath}` : "",
+        attachmentStoragePath: copiedPath,
+        attachmentName: gif ? gif.title : copiedPath ? String(source.attachmentName || "Fayl").slice(0, 100) : "",
+        attachmentType: gif ? "image/gif" : copiedPath ? String(source.attachmentType || "") : "",
+        ...(gif ? { gif } : {}),
+        ...(sticker ? { sticker: { id: sticker.id, category: sticker.category, emoji: sticker.emoji, label: sticker.label } } : {}),
+        replyTo: "", forwardedFrom: source.forwardedFrom || source.from,
+        sharedPostId: source.sharedPostId || (hasSharedPost ? source.sharedPost.id : ""),
+        sharedPost: hasSharedPost ? JSON.parse(JSON.stringify(source.sharedPost)) : null,
+        deleted: false, deliveredAt: recipients.some(user => onlineUsers.has(user)) ? new Date().toISOString() : "",
+        createdAt: new Date().toISOString()
+    };
+    const list = messages(); list.push(forwarded); saveMessages(list);
+    recipients.forEach(to => {
+        io.to(`user:${to}`).emit("newMessage", { conversationId: target.id });
+        addNotification(to, me, "message");
+        push.send(to, "message", me);
+    });
+    res.status(201).json(forwarded);
+});
 app.post("/api/conversations/:id/read", requireAuth, (req, res) => {
     const me = currentUser(req);
     const list = conversations();
@@ -1546,6 +2501,24 @@ app.post("/api/conversations/:id/read", requireAuth, (req, res) => {
 });
 
 // Öz mesajını sil (mətn və fayl təmizlənir, "Mesaj silindi" qalır)
+app.put("/api/conversations/:id/messages/:mid", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    const list = messages();
+    const m = list.find(x => x.id === req.params.mid && x.conversationId === convo.id);
+    if (!m || m.deleted) return res.status(404).json({ error: "Mesaj tapılmadı." });
+    if (m.from !== me) return res.status(403).json({ error: "Yalnız öz mesajını redaktə edə bilərsən." });
+    if (typeof m.text !== "string" || !m.text.trim()) return res.status(400).json({ error: "Yalnız mətn mesajlarını redaktə etmək olar." });
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    if (!text) return res.status(400).json({ error: "Mesaj boş ola bilməz." });
+    if (text.length > 2000) return res.status(400).json({ error: "Mesaj 2000 simvoldan çox ola bilməz." });
+    m.text = text;
+    m.editedAt = new Date().toISOString();
+    saveMessages(list);
+    convo.participants.forEach(to => io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
+    res.json(m);
+});
 app.delete("/api/conversations/:id/messages/:mid", requireAuth, async (req, res) => {
     const me = currentUser(req);
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
@@ -1560,6 +2533,7 @@ app.delete("/api/conversations/:id/messages/:mid", requireAuth, async (req, res)
     }
     Object.assign(m, { deleted: true, text: "", attachment: "", attachmentName: "", attachmentType: "" });
     m.attachmentStoragePath = "";
+    redactReplyPreviews(list, m);
     saveMessages(list);
     convo.participants.forEach(to => io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
     res.json({ ok: true });
@@ -1577,7 +2551,20 @@ app.post("/api/push/register", requireAuth, (req, res) => {
 
 // Aktiv istifadəçilər və son görülmə vaxtları
 app.get("/api/presence", requireAuth, (req, res) => {
-    res.json({ online: [...onlineUsers.keys()], lastSeen: Object.fromEntries(lastSeenMap) });
+    const viewer = currentUser(req);
+    const accountList = users();
+    const online = accountList
+        .filter(account => onlineUsers.has(account.username) && canViewProfile(viewer, account, accountList) &&
+            canSeeActivity(viewer, account, "onlineVisibility"))
+        .map(account => account.username);
+    const lastSeen = {};
+    for (const account of accountList) {
+        if (account.lastSeenAt && canViewProfile(viewer, account, accountList) &&
+            canSeeActivity(viewer, account, "lastSeenVisibility"))
+            lastSeen[account.username] = account.lastSeenAt;
+    }
+    res.set("Cache-Control", "private, no-store");
+    res.json({ online, lastSeen });
 });
 
 // TALKCHAT_STORIES_V1
@@ -1589,7 +2576,8 @@ app.get("/api/stories", requireAuth, async (req, res) => {
         await removeLocalUpload(expired.media, expired.storagePath);
     saveStories(list);
     const me = currentUser(req);
-    const result = list.map(x => {
+    const accountList = users();
+    const result = list.filter(x => canViewContent(me, x.username, "stories", accountList)).map(x => {
         if (!x.views.includes(me) && x.username !== me) {
             x.views.push(me);
         }
@@ -1647,7 +2635,7 @@ app.delete("/api/stories/:id", requireAuth, async (req, res) => {
 // Message requests
 app.get("/api/message-requests", requireAuth, (req, res) => {
     const me = currentUser(req);
-    const list = messageRequests().filter(x => x.status === "pending");
+    const list = messageRequests().filter(x => x.status === "pending" && !isBlockedBetween(me, x.from) && !isBlockedBetween(me, x.to));
     res.json({
         incoming: list.filter(x => x.to === me),
         outgoing: list.filter(x => x.from === me)
@@ -1660,6 +2648,10 @@ app.post("/api/message-requests", requireAuth, (req, res) => {
     const target = users().find(u => u.username.toLowerCase() === to.toLowerCase());
     if (!target || target.username === from)
         return res.status(400).json({error:"İstifadəçi tapılmadı."});
+    if (isBlockedBetween(from, target.username))
+        return res.status(403).json({error:"Bu hesabla əlaqə məhdudlaşdırılıb."});
+    if (!canReceiveRequest(from, target, "messageRequests"))
+        return res.status(403).json({error:"Bu hesab yeni mesaj sorğularını qəbul etmir."});
     const existing = conversations().find(x => x.type === "direct" &&
         x.participants.includes(from) && x.participants.includes(target.username));
     if (existing) return res.status(409).json({error:"Bu şəxslə artıq söhbətin var."});
@@ -1679,6 +2671,8 @@ app.post("/api/message-requests/:id/accept", requireAuth, (req, res) => {
     const list = messageRequests();
     const request = list.find(x => x.id === req.params.id && x.to === currentUser(req) && x.status === "pending");
     if (!request) return res.status(404).json({error:"Mesaj sorğusu tapılmadı."});
+    if (isBlockedBetween(request.from, request.to))
+        return res.status(403).json({error:"Bu hesabla əlaqə məhdudlaşdırılıb."});
     const convos = conversations();
     let convo = convos.find(x => x.type === "direct" &&
         x.participants.includes(request.from) && x.participants.includes(request.to));
@@ -1758,6 +2752,8 @@ app.post("/api/rooms/:id/join", requireAuth, (req, res) => {
   const room = rooms.find(r => r.id === req.params.id);
   if (!room) return res.status(404).json({error:"Otaq tapılmadı."});
   const username = currentUser(req);
+  if (room.members.some(member => member !== username && isBlockedBetween(username, member)))
+    return res.status(403).json({error:"Bloklanmış hesabla eyni otağa qoşulmaq olmaz."});
   if (!roomMember(room, username)) room.members.push(username);
   saveRooms(rooms);
   res.json(room);
@@ -1766,13 +2762,21 @@ app.post("/api/rooms/:id/join", requireAuth, (req, res) => {
 app.get("/api/rooms/:id/members", requireAuth, (req, res) => {
   const room = getRooms().find(r => r.id === req.params.id);
   if (!room || !roomMember(room, currentUser(req))) return res.status(403).json({error:"Giriş icazən yoxdur."});
-  res.json({members:room.members});
+  const me = currentUser(req);
+  res.json({members:room.members.filter(username => !isBlockedBetween(me, username))});
 });
 
 app.get("/api/rooms/:id/messages", requireAuth, (req, res) => {
   const room = getRooms().find(r => r.id === req.params.id);
   if (!room || !roomMember(room, currentUser(req))) return res.status(403).json({error:"Giriş icazən yoxdur."});
-  res.json(getRoomMessages().filter(m => m.roomId === room.id));
+  const me = currentUser(req);
+  const visible = getRoomMessages().filter(m => m.roomId === room.id && !isBlockedBetween(me, m.username));
+  res.json(visible.map(message => ({
+    ...message,
+    reactions: Object.fromEntries(Object.entries(message.reactions || {}).map(([emoji, names]) => [
+      emoji, Array.isArray(names) ? names.filter(name => !isBlockedBetween(me, name)) : []
+    ]))
+  })));
 });
 
 app.post("/api/rooms/:id/messages", requireAuth, (req, res) => {
@@ -1784,7 +2788,8 @@ app.post("/api/rooms/:id/messages", requireAuth, (req, res) => {
   const list = getRoomMessages();
   list.push(message);
   saveRoomMessages(list);
-  io.to("talk-room:" + room.id).emit("roomMessage", message);
+  room.members.filter(member => !isBlockedBetween(member, message.username))
+    .forEach(member => io.to("user:" + member).emit("roomMessage", message));
   res.json(message);
 });
 
@@ -1796,6 +2801,8 @@ app.post("/api/rooms/:id/messages/:messageId/react", requireAuth, (req, res) => 
   const list = getRoomMessages();
   const message = list.find(m => m.id === req.params.messageId && m.roomId === room.id);
   if (!message) return res.status(404).json({error:"Mesaj tapılmadı."});
+  if (isBlockedBetween(currentUser(req), message.username))
+    return res.status(403).json({error:"Bloklanmış hesabın mesajına reaksiya vermək olmaz."});
   if (!message.reactions) message.reactions = {};
   if (!Array.isArray(message.reactions[emoji])) message.reactions[emoji] = [];
   const users = message.reactions[emoji];
@@ -1803,7 +2810,8 @@ app.post("/api/rooms/:id/messages/:messageId/react", requireAuth, (req, res) => 
   const i = users.indexOf(username);
   if (i >= 0) users.splice(i, 1); else users.push(username);
   saveRoomMessages(list);
-  io.to("talk-room:" + room.id).emit("roomReaction", message);
+  room.members.filter(member => !isBlockedBetween(member, username))
+    .forEach(member => io.to("user:" + member).emit("roomReaction", message));
   res.json(message);
 });
 

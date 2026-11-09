@@ -1,0 +1,29 @@
+.tc-ai-page { width: min(100%,900px); margin: 0 auto; padding-bottom: max(20px,env(safe-area-inset-bottom)); }
+.tc-ai-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+.tc-ai-heading h1 { margin: 4px 0; font-size: clamp(25px,5vw,34px); }
+.tc-ai-heading .muted { margin: 0; }
+.tc-ai-heading button { min-height: 40px; }
+.tc-ai-disclosure { padding: 12px 14px; border: 1px solid rgba(255,255,255,.09); border-radius: 13px; color: #C4C1D3; background: rgba(255,255,255,.035); font-size: 12px; line-height: 1.6; }
+.tc-ai-disclosure a { color: #B8A6FF; text-underline-offset: 3px; }
+.tc-ai-messages { display: flex; flex-direction: column; gap: 12px; min-height: min(52dvh,520px); max-height: 60dvh; padding: 16px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid rgba(255,255,255,.09); border-radius: 18px; background: rgba(15,15,27,.65); }
+.tc-ai-empty { display: grid; place-content: center; min-height: 190px; max-width: 38ch; margin: auto; color: #A7A4B8; text-align: center; font-size: 14px; line-height: 1.6; }
+.tc-ai-message { width: fit-content; max-width: min(88%,680px); padding: 12px 14px; border: 1px solid rgba(255,255,255,.08); border-radius: 15px; }
+.tc-ai-message.user { align-self: flex-end; color: #F8F7FC; background: #4B35A2; border-color: rgba(160,139,255,.25); }
+.tc-ai-message.assistant { align-self: flex-start; color: #EAE8F2; background: #202033; }
+.tc-ai-message strong { display: block; margin-bottom: 5px; color: #C9BFFF; font-size: 11px; }
+.tc-ai-message p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; font-size: 14px; }
+.tc-ai-message.pending p { color: #B9B6C7; }
+.tc-ai-form { display: flex; align-items: flex-end; gap: 10px; margin-top: 12px; }
+.tc-ai-form textarea { min-height: 52px; max-height: 180px; flex: 1; margin: 0; resize: vertical; }
+.tc-ai-form button { min-height: 48px; }
+.tc-ai-form button:disabled, .tc-ai-heading button:disabled { opacity: .55; cursor: not-allowed; }
+.tc-ai-page #aiAssistantStatus { min-height: 20px; margin: 8px 2px; font-size: 13px; }
+.tc-ai-page #aiAssistantStatus.error { color: #FFADB8; }
+@media (max-width: 520px) {
+  .tc-ai-heading { align-items: flex-start; }
+  .tc-ai-heading button { max-width: 120px; white-space: normal; }
+  .tc-ai-messages { min-height: 48dvh; max-height: 58dvh; padding: 12px; }
+  .tc-ai-message { max-width: 94%; }
+  .tc-ai-form { align-items: stretch; }
+  .tc-ai-form button { flex: 0 0 auto; min-height: 48px; padding: 0 12px; }
+}
