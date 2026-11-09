@@ -8,6 +8,7 @@ window.TalkChatSocket = socket;
 let me = "";
 let scope = "all";
 let activeConversation = null;
+Object.defineProperty(window, "TalkChatActiveConversationId", { get: () => activeConversation });
 let conversationsCache = [];
 
 function esc(value="") {
@@ -41,6 +42,7 @@ function showPage(name) {
   if (name === "profile") loadMyPosts();
   if (name === "admin") window.TalkChatAdmin?.load();
   if (name === "live") window.TalkChatLive?.load();
+  if (name === "ai") window.TalkChatAI?.load();
   if (name === "profile") window.TalkChatCollections?.load();
 }
 document.querySelectorAll("[data-page]").forEach(b => b.addEventListener("click", () => showPage(b.dataset.page)));
@@ -1800,6 +1802,7 @@ function igRenderMsgs() {
 
 async function openConversation(id) {
   activeConversation = id;
+  window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id } }));
   IG.replyTo = null;
   IG.pendingFile = null;
   igRenderReply();
@@ -2240,6 +2243,7 @@ async function igStartWith(username) {
   igEl("tcMobileBack").onclick = () => {
     igEl("messagesPage").classList.remove("tc-chat-open");
     activeConversation = null;
+    window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id: null } }));
     igRenderList();
   };
   igEl("igInfo").onclick = () => {

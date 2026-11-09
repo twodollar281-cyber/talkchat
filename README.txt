@@ -74,3 +74,7 @@ GIF search uses the official GIPHY API through the TalkChat server. Set the serv
 LIVE STREAMING
 --------------
 Live streams use peer-to-peer WebRTC without a paid provider or API key. Browser HTTPS, a camera/microphone permission, and a compatible network are required. The current implementation supports up to 10 viewers; see docs/live-streaming.md for limitations and setup details.
+
+TALKCHAT AI ASSISTANT
+---------------------
+The assistant uses Cloudflare Workers AI with @cf/zai-org/glm-4.7-flash. Keep CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in the Render server environment only. AI is disabled unless AI_ENABLED=true and CLOUDFLARE_OWNER_VERIFIED=true are set after an adult account owner verifies the Cloudflare billing settings; both flags default to false. Default caps are 8 requests per account per UTC day and 3 per user per minute; configured values are clamped to 40/day and 6/minute. These request limits do not guarantee a dollar ceiling. Workers Free has a 10,000-Neuron daily allocation; Workers Paid bills usage above it. See docs/ai-assistant.md before enabling.
