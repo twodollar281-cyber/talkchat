@@ -66,6 +66,79 @@ const conversations = () => readJSON("conversations.json");
 const saveConversations = value => saveJSON("conversations.json", value);
 const messages = () => readJSON("messages.json");
 const saveMessages = value => saveJSON("messages.json", value);
+const gifPreferences = () => {
+    const value = readJSON("gifPreferences.json", {});
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+};
+const saveGifPreferences = value => saveJSON("gifPreferences.json", value);
+const gifSearchLimiter = rateLimit({ windowMs: 60 * 1000, limit: 40, standardHeaders: true, legacyHeaders: false, message: { error: "GIF axtarışı üçün limitə çatdın. Bir az sonra yenidən cəhd et." } });
+function normalizeGifPayload(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const id = String(value.id || "").trim().slice(0, 128);
+    const safeTenorUrl = input => {
+        try {
+            const url = new URL(String(input || ""));
+            return url.protocol === "https:" && url.hostname === "media.tenor.com" && url.pathname.length > 1 ? url.toString() : "";
+        } catch { return ""; }
+    };
+    const url = safeTenorUrl(value.url);
+    const previewUrl = safeTenorUrl(value.previewUrl) || url;
+    if (!id || !url || !previewUrl) return null;
+    const dimension = input => {
+        const number = Number(input);
+        return Number.isInteger(number) && number > 0 && number <= 4096 ? number : 0;
+    };
+    return { id, url, previewUrl, title: String(value.title || "GIF").replace(/\s+/g, " ").trim().slice(0, 120) || "GIF", width: dimension(value.width), height: dimension(value.height) };
+}
+function rememberGif(username, gif) {
+    const all = gifPreferences();
+    const preferences = all[username] || { favorites: [], recent: [] };
+    const recent = Array.isArray(preferences.recent) ? preferences.recent : [];
+    preferences.recent = [gif, ...recent.filter(item => item && item.id !== gif.id)].slice(0, 30);
+    preferences.favorites = Array.isArray(preferences.favorites) ? preferences.favorites : [];
+    all[username] = preferences;
+    saveGifPreferences(all);
+}
+function normalizeTenorResult(item) {
+    const media = item && item.media_formats && typeof item.media_formats === "object" ? item.media_formats : {};
+    const full = media.gif || media.mediumgif || media.tinygif;
+    const preview = media.tinygif || media.nanogif || full;
+    if (!full || !preview) return null;
+    return normalizeGifPayload({ id: item.id, url: full.url, previewUrl: preview.url, title: item.content_description || item.title || "GIF", width: full.dims && full.dims[0], height: full.dims && full.dims[1] });
+}
+async function tenorRequest(endpoint, parameters = {}) {
+    const key = String(process.env.TENOR_API_KEY || "").trim();
+    if (!key) {
+        const error = new Error("GIF axtarışı üçün serverdə TENOR_API_KEY mühit dəyişənini təyin edin.");
+        error.status = 503;
+        throw error;
+    }
+    const url = new URL("https://tenor.googleapis.com/v2/" + endpoint);
+    url.searchParams.set("key", key);
+    url.searchParams.set("client_key", "talkchat");
+    for (const [name, value] of Object.entries(parameters)) {
+        if (value !== undefined && value !== null && String(value) !== "") url.searchParams.set(name, String(value));
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 9000);
+    try {
+        const response = await fetch(url.toString(), { signal: controller.signal, headers: { Accept: "application/json" } });
+        if (!response.ok) {
+            const error = new Error("GIF provayderi sorğunu tamamlamadı.");
+            error.status = response.status === 429 ? 503 : 502;
+            throw error;
+        }
+        return await response.json();
+    } catch (error) {
+        if (error.status) throw error;
+        const unavailable = new Error("GIF provayderinə qoşulmaq mümkün olmadı.");
+        unavailable.status = 502;
+        throw unavailable;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
 const friendRequests = () => readJSON("friendRequests.json");
 const saveFriendRequests = value => saveJSON("friendRequests.json", value);
 const stories = () => readJSON("stories.json");
@@ -84,7 +157,7 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-            "img-src": ["'self'", "data:", "blob:", supa.origin].filter(Boolean),
+            "img-src": ["'self'", "data:", "blob:", "https://media.tenor.com", supa.origin].filter(Boolean),
             "media-src": ["'self'", "blob:", supa.origin].filter(Boolean)
         }
     }
@@ -1497,6 +1570,50 @@ app.post("/api/conversations/group", requireAuth, (req, res) => {
     const list = conversations(); list.push(convo); saveConversations(list);
     res.json(convo);
 });
+app.get("/api/gifs/categories", requireAuth, gifSearchLimiter, async (_req, res) => {
+    try {
+        const data = await tenorRequest("categories", { limit: 30, locale: "en_US" });
+        const tags = Array.isArray(data.tags) ? data.tags : [];
+        res.json(tags.map(tag => ({ name: String(tag.name || tag.searchterm || "").slice(0, 60), searchterm: String(tag.searchterm || tag.name || "").slice(0, 100) })).filter(tag => tag.name && tag.searchterm));
+    } catch (error) {
+        res.status(error.status || 502).json({ error: error.message || "GIF kateqoriyaları yüklənmədi." });
+    }
+});
+app.get("/api/gifs/search", requireAuth, gifSearchLimiter, async (req, res) => {
+    const query = String(req.query.q || "trending").trim().slice(0, 100) || "trending";
+    const next = String(req.query.next || "").slice(0, 500);
+    try {
+        const data = await tenorRequest("search", { q: query, limit: 24, media_filter: "gif,tinygif", contentfilter: "medium", locale: "en_US", ...(next ? { next } : {}) });
+        const results = (Array.isArray(data.results) ? data.results : []).map(normalizeTenorResult).filter(Boolean);
+        res.json({ results, next: String(data.next || "").slice(0, 500) });
+    } catch (error) {
+        res.status(error.status || 502).json({ error: error.message || "GIF-lər yüklənmədi." });
+    }
+});
+app.get("/api/gifs/preferences", requireAuth, (req, res) => {
+    const preferences = gifPreferences()[currentUser(req)] || {};
+    const safeList = list => (Array.isArray(list) ? list : []).map(normalizeGifPayload).filter(Boolean);
+    res.json({ favorites: safeList(preferences.favorites), recent: safeList(preferences.recent) });
+});
+app.post("/api/gifs/favorites", requireAuth, (req, res) => {
+    const gif = normalizeGifPayload(req.body && req.body.gif);
+    if (!gif) return res.status(400).json({ error: "GIF məlumatı düzgün deyil." });
+    const me = currentUser(req);
+    const all = gifPreferences();
+    const preferences = all[me] || { favorites: [], recent: [] };
+    preferences.favorites = Array.isArray(preferences.favorites) ? preferences.favorites : [];
+    const index = preferences.favorites.findIndex(item => item && item.id === gif.id);
+    if (index >= 0) preferences.favorites.splice(index, 1);
+    else {
+        if (preferences.favorites.length >= 100) return res.status(400).json({ error: "Ən çox 100 GIF-i sevimlilərə əlavə edə bilərsən." });
+        preferences.favorites.unshift(gif);
+    }
+    preferences.recent = Array.isArray(preferences.recent) ? preferences.recent : [];
+    all[me] = preferences;
+    saveGifPreferences(all);
+    res.json({ favorites: preferences.favorites });
+});
+
 app.get("/api/conversations/:id/messages", requireAuth, (req, res) => {
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
@@ -1506,22 +1623,31 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
     const text = String(req.body.text || "").trim().slice(0, 2000);
-    if (!text && !req.file) return res.status(400).json({ error: "Mesaj boş ola bilməz." });
+    const gifInput = req.body && req.body.gif;
+    const gif = gifInput ? normalizeGifPayload(gifInput) : null;
+    if (gifInput && !gif) return res.status(400).json({ error: "GIF məlumatı düzgün deyil." });
+    if (gif && req.file) return res.status(400).json({ error: "Eyni mesajda fayl və GIF göndərmək olmur." });
+    if (!text && !req.file && !gif) return res.status(400).json({ error: "Mesaj boş ola bilməz." });
     const replyId = String(req.body.replyTo || "");
     const replyTarget = replyId ? messages().find(m => m.id === replyId && m.conversationId === convo.id) : null;
     const recipients = convo.participants.filter(x => x !== currentUser(req));
     const message = {
         id: crypto.randomUUID(), conversationId: convo.id, from: currentUser(req), text,
-        attachment: req.file ? `/uploads/${req.file.filename}` : "",
+        attachment: req.file ? `/uploads/${req.file.filename}` : gif ? gif.url : "",
         attachmentStoragePath: req.file ? req.file.filename : "",
-        attachmentName: req.file ? req.file.originalname.slice(0, 100) : "",
-        attachmentType: req.file ? req.file.mimetype : "",
+        attachmentName: req.file ? req.file.originalname.slice(0, 100) : gif ? gif.title : "",
+        attachmentType: req.file ? req.file.mimetype : gif ? "image/gif" : "",
+        ...(gif ? { gif } : {}),
         replyTo: replyTarget ? replyTarget.id : "",
         deleted: false,
         deliveredAt: recipients.some(to => onlineUsers.has(to)) ? new Date().toISOString() : "",
         createdAt: new Date().toISOString()
     };
     const list = messages(); list.push(message); saveMessages(list);
+    if (gif) {
+        try { rememberGif(currentUser(req), gif); }
+        catch (error) { console.error("GIF recent save failed:", error.message); }
+    }
     convo.participants.filter(x => x !== currentUser(req)).forEach(to => {
         io.to(`user:${to}`).emit("newMessage", { conversationId: convo.id });
         addNotification(to, currentUser(req), "message");

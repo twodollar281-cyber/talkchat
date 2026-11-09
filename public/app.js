@@ -1545,6 +1545,7 @@ function igShort(m) {
   if (!m) return "Mesaj";
   if (m.deleted) return "Mesaj silindi";
   if (m.text) return m.text.length > 60 ? m.text.slice(0, 60) + "…" : m.text;
+  if (m.gif) return "🎞 GIF";
   if ((m.attachmentType || "").startsWith("image/")) return "📷 Şəkil";
   return "📎 " + (m.attachmentName || "Fayl");
 }
@@ -1641,9 +1642,14 @@ function igBubble(m, byId) {
   const isImg = (m.attachmentType || "").startsWith("image/");
   let body = "";
   if (m.attachment) {
-    body += isImg
-      ? `<a href="${esc(m.attachment)}" target="_blank" rel="noopener"><img src="${esc(m.attachment)}" alt="Şəkil" loading="lazy"></a>`
-      : `<a class="ig-file" href="${esc(m.attachment)}" target="_blank" rel="noopener">📎 ${esc(m.attachmentName || "Fayl")}</a>`;
+    if (m.gif) {
+      const previewUrl = m.gif.previewUrl || m.attachment;
+      body += '<a class="ig-gif-message" href="' + esc(m.attachment) + '" target="_blank" rel="noopener"><img src="' + esc(previewUrl) + '" alt="' + esc(m.gif.title || "GIF") + '" loading="lazy"></a><span class="ig-gif-tag">GIF</span>';
+    } else {
+      body += isImg
+        ? '<a href="' + esc(m.attachment) + '" target="_blank" rel="noopener"><img src="' + esc(m.attachment) + '" alt="Şəkil" loading="lazy"></a>'
+        : '<a class="ig-file" href="' + esc(m.attachment) + '" target="_blank" rel="noopener">📎 ' + esc(m.attachmentName || "Fayl") + '</a>';
+    }
   }
   if (m.sharedPost) {
     const shared=m.sharedPost;
@@ -1725,6 +1731,100 @@ function igOpenSheet(mid) {
 }
 
 /* ---------- göndərmə ---------- */
+const igGifState = { tab: "search", results: [], categories: [], favorites: [], recent: [], searchTimer: null, request: 0 };
+function igGifEncoded(gif) { return encodeURIComponent(JSON.stringify(gif)); }
+function igGifRenderCategories() {
+  const box = igEl("igGifCategories");
+  box.innerHTML = igGifState.categories.map(category =>
+    '<button type="button" class="ig-gif-category" data-gif-category="' + encodeURIComponent(category.searchterm) + '">' + esc(category.name) + '</button>'
+  ).join("");
+}
+function igGifRender() {
+  const dialog = igEl("igGifDialog");
+  dialog.querySelectorAll("[data-gif-tab]").forEach(button => button.classList.toggle("active", button.dataset.gifTab === igGifState.tab));
+  igEl("igGifSearchControls").hidden = igGifState.tab !== "search";
+  const gifs = igGifState.tab === "favorites" ? igGifState.favorites : igGifState.tab === "recent" ? igGifState.recent : igGifState.results;
+  const empty = igGifState.tab === "favorites" ? "Sevimli GIF yoxdur." : igGifState.tab === "recent" ? "Son istifadə etdiyin GIF yoxdur." : "Nəticə tapılmadı.";
+  igEl("igGifGrid").innerHTML = gifs.length ? gifs.map(gif => {
+    const encoded = igGifEncoded(gif);
+    const favorite = igGifState.favorites.some(item => item.id === gif.id);
+    return '<article class="ig-gif-card"><button type="button" class="ig-gif-send" data-gif-send="' + encoded + '" aria-label="' + esc(gif.title || "GIF göndər") + '"><img src="' + esc(gif.previewUrl || gif.url) + '" alt="' + esc(gif.title || "GIF") + '" loading="lazy"><span>' + esc(gif.title || "GIF") + '</span></button><button type="button" class="ig-gif-favorite' + (favorite ? ' saved' : '') + '" data-gif-favorite="' + encoded + '" aria-label="' + (favorite ? 'Sevimlilərdən çıxar' : 'Sevimlilərə əlavə et') + '">' + (favorite ? '★' : '☆') + '</button></article>';
+  }).join("") : '<p class="ig-gif-empty">' + empty + '</p>';
+}
+async function igGifLoadPreferences() {
+  const data = await api("/api/gifs/preferences");
+  igGifState.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+  igGifState.recent = Array.isArray(data.recent) ? data.recent : [];
+  igGifRender();
+}
+async function igGifLoadCategories() {
+  try {
+    const data = await api("/api/gifs/categories");
+    igGifState.categories = Array.isArray(data) ? data : [];
+    igGifRenderCategories();
+  } catch {
+    igGifState.categories = [];
+    igGifRenderCategories();
+  }
+}
+async function igGifSearch(query) {
+  const request = ++igGifState.request;
+  const status = igEl("igGifStatus");
+  status.textContent = "GIF-lər yüklənir…";
+  try {
+    const data = await api("/api/gifs/search?q=" + encodeURIComponent(query || "trending"));
+    if (request !== igGifState.request) return;
+    igGifState.results = Array.isArray(data.results) ? data.results : [];
+    status.textContent = "";
+    igGifRender();
+  } catch (error) {
+    if (request !== igGifState.request) return;
+    igGifState.results = [];
+    status.textContent = error.message;
+    igGifRender();
+  }
+}
+async function igGifOpen() {
+  if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+  const dialog = igEl("igGifDialog");
+  if (!dialog.open) dialog.showModal();
+  igGifState.tab = "search";
+  igGifRender();
+  await Promise.allSettled([igGifLoadPreferences(), igGifLoadCategories()]);
+  if (!igGifState.results.length) await igGifSearch(igEl("igGifSearch").value.trim());
+  igEl("igGifSearch").focus();
+}
+async function igGifSend(gif) {
+  if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+  const replyTo = IG.replyTo ? IG.replyTo.id : "";
+  try {
+    await api("/api/conversations/" + encodeURIComponent(activeConversation) + "/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "", replyTo, gif })
+    });
+    IG.replyTo = null;
+    igRenderReply();
+    igEl("igGifDialog").close();
+    await Promise.all([igLoadMessages(false), loadConversations(), igGifLoadPreferences()]);
+  } catch (error) {
+    alert(error.message || "GIF göndərilmədi.");
+  }
+}
+async function igGifToggleFavorite(gif) {
+  try {
+    const data = await api("/api/gifs/favorites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ gif })
+    });
+    igGifState.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+    igGifRender();
+  } catch (error) {
+    alert(error.message || "Sevimli GIF yenilənmədi.");
+  }
+}
+
 async function igSendTo(text) {
   const fd = new FormData();
   fd.append("text", text);
@@ -1900,4 +2000,40 @@ async function igStartWith(username) {
     igRenderList();
     igRenderHead();
   });
+  igEl("igGifButton").addEventListener("click", igGifOpen);
+  igEl("igGifClose").addEventListener("click", () => igEl("igGifDialog").close());
+  igEl("igGifDialog").addEventListener("click", event => {
+    if (event.target === igEl("igGifDialog")) igEl("igGifDialog").close();
+    const tab = event.target.closest("[data-gif-tab]");
+    if (tab) {
+      igGifState.tab = tab.dataset.gifTab;
+      igGifRender();
+      if (igGifState.tab === "search" && !igGifState.results.length) igGifSearch(igEl("igGifSearch").value.trim());
+    }
+  });
+  igEl("igGifSearch").addEventListener("input", () => {
+    clearTimeout(igGifState.searchTimer);
+    igGifState.searchTimer = setTimeout(() => igGifSearch(igEl("igGifSearch").value.trim()), 300);
+  });
+  igEl("igGifCategories").addEventListener("click", event => {
+    const button = event.target.closest("[data-gif-category]");
+    if (!button) return;
+    const query = decodeURIComponent(button.dataset.gifCategory);
+    igEl("igGifSearch").value = query;
+    igGifState.tab = "search";
+    igGifRender();
+    igGifSearch(query);
+  });
+  igEl("igGifGrid").addEventListener("click", event => {
+    const favorite = event.target.closest("[data-gif-favorite]");
+    const send = event.target.closest("[data-gif-send]");
+    const button = favorite || send;
+    if (!button) return;
+    try {
+      const gif = JSON.parse(decodeURIComponent(favorite ? favorite.dataset.gifFavorite : send.dataset.gifSend));
+      if (favorite) igGifToggleFavorite(gif);
+      else igGifSend(gif);
+    } catch { alert("GIF məlumatı oxunmadı."); }
+  });
+
 })();
