@@ -28,6 +28,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const PROFILE_THEMES = new Set(["violet", "ocean", "sunset", "forest"]);
+const ACTIVITY_VISIBILITIES = new Set(["everyone", "friends", "nobody"]);
 function normalizeProfileColor(value) {
     return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : "#8257ff";
 }
@@ -272,7 +273,27 @@ io.use((socket, next) => {
 });
 // TALKCHAT_PRESENCE_READ_V1
 const onlineUsers = new Map();
-const lastSeenMap = new Map();
+function canSeeActivity(viewerUsername, target, settingName) {
+    if (viewerUsername === target.username) return true;
+    const setting = ACTIVITY_VISIBILITIES.has(target[settingName]) ? target[settingName] : "everyone";
+    if (setting === "nobody") return false;
+    if (setting === "friends") return Array.isArray(target.friends) && target.friends.includes(viewerUsername);
+    return true;
+}
+function publishPresence(username) {
+    const accountList = users();
+    const target = accountList.find(user => user.username === username);
+    if (!target) return;
+    const online = onlineUsers.has(username);
+    for (const viewer of accountList) {
+        const canSeeOnline = canSeeActivity(viewer.username, target, "onlineVisibility");
+        const canSeeLastSeen = canSeeActivity(viewer.username, target, "lastSeenVisibility");
+        const payload = { username, online: canSeeOnline && online };
+        if (canSeeLastSeen && target.lastSeenAt) payload.lastSeen = target.lastSeenAt;
+        if (!canSeeOnline && !canSeeLastSeen) payload.hidden = true;
+        io.to(`user:${viewer.username}`).emit("presenceUpdate", payload);
+    }
+}
 
 // Mesajın önizlemesi (söhbət siyahısında göstərilir)
 function previewOf(m) {
@@ -377,7 +398,7 @@ io.on("connection", socket => {
         socket.emit("call:incoming", { callId: ringingCall.id, conversationId: ringingCall.conversationId, from: ringingCall.caller, to: name, mediaType: ringingCall.mediaType });
     }
     onlineUsers.set(name, (onlineUsers.get(name) || 0) + 1);
-    io.emit("presenceUpdate", { username: name, online: true });
+    publishPresence(name);
 
 
     
@@ -600,12 +621,14 @@ socket.on("call:end", data => {
                 if (call.participants.length === 0) expireDisconnectedGroupCall(conversationId, call);
             }
             onlineUsers.delete(name);
-            lastSeenMap.set(name, new Date().toISOString());
-            io.emit("presenceUpdate", {
-                username: name,
-                online: false,
-                lastSeen: new Date().toISOString()
-            });
+            const disconnectedAt = new Date().toISOString();
+            const accountList = users();
+            const account = accountList.find(user => user.username === name);
+            if (account) {
+                account.lastSeenAt = disconnectedAt;
+                saveUsers(accountList);
+            }
+            publishPresence(name);
         } else {
             onlineUsers.set(name, count);
         }
@@ -976,6 +999,7 @@ app.post("/api/register", async (req, res) => {
             username: name, password: await bcrypt.hash(password, 12),
             role: "member", displayName: "", bio: "", avatar: "", avatarStoragePath: "",
             link: "", profileTheme: "violet", profileColor: "#8257ff", followers: [], following: [],
+            onlineVisibility: "everyone", lastSeenVisibility: "everyone", lastSeenAt: "",
             createdAt: new Date().toISOString()
         };
         list.push(user);
@@ -1053,7 +1077,11 @@ app.post("/api/owner/bootstrap", requireAuth, (req, res) => {
 app.get("/api/profile", requireAuth, (req, res) => {
     const user = users().find(u => u.username === currentUser(req));
     if (!user) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
-    res.json(publicUser(user));
+    res.json({
+        ...publicUser(user),
+        onlineVisibility: ACTIVITY_VISIBILITIES.has(user.onlineVisibility) ? user.onlineVisibility : "everyone",
+        lastSeenVisibility: ACTIVITY_VISIBILITIES.has(user.lastSeenVisibility) ? user.lastSeenVisibility : "everyone"
+    });
 });
 app.put("/api/profile", requireAuth, (req, res) => {
     const body = req.body || {};
@@ -1065,6 +1093,10 @@ app.put("/api/profile", requireAuth, (req, res) => {
         return res.status(400).json({ error: "Profil mövzusu düzgün deyil." });
     if (body.profileColor !== undefined && (typeof body.profileColor !== "string" || !/^#[0-9a-fA-F]{6}$/.test(body.profileColor)))
         return res.status(400).json({ error: "Profil rəngi düzgün hex formatında olmalıdır." });
+    if (body.onlineVisibility !== undefined && !ACTIVITY_VISIBILITIES.has(body.onlineVisibility))
+        return res.status(400).json({ error: "Onlayn status görünürlüğü düzgün deyil." });
+    if (body.lastSeenVisibility !== undefined && !ACTIVITY_VISIBILITIES.has(body.lastSeenVisibility))
+        return res.status(400).json({ error: "Son görülmə görünürlüğü düzgün deyil." });
     let link = "";
     if (body.link !== undefined) {
         if (typeof body.link !== "string" || body.link.length > 200)
@@ -1083,12 +1115,17 @@ app.put("/api/profile", requireAuth, (req, res) => {
     const list = users();
     const user = list.find(u => u.username === currentUser(req));
     if (!user) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    const previousActivityVisibility = `${user.onlineVisibility || "everyone"}|${user.lastSeenVisibility || "everyone"}`;
     if (body.bio !== undefined) user.bio = body.bio.trim();
     if (body.displayName !== undefined) user.displayName = body.displayName.trim();
     if (body.link !== undefined) user.link = link;
     if (body.profileTheme !== undefined) user.profileTheme = body.profileTheme;
     if (body.profileColor !== undefined) user.profileColor = body.profileColor.toLowerCase();
+    if (body.onlineVisibility !== undefined) user.onlineVisibility = body.onlineVisibility;
+    if (body.lastSeenVisibility !== undefined) user.lastSeenVisibility = body.lastSeenVisibility;
     saveUsers(list);
+    if (previousActivityVisibility !== `${user.onlineVisibility || "everyone"}|${user.lastSeenVisibility || "everyone"}`)
+        publishPresence(user.username);
     res.json(publicUser(user));
 });
 app.post("/api/profile/avatar", requireAuth, socialUpload.single("file"), async (req, res) => {
@@ -2047,7 +2084,18 @@ app.post("/api/push/register", requireAuth, (req, res) => {
 
 // Aktiv istifadəçilər və son görülmə vaxtları
 app.get("/api/presence", requireAuth, (req, res) => {
-    res.json({ online: [...onlineUsers.keys()], lastSeen: Object.fromEntries(lastSeenMap) });
+    const viewer = currentUser(req);
+    const accountList = users();
+    const online = accountList
+        .filter(account => onlineUsers.has(account.username) && canSeeActivity(viewer, account, "onlineVisibility"))
+        .map(account => account.username);
+    const lastSeen = {};
+    for (const account of accountList) {
+        if (account.lastSeenAt && canSeeActivity(viewer, account, "lastSeenVisibility"))
+            lastSeen[account.username] = account.lastSeenAt;
+    }
+    res.set("Cache-Control", "private, no-store");
+    res.json({ online, lastSeen });
 });
 
 // TALKCHAT_STORIES_V1

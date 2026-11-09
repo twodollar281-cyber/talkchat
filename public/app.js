@@ -242,6 +242,8 @@ async function loadMyProfile(){
     $("myUsername").innerHTML="@"+esc(u.username)+(u.verified?verifiedBadge():"");
     $("profileTheme").value=profileThemeNames.has(u.profileTheme)?u.profileTheme:"violet";
     $("profileColor").value=/^#[0-9a-fA-F]{6}$/.test(String(u.profileColor||""))?u.profileColor:"#8257ff";
+    $("onlineVisibility").value=["everyone","friends","nobody"].includes(u.onlineVisibility)?u.onlineVisibility:"everyone";
+    $("lastSeenVisibility").value=["everyone","friends","nobody"].includes(u.lastSeenVisibility)?u.lastSeenVisibility:"everyone";
     applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
     $("myDisplayName").value=u.displayName||"";
@@ -270,7 +272,7 @@ async function loadMyPosts(){
 }
 $("saveBio").onclick=async()=>{
   try{
-    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value,profileTheme:$("profileTheme").value,profileColor:$("profileColor").value})});
+    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value,profileTheme:$("profileTheme").value,profileColor:$("profileColor").value,onlineVisibility:$("onlineVisibility").value,lastSeenVisibility:$("lastSeenVisibility").value})});
     $("profileStatus").textContent="Profil yadda saxlanıldı!";
     applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
@@ -1542,6 +1544,16 @@ const talkchatPresence = new Map();
 
 socket.on("presenceUpdate", data => {
   if (!data || !data.username) return;
+  if (data.hidden) {
+    talkchatPresence.delete(data.username);
+    document.querySelectorAll("[data-presence-user]").forEach(el => {
+      if (el.dataset.presenceUser === data.username) {
+        el.textContent = "";
+        el.classList.remove("online");
+      }
+    });
+    return;
+  }
   talkchatPresence.set(data.username, data);
   document.querySelectorAll("[data-presence-user]").forEach(el => {
     if (el.dataset.presenceUser === data.username) {
@@ -2353,10 +2365,14 @@ async function igStartWith(username) {
   });
   socket.on("presenceUpdate", d => {
     if (!d || !d.username) return;
-    if (d.online) IG.online.add(d.username);
+    if (d.hidden) {
+      IG.online.delete(d.username);
+      delete IG.lastSeen[d.username];
+    } else if (d.online) IG.online.add(d.username);
     else {
       IG.online.delete(d.username);
       if (d.lastSeen) IG.lastSeen[d.username] = d.lastSeen;
+      else delete IG.lastSeen[d.username];
     }
     igRenderList();
     igRenderHead();
