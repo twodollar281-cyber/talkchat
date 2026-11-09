@@ -3417,3 +3417,8 @@ a { color: #c3a8ff; }
 .tc-msg-search-meta { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--ig-muted); }
 .tc-msg-search-text { display: -webkit-box; margin-top: 4px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; font-size: 13px; }
 .tc-msg-search[hidden] { display: none !important; }
+
+/* Forwarded messages */
+.ig-forwarded { display: block; margin-bottom: 4px; font-size: 11px; opacity: .72; }
+.ig-forward-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
+.ig-forward-destination { min-height: 44px; text-align: left; }

@@ -1567,6 +1567,46 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
 
 
 // Söhbəti oxunmuş et (karşı tərəf "Göründü" görür)
+app.post("/api/conversations/:id/messages/:mid/forward", requireAuth, async (req, res) => {
+    const me = currentUser(req);
+    const sourceConvo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!sourceConvo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    const source = messages().find(m => m.id === req.params.mid && m.conversationId === sourceConvo.id);
+    if (!source || source.deleted) return res.status(404).json({ error: "Mesaj tapılmadı." });
+    const targetId = typeof req.body?.targetConversationId === "string" ? req.body.targetConversationId : "";
+    const target = conversations().find(c => c.id === targetId && c.id !== sourceConvo.id && c.participants.includes(me));
+    if (!target) return res.status(404).json({ error: "Hədəf söhbət tapılmadı." });
+    const text = typeof source.text === "string" ? source.text.slice(0, 2000) : "";
+    const hasSharedPost = !!source.sharedPost && typeof source.sharedPost === "object";
+    const rawPath = source.attachmentStoragePath || (typeof source.attachment === "string" && source.attachment.startsWith("/uploads/") ? source.attachment.slice("/uploads/".length) : "");
+    if (!text && !hasSharedPost && !rawPath) return res.status(400).json({ error: "Bu mesaj ötürülə bilməz." });
+    if (rawPath && (path.basename(rawPath) !== rawPath || rawPath === "." || rawPath === "..")) return res.status(400).json({ error: "Fayl yolu etibarsızdır." });
+    let copiedPath = "";
+    if (rawPath) {
+        try { copiedPath = await supa.copy(rawPath); }
+        catch (error) { console.error("Mesaj faylının surəti yaradılmadı:", error.message); return res.status(503).json({ error: "Əlavə fayl təhlükəsiz surətlənmədi; mesaj ötürülmədi." }); }
+    }
+    const recipients = target.participants.filter(user => user !== me);
+    const forwarded = {
+        id: crypto.randomUUID(), conversationId: target.id, from: me, text,
+        attachment: copiedPath ? `/uploads/${copiedPath}` : "",
+        attachmentStoragePath: copiedPath,
+        attachmentName: copiedPath ? String(source.attachmentName || "Fayl").slice(0, 100) : "",
+        attachmentType: copiedPath ? String(source.attachmentType || "") : "",
+        replyTo: "", forwardedFrom: source.forwardedFrom || source.from,
+        sharedPostId: source.sharedPostId || (hasSharedPost ? source.sharedPost.id : ""),
+        sharedPost: hasSharedPost ? JSON.parse(JSON.stringify(source.sharedPost)) : null,
+        deleted: false, deliveredAt: recipients.some(user => onlineUsers.has(user)) ? new Date().toISOString() : "",
+        createdAt: new Date().toISOString()
+    };
+    const list = messages(); list.push(forwarded); saveMessages(list);
+    recipients.forEach(to => {
+        io.to(`user:${to}`).emit("newMessage", { conversationId: target.id });
+        addNotification(to, me, "message");
+        push.send(to, "message", me);
+    });
+    res.status(201).json(forwarded);
+});
 app.post("/api/conversations/:id/read", requireAuth, (req, res) => {
     const me = currentUser(req);
     const list = conversations();

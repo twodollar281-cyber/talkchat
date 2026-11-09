@@ -1645,6 +1645,7 @@ function igBubble(m, byId) {
       ? `<a href="${esc(m.attachment)}" target="_blank" rel="noopener"><img src="${esc(m.attachment)}" alt="Şəkil" loading="lazy"></a>`
       : `<a class="ig-file" href="${esc(m.attachment)}" target="_blank" rel="noopener">📎 ${esc(m.attachmentName || "Fayl")}</a>`;
   }
+  if (m.forwardedFrom) body += `<small class="ig-forwarded">Ötürülüb · @${esc(m.forwardedFrom)}</small>`;
   if (m.sharedPost) {
     const shared=m.sharedPost;
     const sharedMedia=shared.mediaType==="video"
@@ -1718,6 +1719,7 @@ function igOpenSheet(mid) {
   const acts = [["reply", "Cavab ver"]];
   if (m.text) acts.push(["copy", "Mətni kopyala"]);
       if (m.from === me && m.text && !m.deleted) acts.push(["edit", "Mesajı redaktə et"]);
+    if (!m.deleted) acts.push(["forward", "Mesajı ötür"]);
     if (m.from === me) acts.push(["del", "Mesajı sil", "danger"]);
   igEl("igSheetBody").innerHTML =
     acts.map(([a, t, k]) => `<button type="button" class="ig-sheet-btn${k ? " danger" : ""}" data-a="${a}" data-mid="${esc(m.id)}">${t}</button>`).join("") +
@@ -1832,6 +1834,24 @@ async function igStartWith(username) {
         await api("/api/conversations/" + activeConversation + "/messages/" + m.id, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
         await igLoadMessages(false);
         loadConversations();
+      } catch (err) { alert(err.message); }
+      return;
+    }
+    if (a === "forward") {
+      if (m.deleted) return;
+      const destinations = conversationsCache.filter(c => c.id !== activeConversation);
+      const rows = destinations.map(c => `<button type="button" class="ig-sheet-btn ig-forward-destination" data-a="forward-to" data-mid="${esc(m.id)}" data-target="${esc(c.id)}">${esc(c.type === "group" ? (c.name || "Qrup") : "@" + c.name)}</button>`).join("");
+      igEl("igSheetBody").innerHTML = `<div class="ig-forward-list"><b>Mesajı ötür</b>${rows || "<p class=\"ig-none\">Başqa söhbət yoxdur.</p>"}<button type="button" class="ig-sheet-btn cancel" data-a="close">Ləğv et</button></div>`;
+      igEl("igSheet").hidden = false;
+      return;
+    }
+    if (a === "forward-to") {
+      const targetId = b.dataset.target;
+      if (!targetId) return;
+      try {
+        await api("/api/conversations/" + encodeURIComponent(activeConversation) + "/messages/" + encodeURIComponent(m.id) + "/forward", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetConversationId: targetId }) });
+        await loadConversations();
+        await openConversation(targetId);
       } catch (err) { alert(err.message); }
       return;
     }

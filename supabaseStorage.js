@@ -2,6 +2,7 @@
 // SUPABASE_URL və SUPABASE_SERVICE_ROLE_KEY təyin edilməyibsə enabled=false olur
 // və server köhnə disk yükləməsi ilə işləməyə davam edir.
 const crypto = require("crypto");
+const fs = require("fs");
 const path = require("path");
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
@@ -62,6 +63,21 @@ async function ensurePrivateBucket() {
     return true;
 }
 
+async function copy(filename) {
+    const source = String(filename || "");
+    const base = path.basename(source);
+    if (!source || base !== source || base === "." || base === "..") throw new Error("Storage fayl yolu etibarsızdır.");
+    const ext = path.extname(base).toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 10);
+    const destination = `${crypto.randomUUID()}${ext}`;
+    if (enabled) {
+        const { error } = await client.storage.from(BUCKET).copy(base, destination);
+        if (error) throw error;
+        return destination;
+    }
+    const uploads = path.join(__dirname, "public", "uploads");
+    await fs.promises.copyFile(path.join(uploads, base), path.join(uploads, destination));
+    return destination;
+}
 async function remove(filename) {
     if (!enabled || !filename) return { ok: true, skipped: true };
     const { error } = await client.storage.from(BUCKET).remove([filename]);
@@ -69,4 +85,4 @@ async function remove(filename) {
     return { ok: true };
 }
 
-module.exports = { enabled, engine, createSignedUrl, ensurePrivateBucket, remove, origin: enabled ? new URL(SUPABASE_URL).origin : "" };
+module.exports = { enabled, engine, createSignedUrl, ensurePrivateBucket, copy, remove, origin: enabled ? new URL(SUPABASE_URL).origin : "" };
