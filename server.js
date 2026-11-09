@@ -456,17 +456,58 @@ function requireAuth(req, res, next) {
     next();
 }
 
-app.get("/api/calls/ice", requireAuth, (req, res) => {
-    const iceServers = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
-    const turnUrls = String(process.env.TURN_URLS || "").split(",").map(x => x.trim()).filter(x => /^turns?:/i.test(x));
-    const sharedSecret = process.env.TURN_SHARED_SECRET;
-    if (turnUrls.length && sharedSecret) {
-        const username = String(Math.floor(Date.now() / 1000) + 3600) + ":" + currentUser(req);
-        const credential = crypto.createHmac("sha1", sharedSecret).update(username).digest("base64");
-        iceServers.push({ urls: turnUrls, username, credential });
+app.get("/api/calls/ice", requireAuth, async (req, res) => {
+    const token = process.env.TURNIX_API_TOKEN;
+
+    if (!token) {
+        console.error("TURNIX_API_TOKEN is missing");
+        return res.status(503).json({
+            error: "TURN service is not configured"
+        });
     }
-    res.set("Cache-Control", "private, no-store");
-    res.json({ iceServers });
+
+    try {
+        const response = await fetch(
+            "https://turnix.io/api/v1/credentials/ice",
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({ ttl: 3600 }),
+                signal: AbortSignal.timeout(10000)
+            }
+        );
+
+        if (!response.ok) {
+            console.error("Turnix request failed:", response.status);
+            return res.status(502).json({
+                error: "Could not get TURN credentials"
+            });
+        }
+
+        const data = await response.json();
+
+        if (!Array.isArray(data.iceServers) || !data.iceServers.length) {
+            console.error("Invalid Turnix ICE response");
+            return res.status(502).json({
+                error: "Invalid TURN response"
+            });
+        }
+
+        res.set("Cache-Control", "private, no-store");
+        return res.json({
+            iceServers: data.iceServers
+        });
+
+    } catch (error) {
+        console.error("Turnix error:", error.name);
+        return res.status(502).json({
+            error: "TURN connection failed"
+        });
+    }
 });
 function publicUser(user) {
     return {
