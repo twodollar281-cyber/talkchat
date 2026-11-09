@@ -1545,6 +1545,7 @@ function igShort(m) {
   if (!m) return "Mesaj";
   if (m.deleted) return "Mesaj silindi";
   if (m.text) return m.text.length > 60 ? m.text.slice(0, 60) + "…" : m.text;
+  if (m.sticker) return "◆ " + (m.sticker.label || "Sticker");
   if (m.gif) return "🎞 GIF";
   if ((m.attachmentType || "").startsWith("image/")) return "📷 Şəkil";
   return "📎 " + (m.attachmentName || "Fayl");
@@ -1642,6 +1643,7 @@ function igBubble(m, byId) {
   const isImg = (m.attachmentType || "").startsWith("image/");
   const isAudio = (m.attachmentType || "").startsWith("audio/");
   let body = "";
+  if (m.sticker) body += '<span class="tc-sticker-message" role="img" aria-label="' + esc(m.sticker.label || "Sticker") + '"><span class="tc-sticker-art" data-sticker-category="' + esc(m.sticker.category || "") + '">' + esc(m.sticker.emoji || "✨") + '</span><small>' + esc(m.sticker.label || "Sticker") + '</small></span>';
   if (m.attachment) {
     if (m.gif) {
       const previewUrl = m.gif.previewUrl || m.attachment;
@@ -1829,6 +1831,90 @@ async function igGifToggleFavorite(gif) {
   } catch (error) {
     alert(error.message || "Sevimli GIF yenilənmədi.");
   }
+}
+
+const igStickerState = { tab: "search", stickers: [], categories: [], favorites: [], recent: [], category: "", searchTimer: null, request: 0 };
+function igStickerRenderCategories() {
+  igEl("igStickerCategories").innerHTML = igStickerState.categories.map(category =>
+    '<button type="button" class="tc-sticker-category' + (igStickerState.category === category.id ? ' active' : '') + '" data-sticker-category="' + encodeURIComponent(category.id) + '">' + esc(category.name) + '</button>'
+  ).join("");
+}
+function igStickerRender() {
+  const dialog = igEl("igStickerDialog");
+  dialog.querySelectorAll("[data-sticker-tab]").forEach(button => button.classList.toggle("active", button.dataset.stickerTab === igStickerState.tab));
+  igEl("igStickerSearchControls").hidden = igStickerState.tab !== "search";
+  const list = igStickerState.tab === "favorites" ? igStickerState.favorites : igStickerState.tab === "recent" ? igStickerState.recent : igStickerState.stickers;
+  const empty = igStickerState.tab === "favorites" ? "Sevimli sticker yoxdur." : igStickerState.tab === "recent" ? "Son istifadə etdiyin sticker yoxdur." : "Sticker tapılmadı.";
+  igEl("igStickerGrid").innerHTML = list.length ? list.map(sticker => {
+    const favorite = igStickerState.favorites.some(item => item.id === sticker.id);
+    return '<article class="tc-sticker-card"><button type="button" class="tc-sticker-send" data-sticker-send="' + esc(sticker.id) + '" aria-label="' + esc(sticker.label || "Sticker göndər") + '"><span class="tc-sticker-art" data-sticker-category="' + esc(sticker.category || "") + '">' + esc(sticker.emoji || "✨") + '</span><span class="tc-sticker-label">' + esc(sticker.label || "Sticker") + '</span></button><button type="button" class="tc-sticker-favorite' + (favorite ? ' saved' : '') + '" data-sticker-favorite="' + esc(sticker.id) + '" aria-label="' + (favorite ? 'Sevimlilərdən çıxar' : 'Sevimlilərə əlavə et') + '">' + (favorite ? '★' : '☆') + '</button></article>';
+  }).join("") : '<p class="tc-sticker-empty">' + empty + '</p>';
+}
+async function igStickerLoadPreferences() {
+  const data = await api("/api/stickers/preferences");
+  igStickerState.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+  igStickerState.recent = Array.isArray(data.recent) ? data.recent : [];
+  igStickerRender();
+}
+async function igStickerLoadCategories() {
+  const data = await api("/api/stickers/categories");
+  igStickerState.categories = Array.isArray(data) ? data : [];
+  igStickerRenderCategories();
+}
+async function igStickerSearch(query, category) {
+  const request = ++igStickerState.request;
+  igEl("igStickerStatus").textContent = "Sticker-lər yüklənir…";
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (category) params.set("category", category);
+  try {
+    const data = await api("/api/stickers" + (params.toString() ? "?" + params.toString() : ""));
+    if (request !== igStickerState.request) return;
+    igStickerState.stickers = Array.isArray(data) ? data : [];
+    igEl("igStickerStatus").textContent = "";
+    igStickerRender();
+  } catch (error) {
+    if (request !== igStickerState.request) return;
+    igStickerState.stickers = [];
+    igEl("igStickerStatus").textContent = error.message;
+    igStickerRender();
+  }
+}
+async function igStickerOpen() {
+  if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+  const dialog = igEl("igStickerDialog");
+  if (!dialog.open) dialog.showModal();
+  igStickerState.tab = "search";
+  igStickerState.category = "";
+  igStickerRender();
+  try { await Promise.all([igStickerLoadPreferences(), igStickerLoadCategories()]); }
+  catch (error) { igEl("igStickerStatus").textContent = error.message; }
+  await igStickerSearch(igEl("igStickerSearch").value.trim(), "");
+  igEl("igStickerSearch").focus();
+}
+async function igStickerSend(stickerId) {
+  if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+  const replyTo = IG.replyTo ? IG.replyTo.id : "";
+  try {
+    await api("/api/conversations/" + encodeURIComponent(activeConversation) + "/messages", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "", replyTo, stickerId })
+    });
+    IG.replyTo = null;
+    igRenderReply();
+    igEl("igStickerDialog").close();
+    await Promise.all([igLoadMessages(false), loadConversations(), igStickerLoadPreferences()]);
+  } catch (error) { alert(error.message || "Sticker göndərilmədi."); }
+}
+async function igStickerToggleFavorite(stickerId) {
+  try {
+    const data = await api("/api/stickers/favorites", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stickerId })
+    });
+    igStickerState.favorites = Array.isArray(data.favorites) ? data.favorites : [];
+    igStickerRender();
+  } catch (error) { alert(error.message || "Sevimli sticker yenilənmədi."); }
 }
 
 async function igSendTo(text) {
@@ -2177,6 +2263,37 @@ async function igStartWith(username) {
       if (favorite) igGifToggleFavorite(gif);
       else igGifSend(gif);
     } catch { alert("GIF məlumatı oxunmadı."); }
+  });
+
+  igEl("igStickerButton").addEventListener("click", igStickerOpen);
+  igEl("igStickerClose").addEventListener("click", () => igEl("igStickerDialog").close());
+  igEl("igStickerDialog").addEventListener("click", event => {
+    if (event.target === igEl("igStickerDialog")) igEl("igStickerDialog").close();
+    const tab = event.target.closest("[data-sticker-tab]");
+    if (tab) {
+      igStickerState.tab = tab.dataset.stickerTab;
+      igStickerRender();
+      if (igStickerState.tab === "search" && !igStickerState.stickers.length) igStickerSearch(igEl("igStickerSearch").value.trim(), igStickerState.category);
+    }
+  });
+  igEl("igStickerSearch").addEventListener("input", () => {
+    clearTimeout(igStickerState.searchTimer);
+    igStickerState.searchTimer = setTimeout(() => igStickerSearch(igEl("igStickerSearch").value.trim(), igStickerState.category), 180);
+  });
+  igEl("igStickerCategories").addEventListener("click", event => {
+    const button = event.target.closest("[data-sticker-category]");
+    if (!button) return;
+    igStickerState.category = igStickerState.category === decodeURIComponent(button.dataset.stickerCategory) ? "" : decodeURIComponent(button.dataset.stickerCategory);
+    igStickerRenderCategories();
+    igStickerSearch(igEl("igStickerSearch").value.trim(), igStickerState.category);
+  });
+  igEl("igStickerGrid").addEventListener("click", event => {
+    const favorite = event.target.closest("[data-sticker-favorite]");
+    const send = event.target.closest("[data-sticker-send]");
+    const button = favorite || send;
+    if (!button) return;
+    if (favorite) igStickerToggleFavorite(favorite.dataset.stickerFavorite);
+    else igStickerSend(send.dataset.stickerSend);
   });
 
 })();

@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="social.css?v=1">
   <link rel="stylesheet" href="talkchat-premium.css?v=2">
   <link rel="stylesheet" href="gif-picker.css?v=1">
+  <link rel="stylesheet" href="sticker-picker.css?v=1">
   <link rel="stylesheet" href="admin.css?v=1">
 </head>
 <body>
@@ -258,6 +259,7 @@
                 </label>
                 <button type="button" id="tcVoiceRecord" class="ig-ibtn tc-voice-record" aria-label="Səsli mesaj yaz" title="Səsli mesaj yaz" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"></path></svg></button>
                 <button type="button" id="igGifButton" class="ig-gif-open" aria-label="GIF seç">GIF</button>
+                <button type="button" id="igStickerButton" class="tc-sticker-open" aria-label="Sticker seç">✦</button>
                 <input id="dmText" placeholder="Mesaj yaz..." maxlength="2000" autocomplete="off">
                 <button type="submit" id="dmSend">Göndər</button>
               </form>
@@ -275,6 +277,22 @@
                   </div>
                   <p id="igGifStatus" class="ig-gif-status" role="status" aria-live="polite"></p>
                   <div id="igGifGrid" class="ig-gif-grid"></div>
+                </section>
+              </dialog>
+              <dialog id="igStickerDialog" class="tc-sticker-dialog" aria-labelledby="igStickerTitle">
+                <section class="tc-sticker-panel">
+                  <header class="tc-sticker-header"><div><h2 id="igStickerTitle">Sticker-lər</h2><p>Söhbətə uyğun sticker seç</p></div><button type="button" id="igStickerClose" class="tc-sticker-close" aria-label="Bağla">×</button></header>
+                  <nav class="tc-sticker-tabs" aria-label="Sticker bölmələri">
+                    <button type="button" class="active" data-sticker-tab="search">Axtar</button>
+                    <button type="button" data-sticker-tab="recent">Son istifadə</button>
+                    <button type="button" data-sticker-tab="favorites">Sevimlilər</button>
+                  </nav>
+                  <div id="igStickerSearchControls" class="tc-sticker-search-controls">
+                    <label class="tc-sticker-search"><span aria-hidden="true">⌕</span><input id="igStickerSearch" type="search" placeholder="Sticker axtar..." autocomplete="off"></label>
+                    <div id="igStickerCategories" class="tc-sticker-categories" aria-label="Sticker kateqoriyaları"></div>
+                  </div>
+                  <p id="igStickerStatus" class="tc-sticker-status" role="status" aria-live="polite"></p>
+                  <div id="igStickerGrid" class="tc-sticker-grid"></div>
                 </section>
               </dialog>
             </div>
@@ -448,7 +466,7 @@
   <div id="tcToastRegion" class="tc-toast-region" aria-live="polite" aria-atomic="true"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="talkchat-2027.js?v=1"></script>
-  <script src="app.js?v=2027gif2"></script>
+  <script src="app.js?v=2027sticker1"></script>
   <script src="social.js?v=1"></script>
   <script src="admin.js?v=1"></script>
   <script src="tc-mobile-chat.js?v=1"></script>

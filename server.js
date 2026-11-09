@@ -66,6 +66,52 @@ const conversations = () => readJSON("conversations.json");
 const saveConversations = value => saveJSON("conversations.json", value);
 const messages = () => readJSON("messages.json");
 const saveMessages = value => saveJSON("messages.json", value);
+const STICKER_PACK = [
+    { id: "love-purple-heart", category: "Sevgi", emoji: "💜", label: "Bənövşəyi ürək", keywords: "love heart sevgi ürək aşk kalp" },
+    { id: "love-sparkling-heart", category: "Sevgi", emoji: "💖", label: "Parlaq ürək", keywords: "love heart sevgi parlaq sparkle" },
+    { id: "love-hug", category: "Sevgi", emoji: "🫶", label: "Qəlbdən qucaq", keywords: "love hug sevgi qucaq əl" },
+    { id: "love-kiss", category: "Sevgi", emoji: "😘", label: "Öpüş", keywords: "kiss love öpüş öpücük" },
+    { id: "love-flowers", category: "Sevgi", emoji: "💐", label: "Gül dəstəsi", keywords: "flower rose love gül çiçək" },
+    { id: "react-laugh", category: "Reaksiyalar", emoji: "😂", label: "Gülməkdən ağlayıram", keywords: "laugh funny gülmək gülməli" },
+    { id: "react-rofl", category: "Reaksiyalar", emoji: "🤣", label: "Daha çox gülüş", keywords: "laugh rofl funny gülüş" },
+    { id: "react-wow", category: "Reaksiyalar", emoji: "😮", label: "Vay!", keywords: "wow surprised təəccüb vay" },
+    { id: "react-cry", category: "Reaksiyalar", emoji: "😭", label: "Çox kövrəldim", keywords: "cry sad ağlamaq kədər" },
+    { id: "react-clap", category: "Reaksiyalar", emoji: "👏", label: "Alqış", keywords: "clap bravo alqış" },
+    { id: "react-thumbs", category: "Reaksiyalar", emoji: "👍", label: "Bəyəndim", keywords: "like yes thumbs bəyənirəm" },
+    { id: "react-dislike", category: "Reaksiyalar", emoji: "👎", label: "Bəyənmədim", keywords: "dislike no thumbs bəyənmədim" },
+    { id: "react-pray", category: "Reaksiyalar", emoji: "🙏", label: "Təşəkkürlər", keywords: "thanks pray please təşəkkür sağol" },
+    { id: "mood-cool", category: "Əhval", emoji: "😎", label: "Hər şey nəzarətdədir", keywords: "cool sunglasses cool əla" },
+    { id: "mood-thinking", category: "Əhval", emoji: "🤔", label: "Fikirləşirəm", keywords: "think thinking hmm düşünürəm" },
+    { id: "mood-sleepy", category: "Əhval", emoji: "😴", label: "Yuxum gəlir", keywords: "sleep tired yuxu yorğun" },
+    { id: "mood-fire", category: "Əhval", emoji: "🔥", label: "Əla alındı", keywords: "fire hot awesome əla super" },
+    { id: "mood-please", category: "Əhval", emoji: "🥺", label: "Xahiş edirəm", keywords: "please cute xahiş rica" },
+    { id: "fun-cat", category: "Əyləncə", emoji: "😹", label: "Gülən pişik", keywords: "cat funny pişik gülməli" },
+    { id: "fun-frog", category: "Əyləncə", emoji: "🐸", label: "Şən qurbağa", keywords: "frog funny qurbağa" },
+    { id: "fun-panda", category: "Əyləncə", emoji: "🐼", label: "Panda", keywords: "panda bear ayı" },
+    { id: "fun-unicorn", category: "Əyləncə", emoji: "🦄", label: "Sehrli təkbuynuz", keywords: "unicorn magic sehrli" },
+    { id: "party-confetti", category: "Bayram", emoji: "🎉", label: "Təbriklər!", keywords: "party celebrate təbrik bayram" },
+    { id: "party-sparkles", category: "Bayram", emoji: "✨", label: "Parıltı", keywords: "sparkle magic parıltı sehr" },
+    { id: "party-balloon", category: "Bayram", emoji: "🎈", label: "Bayram şarı", keywords: "balloon party şar" },
+    { id: "food-pizza", category: "Yemək", emoji: "🍕", label: "Pizza vaxtıdır", keywords: "food pizza yemək" },
+    { id: "food-tea", category: "Yemək", emoji: "🧋", label: "Çay fasiləsi", keywords: "tea drink boba çay içki" },
+    { id: "food-strawberry", category: "Yemək", emoji: "🍓", label: "Çiyələk", keywords: "food fruit strawberry çiyələk meyvə" }
+].map(sticker => Object.freeze(sticker));
+const findSticker = id => STICKER_PACK.find(sticker => sticker.id === String(id || "")) || null;
+const stickerPreferences = () => {
+    const value = readJSON("stickerPreferences.json", {});
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+};
+const saveStickerPreferences = value => saveJSON("stickerPreferences.json", value);
+function rememberSticker(username, sticker) {
+    const all = stickerPreferences();
+    const preferences = all[username] || { favorites: [], recent: [] };
+    const recent = Array.isArray(preferences.recent) ? preferences.recent : [];
+    preferences.recent = [sticker.id, ...recent.filter(id => id !== sticker.id)].slice(0, 30);
+    preferences.favorites = Array.isArray(preferences.favorites) ? preferences.favorites : [];
+    all[username] = preferences;
+    saveStickerPreferences(all);
+}
+
 const gifPreferences = () => {
     const value = readJSON("gifPreferences.json", {});
     return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -1615,6 +1661,47 @@ app.post("/api/gifs/favorites", requireAuth, (req, res) => {
     res.json({ favorites: preferences.favorites });
 });
 
+app.get("/api/stickers/categories", requireAuth, (_req, res) => {
+    const categories = [...new Set(STICKER_PACK.map(sticker => sticker.category))];
+    res.set("Cache-Control", "private, no-store");
+    res.json(categories.map(name => ({ id: name, name })));
+});
+app.get("/api/stickers", requireAuth, (req, res) => {
+    const query = String(req.query.q || "").trim().normalize("NFKC").toLocaleLowerCase("az").slice(0, 100);
+    const category = String(req.query.category || "").trim().slice(0, 60);
+    const results = STICKER_PACK.filter(sticker => {
+        if (category && sticker.category !== category) return false;
+        if (!query) return true;
+        const searchable = (sticker.label + " " + sticker.category + " " + sticker.emoji + " " + sticker.keywords).normalize("NFKC").toLocaleLowerCase("az");
+        return searchable.includes(query);
+    }).slice(0, 80);
+    res.json(results.map(({ id, category: group, emoji, label }) => ({ id, category: group, emoji, label })));
+});
+app.get("/api/stickers/preferences", requireAuth, (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    const preferences = stickerPreferences()[currentUser(req)] || {};
+    const safeList = ids => (Array.isArray(ids) ? ids : []).map(findSticker).filter(Boolean).map(({ id, category, emoji, label }) => ({ id, category, emoji, label }));
+    res.json({ favorites: safeList(preferences.favorites), recent: safeList(preferences.recent) });
+});
+app.post("/api/stickers/favorites", requireAuth, (req, res) => {
+    const sticker = findSticker(req.body && req.body.stickerId);
+    if (!sticker) return res.status(400).json({ error: "Sticker məlumatı düzgün deyil." });
+    const me = currentUser(req);
+    const all = stickerPreferences();
+    const preferences = all[me] || { favorites: [], recent: [] };
+    preferences.favorites = Array.isArray(preferences.favorites) ? preferences.favorites : [];
+    const index = preferences.favorites.indexOf(sticker.id);
+    if (index >= 0) preferences.favorites.splice(index, 1);
+    else {
+        if (preferences.favorites.length >= 120) return res.status(400).json({ error: "Ən çox 120 sticker-i sevimlilərə əlavə edə bilərsən." });
+        preferences.favorites.unshift(sticker.id);
+    }
+    preferences.recent = Array.isArray(preferences.recent) ? preferences.recent : [];
+    all[me] = preferences;
+    saveStickerPreferences(all);
+    res.json({ favorites: preferences.favorites.map(findSticker).filter(Boolean).map(({ id, category, emoji, label }) => ({ id, category, emoji, label })) });
+});
+
 app.get("/api/conversations/:id/messages", requireAuth, (req, res) => {
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
@@ -1661,8 +1748,11 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
     const gifInput = req.body && req.body.gif;
     const gif = gifInput ? normalizeGifPayload(gifInput) : null;
     if (gifInput && !gif) return res.status(400).json({ error: "GIF məlumatı düzgün deyil." });
-    if (gif && req.file) return res.status(400).json({ error: "Eyni mesajda fayl və GIF göndərmək olmur." });
-    if (!text && !req.file && !gif) return res.status(400).json({ error: "Mesaj boş ola bilməz." });
+    const stickerId = String((req.body && req.body.stickerId) || "").trim();
+    const sticker = stickerId ? findSticker(stickerId) : null;
+    if (stickerId && !sticker) return res.status(400).json({ error: "Sticker tapılmadı." });
+    if ((gif && req.file) || (sticker && (req.file || gif))) return res.status(400).json({ error: "Eyni mesajda yalnız bir media göndərmək olar." });
+    if (!text && !req.file && !gif && !sticker) return res.status(400).json({ error: "Mesaj boş ola bilməz." });
     const replyId = String(req.body.replyTo || "");
     const replyTarget = replyId ? messages().find(m => m.id === replyId && m.conversationId === convo.id) : null;
     const recipients = convo.participants.filter(x => x !== currentUser(req));
@@ -1673,6 +1763,7 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
         attachmentName: req.file ? req.file.originalname.slice(0, 100) : gif ? gif.title : "",
         attachmentType: req.file ? req.file.mimetype : gif ? "image/gif" : "",
         ...(gif ? { gif } : {}),
+        ...(sticker ? { sticker: { id: sticker.id, category: sticker.category, emoji: sticker.emoji, label: sticker.label } } : {}),
         replyTo: replyTarget ? replyTarget.id : "",
         deleted: false,
         deliveredAt: recipients.some(to => onlineUsers.has(to)) ? new Date().toISOString() : "",
@@ -1682,6 +1773,10 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
     if (gif) {
         try { rememberGif(currentUser(req), gif); }
         catch (error) { console.error("GIF recent save failed:", error.message); }
+    }
+    if (sticker) {
+        try { rememberSticker(currentUser(req), sticker); }
+        catch (error) { console.error("Sticker recent save failed:", error.message); }
     }
     convo.participants.filter(x => x !== currentUser(req)).forEach(to => {
         io.to(`user:${to}`).emit("newMessage", { conversationId: convo.id });
