@@ -3422,3 +3422,9 @@ a { color: #c3a8ff; }
 .ig-forwarded { display: block; margin-bottom: 4px; font-size: 11px; opacity: .72; }
 .ig-forward-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
 .ig-forward-destination { min-height: 44px; text-align: left; }
+
+/* Voice messages */
+.tc-voice-record { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 38px; width: 38px; height: 38px; padding: 8px; border: 0; border-radius: 50%; background: transparent; color: var(--ig-txt); }
+.tc-voice-record svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tc-voice-record.recording { background: #7d2934; color: #fff; }
+.ig-audio { display: block; width: min(260px, 68vw); max-width: 100%; min-height: 40px; }

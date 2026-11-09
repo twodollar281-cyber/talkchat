@@ -1639,11 +1639,14 @@ function igBubble(m, byId) {
     quote = `<span class="ig-quote"><b>${esc(r ? (r.from === me ? "Sən" : "@" + r.from) : "Mesaj")}</b>${esc(igShort(r))}</span>`;
   }
   const isImg = (m.attachmentType || "").startsWith("image/");
+  const isAudio = (m.attachmentType || "").startsWith("audio/");
   let body = "";
   if (m.attachment) {
     body += isImg
       ? `<a href="${esc(m.attachment)}" target="_blank" rel="noopener"><img src="${esc(m.attachment)}" alt="Şəkil" loading="lazy"></a>`
-      : `<a class="ig-file" href="${esc(m.attachment)}" target="_blank" rel="noopener">📎 ${esc(m.attachmentName || "Fayl")}</a>`;
+      : isAudio
+        ? `<audio class="ig-audio" controls preload="metadata" src="${esc(m.attachment)}" aria-label="Səsli mesaj"></audio>`
+        : `<a class="ig-file" href="${esc(m.attachment)}" target="_blank" rel="noopener">📎 ${esc(m.attachmentName || "Fayl")}</a>`;
   }
   if (m.forwardedFrom) body += `<small class="ig-forwarded">Ötürülüb · @${esc(m.forwardedFrom)}</small>`;
   if (m.sharedPost) {
@@ -1928,6 +1931,54 @@ async function igStartWith(username) {
     try { await igStartWith(b.dataset.start); } catch (err) { alert(err.message); }
   });
 
+  let voiceRecorder = null, voiceStream = null, voiceChunks = [], voiceTargetConversation = "", voiceFailed = false;
+  const voiceButton = igEl("tcVoiceRecord");
+  function resetVoiceButton() {
+    voiceButton.disabled = false;
+    voiceButton.classList.remove("recording");
+    voiceButton.setAttribute("aria-pressed", "false");
+    voiceButton.setAttribute("aria-label", "Səsli mesaj yaz");
+    voiceButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"></path></svg>`;
+  }
+  voiceButton.addEventListener("click", async () => {
+    if (voiceRecorder && voiceRecorder.state === "recording") { voiceButton.disabled = true; voiceRecorder.stop(); return; }
+    if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return alert("Bu brauzer səs yazısını dəstəkləmir.");
+    try {
+      voiceTargetConversation = activeConversation; voiceFailed = false;
+      voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeTypes = ["audio/webm", "audio/ogg", "audio/mp4"];
+      const mimeType = mimeTypes.find(type => MediaRecorder.isTypeSupported?.(type));
+      const recorder = new MediaRecorder(voiceStream, mimeType ? { mimeType } : {});
+      voiceRecorder = recorder; voiceChunks = [];
+      recorder.addEventListener("dataavailable", event => { if (event.data?.size) voiceChunks.push(event.data); });
+      recorder.addEventListener("stop", () => {
+        if (voiceFailed) { voiceFailed = false; return; }
+        const type = (recorder.mimeType || voiceChunks[0]?.type || "audio/webm").split(";")[0].toLowerCase();
+        const blob = new Blob(voiceChunks, { type });
+        const target = voiceTargetConversation;
+        voiceStream?.getTracks().forEach(track => track.stop());
+        voiceStream = null; voiceRecorder = null; voiceChunks = []; voiceTargetConversation = "";
+        resetVoiceButton();
+        if (!blob.size) return alert("Səs yazısı boşdur.");
+        if (target !== activeConversation) return alert("Söhbət dəyişdiyi üçün səs yazısı əlavə edilmədi.");
+        if (blob.size > 30 * 1024 * 1024) return alert("Səs yazısı 30 MB-dan böyükdür.");
+        const ext = type === "audio/ogg" ? "ogg" : type === "audio/mp4" ? "m4a" : "webm";
+        IG.pendingFile = new File([blob], `voice-${Date.now()}.${ext}`, { type });
+        igRenderPending();
+      }, { once: true });
+      recorder.addEventListener("error", () => {
+        voiceFailed = true;
+        voiceStream?.getTracks().forEach(track => track.stop()); voiceStream = null; voiceRecorder = null; voiceChunks = []; voiceTargetConversation = ""; resetVoiceButton();
+        alert("Səs yazısı alınmadı.");
+      }, { once: true });
+      recorder.start(250);
+      voiceButton.classList.add("recording"); voiceButton.setAttribute("aria-pressed", "true"); voiceButton.setAttribute("aria-label", "Səs yazısını dayandır"); voiceButton.textContent = "■";
+    } catch (err) {
+      voiceStream?.getTracks().forEach(track => track.stop()); voiceStream = null; voiceRecorder = null; voiceTargetConversation = ""; resetVoiceButton();
+      alert(err.name === "NotAllowedError" ? "Mikrofon icazəsi verilmədi." : (err.message || "Səs yazısı başlatılmadı."));
+    }
+  });
   igEl("dmForm").addEventListener("submit", async e => {
     e.preventDefault();
     if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
