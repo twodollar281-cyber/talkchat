@@ -24,6 +24,7 @@
   <link rel="stylesheet" href="live-streams.css?v=1">
   <link rel="stylesheet" href="saved-collections.css?v=1">
   <link rel="stylesheet" href="chat-themes.css?v=1">
+  <link rel="stylesheet" href="ai-assistant.css?v=1">
 </head>
 <body>
   <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -117,6 +118,7 @@
         <button type="button" data-page="home" class="nav-item active"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span class="nav-item-label">Ana səhifə</span></button>
         <button type="button" data-page="discover" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5M10.8 7.5v6.6M7.5 10.8h6.6"/></svg></span><span class="nav-item-label">Discover</span></button>
         <button type="button" data-page="messages" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.5a8.5 8.5 0 0 1-12.2 7.7L3 21l1.7-4.8a8.5 8.5 0 1 1 15.8-4.7Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg></span><span class="nav-item-label">Mesajlar</span></button>
+         <button type="button" data-page="ai" class="nav-item"><span class="nav-item-icon" aria-hidden="true">✦</span><span class="nav-item-label">TalkChat AI</span></button>
         <button type="button" data-page="notifications" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg></span><span class="nav-item-label">Bildirişlər</span></button>
         <button type="button" data-page="profile" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c.8-3.6 3.4-5.5 7.5-5.5s6.7 1.9 7.5 5.5"/></svg></span><span class="nav-item-label">Profil</span></button>
       </nav>
@@ -351,6 +353,21 @@
         </div>
       </section>
 
+      <section id="aiPage" class="page tc-ai-page" hidden>
+        <header class="tc-ai-heading">
+          <div><span class="eyebrow">TALKCHAT · AI</span><h1>TalkChat AI</h1><p class="muted">Cloudflare Workers AI ilə suallarına cavab al.</p></div>
+          <button id="aiClearHistory" class="secondary" type="button" disabled>Tarixçəni sil</button>
+        </header>
+        <p class="tc-ai-disclosure">Bu tarixçə yalnız sənin TalkChat hesabında saxlanılır və digər istifadəçilərə göstərilmir. Suallar cavab yaratmaq üçün Cloudflare Workers AI-a göndərilir. Cloudflare standart, vəziyyətsiz inference sorğuları üçün məlumatı cavab verildikdən sonra saxlamadığını bildirir; əməliyyat metadatası yenə saxlanıla bilər. Model: @cf/zai-org/glm-4.7-flash. Limitlər: hesab üzrə gündə 8 sorğu (konfiqurasiya edilə bilər, maksimum 40), istifadəçi üzrə dəqiqədə 3 (maksimum 6). Bu limitlər billing zəmanəti deyil. AI yalnız hesab sahibi billing tənzimləmələrini yoxlayıb serverdə aktiv etdikdən sonra işləyir. <a href="https://developers.cloudflare.com/workers-ai/platform/pricing/" target="_blank" rel="noopener noreferrer">Workers AI qiymətləri</a>.</p>
+        <div id="aiAssistantMessages" class="tc-ai-messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
+        <form id="aiAssistantForm" class="tc-ai-form">
+          <label class="sr-only" for="aiAssistantInput">TalkChat AI-a mesaj</label>
+          <textarea id="aiAssistantInput" maxlength="2000" rows="3" placeholder="Sualını yaz…" required></textarea>
+          <button id="aiAssistantSend" class="primary" type="submit">Göndər</button>
+        </form>
+        <p id="aiAssistantStatus" class="status" role="status" aria-live="polite"></p>
+      </section>
+
       <section id="notificationsPage" class="page" hidden>
         <h1>Bildirişlər</h1><div id="notificationList" class="stack"></div>
       </section>
@@ -512,6 +529,7 @@
         <button type="button" data-page="live"><span aria-hidden="true">●</span>Canlı yayımlar</button>
         <button type="button" data-page="reels"><span aria-hidden="true">▶</span>Reels</button>
         <button type="button" data-page="messages"><span aria-hidden="true">▣</span>Mesajlar</button>
+        <button type="button" data-page="ai"><span aria-hidden="true">✦</span>TalkChat AI</button>
         <button type="button" data-page="notifications"><span aria-hidden="true">♧</span>Bildirişlər</button>
         <button type="button" data-page="profile"><span aria-hidden="true">◉</span>Profil</button>
         <button type="button" data-page="admin" id="adminMenuLink" hidden><span aria-hidden="true">⚙</span>Admin Paneli</button>
@@ -616,6 +634,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="talkchat-2027.js?v=1"></script>
   <script src="app.js?v=2027sticker1"></script>
+  <script src="ai-assistant.js?v=1"></script>
   <script src="chat-themes.js?v=1"></script>
   <script src="social.js?v=1"></script>
   <script src="saved-collections.js?v=1"></script>

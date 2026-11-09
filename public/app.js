@@ -42,6 +42,7 @@ function showPage(name) {
   if (name === "profile") loadMyPosts();
   if (name === "admin") window.TalkChatAdmin?.load();
   if (name === "live") window.TalkChatLive?.load();
+  if (name === "ai") window.TalkChatAI?.load();
   if (name === "profile") window.TalkChatCollections?.load();
 }
 document.querySelectorAll("[data-page]").forEach(b => b.addEventListener("click", () => showPage(b.dataset.page)));
