@@ -709,6 +709,7 @@ function publicUser(user) {
         bio: user.bio || "",
         avatar: user.avatar || "",
         link: user.link || "",
+        verified: user.verified === true,
         followersCount: (user.followers || []).length,
         followingCount: (user.following || []).length,
         isFollowing: false
@@ -725,7 +726,8 @@ function publicPost(post, userList = users()) {
         })),
         authorName: author?.displayName || "",
         authorAvatar: author?.avatar || "",
-        authorRole: roleOf(author)
+        authorRole: roleOf(author),
+        authorVerified: author?.verified === true
     };
 }
 function activeBan(user) {
@@ -1484,6 +1486,31 @@ app.post("/api/admin/users/:username/role", requireAuth, requireRole("owner"), (
         actionType: "role_changed", reason: `${reason} (${roleOf(target)})`
     });
     res.json({ username: target.username, role: roleOf(target) });
+});
+app.post("/api/admin/users/:username/verification", requireAuth, requireRole("owner"), (req, res) => {
+    const target = findAccount(req.params.username);
+    if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (typeof req.body?.verified !== "boolean")
+        return res.status(400).json({ error: "Təsdiq statusu düzgün deyil." });
+    const verified = req.body.verified;
+    const reason = String(req.body?.reason || "").trim().slice(0, 500);
+    if (reason.length < 3) return res.status(400).json({ error: "Səbəb ən azı 3 simvol olmalıdır." });
+    if ((target.verified === true) === verified)
+        return res.status(409).json({ error: "Hesabın təsdiq statusu artıq belədir." });
+
+    const list = users();
+    const account = list.find(user => user.username === target.username);
+    account.verified = verified;
+    account.verifiedAt = verified ? new Date().toISOString() : "";
+    account.verifiedBy = verified ? req.talkchatActor.username : "";
+    saveUsers(list);
+    appendAudit({
+        actorUsername: req.talkchatActor.username,
+        targetUsername: account.username,
+        actionType: verified ? "account_verified" : "account_unverified",
+        reason
+    });
+    res.json({ username: account.username, verified: account.verified });
 });
 app.post("/api/admin/users/:username/ban", requireAuth, requireRole("moderator"), (req, res) => {
     const target = findAccount(req.params.username);

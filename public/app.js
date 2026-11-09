@@ -152,6 +152,10 @@ function roleBadge(role) {
   return `<span class="tc-role-badge tc-role-${value.toLowerCase()}">[${value}]</span>`;
 }
 window.TalkChatRoleBadge = roleBadge;
+function verifiedBadge() {
+  return '<span class="tc-verified-badge" role="img" aria-label="Təsdiqlənmiş hesab" title="Təsdiqlənmiş hesab">✓</span>';
+}
+window.TalkChatVerifiedBadge = verifiedBadge;
 function postHTML(p) {
   const liked=(p.likes||[]).includes(me);
   const isReel=p.kind==="reel";
@@ -169,7 +173,7 @@ function postHTML(p) {
       ? `<button type="button" data-admin-delete-post="${esc(p.id)}" data-admin-delete-type="${isReel?"reel":"post"}">Məzmunu sil</button>`
       : `<button type="button" data-report-post="${esc(p.id)}">Şikayət et</button>`;
   return `<article class="post-card${isReel?" post-card-reel":""}" data-post="${esc(p.id)}" data-kind="${isReel?"reel":"post"}">
-    <div class="post-head">${avatar}<div class="post-author"><div class="post-user">${esc(authorName)} ${roleBadge(p.authorRole)}</div><small>@${esc(p.username)}</small><div class="post-date">${new Date(p.createdAt).toLocaleString(currentLang()==="en"?"en-US":currentLang()==="ru"?"ru-RU":currentLang()==="tr"?"tr-TR":"az-AZ")}</div></div>
+      <div class="post-head">${avatar}<div class="post-author"><div class="post-user">${esc(authorName)}${p.authorVerified ? verifiedBadge() : ""} ${roleBadge(p.authorRole)}</div><small>@${esc(p.username)}</small><div class="post-date">${new Date(p.createdAt).toLocaleString(currentLang()==="en"?"en-US":currentLang()==="ru"?"ru-RU":currentLang()==="tr"?"tr-TR":"az-AZ")}</div></div>
       <details class="post-more"><summary aria-label="Əlavə əməliyyatlar">···</summary><div class="post-more-menu">${menuActions}</div></details>
     </div>
     ${isReel?`<span class="post-kind-badge">▶ REELS</span>`:""}
@@ -215,7 +219,7 @@ $("searchInput").addEventListener("input",()=>{
     $("searchResults").innerHTML = window.TalkChat2027?.searchSkeleton?.() || "";
     try{
       const list=await api("/api/search?q="+encodeURIComponent(q));
-      $("searchResults").innerHTML=list.map(u=>`<div class="user-row">${avatarHTML(u)}<div class="user-info"><b>@${esc(u.username)} ${roleBadge(u.role)}</b><small>${esc(u.bio||"TalkChat istifadəçisi")}</small></div><button class="primary" data-open-user="${esc(u.username)}">Profil</button></div>`).join("")||"<p class='muted'>İstifadəçi tapılmadı.</p>";
+       $("searchResults").innerHTML=list.map(u=>`<div class="user-row">${avatarHTML(u)}<div class="user-info"><b>@${esc(u.username)} ${u.verified?verifiedBadge():""} ${roleBadge(u.role)}</b><small>${esc(u.bio||"TalkChat istifadəçisi")}</small></div><button class="primary" data-open-user="${esc(u.username)}">Profil</button></div>`).join("")||"<p class='muted'>İstifadəçi tapılmadı.</p>";
     }catch(e){$("searchResults").textContent=e.message;}
     finally{$("searchResults").removeAttribute("aria-busy");}
   },250);
@@ -228,7 +232,7 @@ async function loadMyProfile(){
     const u=await api("/api/profile");
     window.talkChatRole=u.role||"member";
     window.TalkChatAdmin?.syncRole(window.talkChatRole);
-    $("myUsername").textContent="@"+u.username;
+    $("myUsername").innerHTML="@"+esc(u.username)+(u.verified?verifiedBadge():"");
     $("myDisplayNameValue").textContent=u.displayName||u.username;
     $("myDisplayName").value=u.displayName||"";
     $("myLink").value=u.link||"";
@@ -286,7 +290,7 @@ async function openPublicProfile(name){
     const outgoing = friendRequests.outgoing.some(x => x.username === u.username);
     $("homePage").hidden=true;$("discoverPage").hidden=true;$("messagesPage").hidden=true;$("notificationsPage").hidden=true;$("profilePage").hidden=true;$("publicProfilePage").hidden=false;
     const profileLink=u.link?`<a class="profile-link" href="${esc(u.link)}" target="_blank" rel="noopener noreferrer">${esc(u.link.replace(/^https?:\/\//i,""))}</a>`:"";
-    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)}</h2><p class="public-username">@${esc(u.username)} ${roleBadge(u.role)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button>`}`;
+    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)} ${u.verified?verifiedBadge():""}</h2><p class="public-username">@${esc(u.username)} ${roleBadge(u.role)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button>`}`;
     $("friendButton")?.addEventListener("click", async()=>{
       try {
         if(incoming) {
@@ -1623,7 +1627,7 @@ function igRenderList() {
         const prev = c.lastMessage ? (c.lastFrom === me ? "Sən: " : "") + c.lastMessage : (group ? "Qrup söhbəti" : "Söhbətə başla");
         return `<button type="button" class="ig-item${c.unread ? " unread" : ""}${c.id === activeConversation ? " on" : ""}" data-convo="${esc(c.id)}">
           <span class="ig-avw">${group ? igAv("Q") : igAv(name, p && p.avatar)}${on ? '<i class="ig-dot"></i>' : ""}</span>
-          <span class="ig-mid"><span class="ig-name">${esc(name)}</span><span class="ig-prev">${esc(prev)}</span></span>
+          <span class="ig-mid"><span class="ig-name">${esc(name)}${!group && p?.verified ? verifiedBadge() : ""}</span><span class="ig-prev">${esc(prev)}</span></span>
           ${c.unread ? `<span class="ig-badge">${c.unread > 99 ? "99+" : c.unread}</span>` : ""}
         </button>`;
       }).join("")
@@ -1637,7 +1641,7 @@ function igRenderHead() {
   const group = c.type === "group";
   const name = group ? (c.name || "Qrup") : c.name;
   const p = group ? null : IG.profiles.get(c.name);
-  igEl("chatTitle").textContent = name;
+  igEl("chatTitle").innerHTML = esc(name) + (!group && p?.verified ? verifiedBadge() : "");
   igEl("chatAv").innerHTML = group ? igAv("Q") : igAv(name, p && p.avatar, true);
   const typing = IG.typers[c.id] && Date.now() < IG.typers[c.id];
   const sub = typing ? "yazır…" : group ? c.participants.length + " iştirakçı" : igStatus(c.name);

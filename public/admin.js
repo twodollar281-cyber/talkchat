@@ -54,6 +54,8 @@
   function auditHTML(item) {
     const labels = {
       owner_verified: "Owner təsdiqləndi",
+      account_verified: "Hesab təsdiqləndi",
+      account_unverified: "Hesab təsdiqi ləğv edildi",
       role_changed: "Rol dəyişdirildi",
       user_banned: "İstifadəçi banlandı",
       ban_lifted: "Ban qaldırıldı",
@@ -79,6 +81,7 @@
       ${banned ? `<div class="tc-admin-ban-note"><b>Ban aktivdir</b><span>${user.ban.until ? `Bitmə: ${escapeHTML(new Date(user.ban.until).toLocaleString())}` : "Daimi"}</span><small>${escapeHTML(user.ban.reason || "Səbəb göstərilməyib")}</small></div>` : ""}
       <details class="tc-admin-user-actions"><summary>İdarə et</summary><div class="tc-admin-action-box">
         ${owner ? `<label>Rol<select data-user-role="${escapeHTML(user.username)}"><option value="member" ${user.role === "member" ? "selected" : ""}>[MEMBER]</option><option value="moderator" ${user.role === "moderator" ? "selected" : ""}>[MODERATOR]</option><option value="admin" ${user.role === "admin" ? "selected" : ""}>[ADMIN]</option></select></label><input data-role-reason="${escapeHTML(user.username)}" maxlength="500" placeholder="Rol dəyişikliyi səbəbi">${!self ? `<button type="button" class="secondary" data-role-save="${escapeHTML(user.username)}">Rolu yadda saxla</button>` : `<small>Öz rolunu dəyişə bilməzsən.</small>`}` : ""}
+        ${owner ? `<label>Təsdiq səbəbi<input data-verification-reason="${escapeHTML(user.username)}" maxlength="500" placeholder="Ən azı 3 simvol"></label><button type="button" class="secondary" data-verification-toggle="${escapeHTML(user.username)}" data-verified="${user.verified ? "true" : "false"}">${user.verified ? "Təsdiqi ləğv et" : "Hesabı təsdiqlə"}</button>` : user.verified ? `<span class="tc-verified-status">✓ Təsdiqlənmiş hesab</span>` : ""}
         <label>Ban müddəti<select data-ban-duration="${escapeHTML(user.username)}">${durationOptions}</select></label>
         <textarea data-ban-reason="${escapeHTML(user.username)}" maxlength="500" placeholder="Ban səbəbi"></textarea>
         ${!banned && !self ? `<button type="button" class="tc-admin-danger" data-admin-ban="${escapeHTML(user.username)}">Ban et</button>` : ""}
@@ -158,6 +161,7 @@
 
   document.addEventListener("click", async event => {
     const roleButton = event.target.closest("[data-role-save]");
+    const verificationButton = event.target.closest("[data-verification-toggle]");
     const banButton = event.target.closest("[data-admin-ban]");
     const unbanButton = event.target.closest("[data-admin-unban]");
     const profileButton = event.target.closest("[data-admin-profile]");
@@ -165,7 +169,14 @@
     const deletePostButton = event.target.closest("[data-admin-delete-post]");
     const deleteCommentButton = event.target.closest("[data-admin-delete-comment]");
     try {
-      if (roleButton) {
+      if (verificationButton) {
+        const username = verificationButton.dataset.verificationToggle;
+        const reason = document.querySelector(`[data-verification-reason="${CSS.escape(username)}"]`)?.value || "";
+        await act(`/api/admin/users/${encodeURIComponent(username)}/verification`, {
+          verified: verificationButton.dataset.verified !== "true",
+          reason
+        });
+      } else if (roleButton) {
         const username = roleButton.dataset.roleSave;
         const role = document.querySelector(`[data-user-role="${CSS.escape(username)}"]`)?.value;
         const reason = document.querySelector(`[data-role-reason="${CSS.escape(username)}"]`)?.value || "";
