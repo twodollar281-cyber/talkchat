@@ -24,10 +24,6 @@ const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const supa = require("./supabaseStorage");
 
-if (process.env.NODE_ENV === "production" && !supa.enabled) {
-    throw new Error("Supabase Storage konfiqurasiyası production mühitində tələb olunur; lokal diskə fayl yazılmayacaq.");
-}
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -761,13 +757,25 @@ const allowedMime = new Set([
     "application/pdf", "text/plain",
     "application/zip", "application/x-zip-compressed"
 ]);
-const storage = supa.enabled ? supa.engine() : multer.diskStorage({
+const unavailableStorage = {
+    _handleFile(_req, _file, cb) {
+        const error = new Error("Supabase Storage hazır deyil. Render Environment-də SUPABASE_URL və SUPABASE_SERVICE_ROLE_KEY adlarını yoxlayın; lokal diskə yazılmayacaq.");
+        error.code = "SUPABASE_STORAGE_NOT_CONFIGURED";
+        error.status = 503;
+        cb(error);
+    },
+    _removeFile(_req, _file, cb) { cb(null); }
+};
+const storage = supa.enabled ? supa.engine() : process.env.NODE_ENV === "production" ? unavailableStorage : multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, UPLOADS),
     filename: (_req, file, cb) => {
         const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 10);
-        cb(null, `${crypto.randomUUID()}${ext}`);
+        cb(null, crypto.randomUUID() + ext);
     }
 });
+if (process.env.NODE_ENV === "production" && !supa.enabled) {
+    console.error("Supabase Storage konfiqurasiyası tapılmadı; tətbiq açıq qalacaq, fayl yükləmələri söndürülüb.");
+}
 const upload = multer({
     storage,
     limits: { fileSize: 30 * 1024 * 1024 },
@@ -1703,7 +1711,7 @@ app.delete("/api/message-requests/:id", requireAuth, (req, res) => {
 
 app.use((err, req, res, next) => {
     if (err instanceof multer.MulterError) return res.status(400).json({ error: "Fayl çox böyükdür və ya yükləmə xətası baş verdi (maksimum 30 MB)." });
-    if (err) return res.status(400).json({ error: err.message || "Xəta baş verdi." });
+    if (err) return res.status(err.status || 400).json({ error: err.message || "Xəta baş verdi.", code: err.code || undefined });
     next();
 });
 
