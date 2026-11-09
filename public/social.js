@@ -37,6 +37,13 @@
       button.setAttribute("aria-pressed", String(button.dataset.shareMode === mode));
     });
   }
+  function chooseReportReason() {
+    const options = ["Spam", "Taciz", "Uygunsuz içerik", "Sahte hesap", "Diğer"];
+    const answer = window.prompt("Şikayət səbəbini seç:\n" + options.map((value, index) => `${index + 1}. ${value}`).join("\n"), "1");
+    if (answer === null) return null;
+    const index = Number.parseInt(answer, 10) - 1;
+    return options[index] || null;
+  }
 
   function openShare(mode = "post") {
     setMenu(false);
@@ -226,11 +233,24 @@
 
     const reportButton = event.target.closest("[data-report-post]");
     if (reportButton) {
-      const reason = window.prompt("Səbəb (istəyə bağlı)", "");
+      const reason = chooseReportReason();
       if (reason === null) return;
+      if (!reason) { toast("Siyahıdan etibarlı səbəb seç.", "error"); return; }
       api("/api/posts/" + encodeURIComponent(reportButton.dataset.reportPost) + "/report", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason })
       }).then(() => toast("Paylaşım şikayət üçün göndərildi.")).catch(error => toast(error.message, "error"));
+      return;
+    }
+
+    const reportComment = event.target.closest("[data-report-comment]");
+    if (reportComment) {
+      const [postId, commentId] = reportComment.dataset.reportComment.split(":");
+      const reason = chooseReportReason();
+      if (reason === null) return;
+      if (!reason) { toast("Siyahıdan etibarlı səbəb seç.", "error"); return; }
+      api(`/api/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}/report`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason })
+      }).then(() => toast("Şərh şikayət üçün göndərildi.")).catch(error => toast(error.message, "error"));
     }
   });
 
@@ -284,6 +304,8 @@
       ? `<img src="${html(post.authorAvatar)}" alt="">`
       : `<span>${html((post.username || "?")[0].toUpperCase())}</span>`;
     const own = post.username === me;
+    const canModerate = ["owner", "admin", "moderator"].includes(window.talkChatRole);
+    const badge = window.TalkChatRoleBadge ? window.TalkChatRoleBadge(post.authorRole) : "";
     return `<article class="reel-slide" data-post="${html(post.id)}" data-kind="reel">
       <video class="reel-video" src="${html(post.media)}" muted loop playsinline preload="metadata" aria-label="${html(post.text || "Reels videosu")}"></video>
       <div class="reel-shade"></div>
@@ -293,11 +315,11 @@
         <button type="button" class="reel-action" data-reel-comments="${html(post.id)}" aria-label="Şərh yaz"><span>▢</span><small>${(post.comments || []).length}</small></button>
         <button type="button" class="reel-action" data-share-post="${html(post.id)}" aria-label="Göndər"><span>➤</span><small>Göndər</small></button>
         <details class="reel-more"><summary aria-label="Əlavə əməliyyatlar">···</summary><div class="post-more-menu">
-          ${own ? `<button type="button" data-edit-post="${html(post.id)}">Redaktə et</button><button type="button" data-delete-post="${html(post.id)}">Paylaşımı sil</button>` : `<button type="button" data-report-post="${html(post.id)}">Şikayət et</button>`}
+          ${own ? `<button type="button" data-edit-post="${html(post.id)}">Redaktə et</button><button type="button" data-delete-post="${html(post.id)}">Paylaşımı sil</button>` : canModerate ? `<button type="button" data-admin-delete-post="${html(post.id)}" data-admin-delete-type="reel">Məzmunu sil</button>` : `<button type="button" data-report-post="${html(post.id)}">Şikayət et</button>`}
         </div></details>
       </div>
       <div class="reel-caption">
-        <div class="reel-author"><span class="reel-avatar">${avatar}</span><span><b>${html(post.authorName || post.username)}</b><small>@${html(post.username)}</small></span><span class="reel-badge">REELS</span></div>
+        <div class="reel-author"><span class="reel-avatar">${avatar}</span><span><b>${html(post.authorName || post.username)} ${badge}</b><small>@${html(post.username)}</small></span><span class="reel-badge">REELS</span></div>
         ${post.text ? `<p>${html(post.text)}</p>` : ""}
       </div>
     </article>`;
@@ -373,8 +395,9 @@
   async function renderComments(postId) {
     const list = await api("/api/reels");
     const post = list.find(item => item.id === postId);
+    const canModerate = ["owner", "admin", "moderator"].includes(window.talkChatRole);
     $("reelCommentList").innerHTML = (post?.comments || []).map(comment =>
-      `<article class="reel-comment"><span class="avatar-fallback">${html((comment.username || "?")[0].toUpperCase())}</span><p><b>@${html(comment.username)}</b> ${html(comment.text)}</p></article>`
+      `<article class="reel-comment"><span class="avatar-fallback">${html((comment.username || "?")[0].toUpperCase())}</span><p><b>@${html(comment.username)}</b> ${window.TalkChatRoleBadge ? window.TalkChatRoleBadge(comment.role) : ""} ${html(comment.text)}<br><button type="button" class="tc-inline-mod" ${canModerate ? `data-admin-delete-comment="${html(comment.id)}"` : `data-report-comment="${html(postId)}:${html(comment.id)}"`}>${canModerate ? "Sil" : "Şikayət et"}</button></p></article>`
     ).join("") || `<div class="tc-empty-state"><b>Hələ şərh yoxdur</b><p>İlk şərhi sən yaz.</p></div>`;
   }
 
@@ -451,8 +474,11 @@
   window.TalkChatSocial = { loadReels, refreshMenuProfile: async () => {
     try {
       const user = await api("/api/profile");
+      window.talkChatRole = user.role || "member";
+      window.TalkChatAdmin?.syncRole(window.talkChatRole);
       $("menuDisplayName").textContent = user.displayName || user.username;
       $("menuUsername").textContent = "@" + user.username;
+      if ($("menuRoleBadge") && window.TalkChatRoleBadge) $("menuRoleBadge").innerHTML = window.TalkChatRoleBadge(user.role);
       $("menuAvatar").innerHTML = user.avatar
         ? `<img src="${html(user.avatar)}" alt="">`
         : html((user.username || "?")[0].toUpperCase());

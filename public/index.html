@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="talkchat-2027.css?v=1">
   <link rel="stylesheet" href="social.css?v=1">
   <link rel="stylesheet" href="talkchat-premium.css?v=2">
+  <link rel="stylesheet" href="admin.css?v=1">
 </head>
 <body>
   <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -83,6 +84,11 @@
             <button id="passwordToggle" type="button" aria-label="Şifrəni göstər" aria-pressed="false">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>
             </button>
+          </div>
+          <div id="ownerBootstrapField" class="owner-bootstrap-field" hidden>
+            <label class="field-label" for="ownerBootstrapSecret">Owner təsdiq kodu</label>
+            <input id="ownerBootstrapSecret" type="password" autocomplete="off" placeholder="Serverdəki owner kodu">
+            <small>Yalnız DevQrxyz hesabını serverdə təsdiqləmək üçündür.</small>
           </div>
           <button class="primary full" id="authSubmit" type="submit">Daxil ol</button>
         </form>
@@ -217,8 +223,8 @@
                   <button type="button" id="tcCallBtn" class="ig-hbtn" aria-label="Səsli zəng">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1-2-2z"/></svg>
                   </button>
-                  <button type="button" id="tcVideoCallBtn" class="ig-hbtn" aria-label="Görüntülü arama" title="Görüntülü arama">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 1-2-2zM16 10l5-3v10l-5-3"/></svg>
+                  <button type="button" id="tcVideoCallBtn" class="ig-hbtn" aria-label="Video zəng">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg>
                   </button>
                 </div>
               </header>
@@ -301,6 +307,31 @@
         <div id="publicProfile" class="profile-card"></div>
         <div id="publicPosts" class="feed"></div>
       </section>
+
+      <section id="adminPage" class="page tc-admin-page" hidden>
+        <header class="tc-admin-heading">
+          <div><span class="eyebrow">TALKCHAT · MODERATION</span><h1>Admin Paneli</h1><p class="muted">Hesabları, şikayətləri və son idarəetmə əməliyyatlarını izləyin.</p></div>
+          <button id="adminRefresh" class="secondary" type="button">Yenilə</button>
+        </header>
+        <div id="adminStats" class="tc-admin-stats" aria-live="polite"></div>
+        <div class="tc-admin-grid">
+          <section class="tc-admin-card">
+            <div class="tc-admin-card-head"><div><span class="eyebrow">HESABLAR</span><h2>İstifadəçi axtarışı</h2></div></div>
+            <form id="adminSearchForm" class="tc-admin-search"><input id="adminSearchInput" maxlength="60" placeholder="İstifadəçi adı və ya ad" autocomplete="off"><button class="primary" type="submit">Axtar</button></form>
+            <div id="adminUserList" class="tc-admin-list"></div>
+            <div id="adminProfile" class="tc-admin-profile" hidden></div>
+          </section>
+          <section class="tc-admin-card">
+            <div class="tc-admin-card-head"><div><span class="eyebrow">İNCELEME</span><h2>Şikayətlər</h2></div><select id="adminReportFilter" aria-label="Şikayət statusu"><option value="pending">Gözləyən</option><option value="resolved">Həll edildi</option><option value="rejected">Rədd edildi</option><option value="all">Hamısı</option></select></div>
+            <div id="adminReportList" class="tc-admin-list"></div>
+          </section>
+        </div>
+        <section class="tc-admin-card tc-admin-audit">
+          <div class="tc-admin-card-head"><div><span class="eyebrow">AUDIT LOG</span><h2>Son idarəetmə əməliyyatları</h2></div></div>
+          <div id="adminAuditList" class="tc-admin-list"></div>
+        </section>
+        <p id="adminStatus" class="status" aria-live="polite"></p>
+      </section>
     </main>
     </div>
 
@@ -320,7 +351,7 @@
       </header>
       <div class="tc-menu-user">
         <span class="tc-menu-avatar" id="menuAvatar">T</span>
-        <span><b id="menuDisplayName">TalkChat</b><small id="menuUsername">@username</small></span>
+        <span><b id="menuDisplayName">TalkChat</b><small id="menuUsername">@username</small><small id="menuRoleBadge" class="tc-role-badge"></small></span>
       </div>
       <nav class="tc-menu-links" aria-label="Əsas menyu">
         <button type="button" data-page="home"><span aria-hidden="true">⌂</span>Ana Səhifə</button>
@@ -329,6 +360,7 @@
         <button type="button" data-page="messages"><span aria-hidden="true">▣</span>Mesajlar</button>
         <button type="button" data-page="notifications"><span aria-hidden="true">♧</span>Bildirişlər</button>
         <button type="button" data-page="profile"><span aria-hidden="true">◉</span>Profil</button>
+        <button type="button" data-page="admin" id="adminMenuLink" hidden><span aria-hidden="true">⚙</span>Admin Paneli</button>
       </nav>
       <div class="tc-menu-share">
         <span class="eyebrow">YENİ PAYLAŞIM</span>
@@ -396,8 +428,9 @@
   <script src="talkchat-2027.js?v=1"></script>
   <script src="app.js?v=2027social1"></script>
   <script src="social.js?v=1"></script>
+  <script src="admin.js?v=1"></script>
   <script src="tc-mobile-chat.js?v=1"></script>
-  <script src="calls.js?v=4"></script>
-<script src="group-calls.js?v=2"></script>
+  <script src="calls.js?v=5"></script>
+<script src="group-calls.js?v=3"></script>
 </body>
 </html>
