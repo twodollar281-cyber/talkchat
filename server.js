@@ -1111,6 +1111,16 @@ require("./liveStreams").install({
     canViewProfile, canViewContent, isBlockedBetween,
     roleOf, canModerateUser, appendAudit
 });
+require("./savedCollections").installSavedCollections({
+    app, posts, readJSON, saveJSON, requireAuth, currentUser,
+    canViewContent, isBlockedBetween, publicPost
+});
+require("./chatThemes").installChatThemes({
+    app, readJSON, saveJSON, conversations, requireAuth, currentUser
+});
+require("./aiAssistant").installAIAssistant({
+    app, readJSON, saveJSON, requireAuth, currentUser, userRateLimit
+});
 
 const allowedMime = new Set([
     "image/jpeg", "image/png", "image/webp", "image/gif",

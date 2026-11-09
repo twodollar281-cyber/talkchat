@@ -8,6 +8,7 @@ window.TalkChatSocket = socket;
 let me = "";
 let scope = "all";
 let activeConversation = null;
+Object.defineProperty(window, "TalkChatActiveConversationId", { get: () => activeConversation });
 let conversationsCache = [];
 
 function esc(value="") {
@@ -41,6 +42,8 @@ function showPage(name) {
   if (name === "profile") loadMyPosts();
   if (name === "admin") window.TalkChatAdmin?.load();
   if (name === "live") window.TalkChatLive?.load();
+  if (name === "ai") window.TalkChatAI?.load();
+  if (name === "profile") window.TalkChatCollections?.load();
 }
 document.querySelectorAll("[data-page]").forEach(b => b.addEventListener("click", () => showPage(b.dataset.page)));
 $("loginTab").onclick = () => setAuthMode("login");
@@ -188,7 +191,7 @@ function postHTML(p) {
     </div>
     ${isReel?`<span class="post-kind-badge">▶ REELS</span>`:""}
     ${p.text?`<div class="post-text">${esc(p.text)}</div>`:""}${media}
-    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button><button type="button" data-share-post="${esc(p.id)}">Göndər</button></div>
+    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button><button type="button" data-share-post="${esc(p.id)}">Göndər</button><button type="button" data-save-post="${esc(p.id)}">Yadda saxla</button></div>
     <div class="comment-list">${comments}</div>
     <form class="comment-form" data-comment="${esc(p.id)}"><input name="text" placeholder="Şərh yaz..." maxlength="500" required><button class="primary">Göndər</button></form>
   </article>`;
@@ -1799,6 +1802,7 @@ function igRenderMsgs() {
 
 async function openConversation(id) {
   activeConversation = id;
+  window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id } }));
   IG.replyTo = null;
   IG.pendingFile = null;
   igRenderReply();
@@ -2239,6 +2243,7 @@ async function igStartWith(username) {
   igEl("tcMobileBack").onclick = () => {
     igEl("messagesPage").classList.remove("tc-chat-open");
     activeConversation = null;
+    window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id: null } }));
     igRenderList();
   };
   igEl("igInfo").onclick = () => {
