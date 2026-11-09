@@ -1744,6 +1744,79 @@ app.get("/api/conversations/:id/messages", requireAuth, (req, res) => {
     res.json(list.slice(-200));
 });
 
+app.get("/api/conversations/:id/files", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    const cursor = typeof req.query.before === "string" ? req.query.before : "";
+    const split = cursor.indexOf("|");
+    if (cursor && (split < 1 || cursor.length > 250)) return res.status(400).json({ error: "Fayl səhifəsi etibarsızdır." });
+    const beforeAt = split >= 0 ? cursor.slice(0, split) : "";
+    const beforeId = split >= 0 ? cursor.slice(split + 1) : "";
+    const query = typeof req.query.q === "string" ? req.query.q.trim().normalize("NFKC") : "";
+    if (query.length > 100) return res.status(400).json({ error: "Fayl axtarışı 100 simvoldan çox ola bilməz." });
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 50;
+    const files = messages().filter(message => message.conversationId === convo.id && !message.deleted)
+        .map(message => {
+            const rawPath = message.attachmentStoragePath ||
+                (typeof message.attachment === "string" && message.attachment.startsWith("/uploads/")
+                    ? message.attachment.slice("/uploads/".length) : "");
+            if (!rawPath || path.basename(rawPath) !== rawPath || rawPath === "." || rawPath === ".." ||
+                !/^[a-zA-Z0-9._-]{1,180}$/.test(rawPath)) return null;
+            return {
+                id: message.id, from: message.from,
+                name: String(message.attachmentName || "Fayl").replace(/\s+/g, " ").trim().slice(0, 120) || "Fayl",
+                type: String(message.attachmentType || "").slice(0, 100),
+                createdAt: message.createdAt || "",
+                url: `/uploads/${encodeURIComponent(rawPath)}`,
+                downloadUrl: `/api/conversations/${encodeURIComponent(convo.id)}/files/${encodeURIComponent(message.id)}/download`,
+                canDelete: message.from === me
+            };
+        }).filter(Boolean)
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)) || String(right.id).localeCompare(String(left.id)))
+        .filter(file => !query || String(file.name).normalize("NFKC").toLocaleLowerCase("az").includes(query.toLocaleLowerCase("az")))
+        .filter(file => !cursor || String(file.createdAt).localeCompare(beforeAt) < 0 ||
+            (String(file.createdAt) === beforeAt && String(file.id).localeCompare(beforeId) < 0));
+    const page = files.slice(0, limit + 1);
+    const hasMore = page.length > limit;
+    const results = page.slice(0, limit);
+    const last = results[results.length - 1];
+    res.set("Cache-Control", "private, no-store");
+    res.json({
+        files: results,
+        nextCursor: hasMore && last ? `${last.createdAt}|${last.id}` : ""
+    });
+});
+
+app.get("/api/conversations/:id/files/:mid/download", requireAuth, async (req, res) => {
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!convo) return res.status(404).json({ error: "Fayl tapılmadı." });
+    const message = messages().find(item => item.id === req.params.mid && item.conversationId === convo.id && !item.deleted);
+    if (!message) return res.status(404).json({ error: "Fayl tapılmadı." });
+    const rawPath = message.attachmentStoragePath ||
+        (typeof message.attachment === "string" && message.attachment.startsWith("/uploads/")
+            ? message.attachment.slice("/uploads/".length) : "");
+    if (!rawPath || path.basename(rawPath) !== rawPath || rawPath === "." || rawPath === ".." ||
+        !/^[a-zA-Z0-9._-]{1,180}$/.test(rawPath)) return res.status(404).json({ error: "Fayl tapılmadı." });
+    const downloadName = String(message.attachmentName || "download").replace(/[\r\n"]/g, "_").replace(/[\\/]/g, "_").slice(0, 120) || "download";
+    res.set("Cache-Control", "private, no-store");
+    if (supa.enabled) {
+        try {
+            return res.redirect(302, await supa.createSignedUrl(rawPath, 900, { download: downloadName }));
+        } catch (error) {
+            console.error("Supabase fayl yükləmə linki xətası:", error.message);
+            return res.status(503).json({ error: "Faylı hazırda yükləmək mümkün deyil." });
+        }
+    }
+    const filePath = path.join(UPLOADS, rawPath);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Fayl tapılmadı." });
+    return res.download(filePath, downloadName, error => {
+        if (error && !res.headersSent) res.status(404).json({ error: "Fayl tapılmadı." });
+    });
+});
+
 app.get("/api/conversations/:id/messages/search", requireAuth, (req, res) => {
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });

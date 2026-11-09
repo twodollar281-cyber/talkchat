@@ -41,9 +41,12 @@ function engine() {
     };
 }
 
-async function createSignedUrl(filename, expiresIn = 900) {
+async function createSignedUrl(filename, expiresIn = 900, options = null) {
     if (!enabled || !filename) throw new Error("Supabase Storage aktiv deyil.");
-    const { data, error } = await client.storage.from(BUCKET).createSignedUrl(filename, expiresIn);
+    const storage = client.storage.from(BUCKET);
+    const { data, error } = options
+        ? await storage.createSignedUrl(filename, expiresIn, options)
+        : await storage.createSignedUrl(filename, expiresIn);
     if (error) throw error;
     if (!data?.signedUrl) throw new Error("Supabase imzalı fayl linki yaratmadı.");
     return /^https?:\/\//i.test(data.signedUrl)

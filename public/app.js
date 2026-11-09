@@ -698,6 +698,18 @@ const translations = {
     "Paylaşıldı! 💜": "Paylaşıldı! 💜",
     "Paylaşım menyusundan ilk postunu əlavə et.": "Paylaşım menüsünden ilk gönderini ekle.",
     "Yeni aktivlik olanda burada görünəcək.": "Yeni etkinlik olduğunda burada görünecek.",
+    "Söhbət faylları": "Sohbet dosyaları",
+    "Paylaşılan fayllara bax, yüklə və idarə et": "Paylaşılan dosyalara göz at, indir ve yönet",
+    "Fayl adında axtar...": "Dosya adına göre ara...",
+    "Hələ fayl paylaşılmayıb.": "Henüz dosya paylaşılmadı.",
+    "Uyğun fayl tapılmadı.": "Uygun dosya bulunamadı.",
+    "Fayllar yüklənir…": "Dosyalar yükleniyor…",
+    "Fayllar yüklənə bilmədi.": "Dosyalar yüklenemedi.",
+    "Faylı aç": "Dosyayı aç",
+    "Yüklə": "İndir",
+    "Faylı sil": "Dosyayı sil",
+    "Bu mesajı və paylaşılmış faylı silmək istəyirsən?": "Bu mesajı ve paylaşılan dosyayı silmek istiyor musun?",
+    "Daha köhnə fayllar": "Daha eski dosyalar",
   },
   en: {
     "Ana səhifə": "Home",
@@ -996,6 +1008,18 @@ const translations = {
     "Reels paylaşıldı.": "Reel shared.",
     "Paylaşım menyusundan ilk postunu əlavə et.": "Use the sharing menu to add your first post.",
     "Yeni aktivlik olanda burada görünəcək.": "New activity will appear here.",
+    "Söhbət faylları": "Chat files",
+    "Paylaşılan fayllara bax, yüklə və idarə et": "Browse, download, and manage shared files",
+    "Fayl adında axtar...": "Search file names...",
+    "Hələ fayl paylaşılmayıb.": "No files shared yet.",
+    "Uyğun fayl tapılmadı.": "No matching files found.",
+    "Fayllar yüklənir…": "Loading files…",
+    "Fayllar yüklənə bilmədi.": "Couldn't load files.",
+    "Faylı aç": "Open file",
+    "Yüklə": "Download",
+    "Faylı sil": "Delete file",
+    "Bu mesajı və paylaşılmış faylı silmək istəyirsən?": "Delete this message and its shared file?",
+    "Daha köhnə fayllar": "Older files",
   },
   ru: {
     "Ana səhifə": "Главная",
@@ -1294,6 +1318,18 @@ const translations = {
     "Reels paylaşıldı.": "Reels опубликован.",
     "Paylaşım menyusundan ilk postunu əlavə et.": "Добавьте первую публикацию через меню.",
     "Yeni aktivlik olanda burada görünəcək.": "Новая активность появится здесь.",
+    "Söhbət faylları": "Файлы чата",
+    "Paylaşılan fayllara bax, yüklə və idarə et": "Просмотр, загрузка и управление общими файлами",
+    "Fayl adında axtar...": "Поиск по имени файла...",
+    "Hələ fayl paylaşılmayıb.": "Файлы пока не отправляли.",
+    "Uyğun fayl tapılmadı.": "Подходящие файлы не найдены.",
+    "Fayllar yüklənir…": "Загрузка файлов…",
+    "Fayllar yüklənə bilmədi.": "Не удалось загрузить файлы.",
+    "Faylı aç": "Открыть файл",
+    "Yüklə": "Скачать",
+    "Faylı sil": "Удалить файл",
+    "Bu mesajı və paylaşılmış faylı silmək istəyirsən?": "Удалить это сообщение и общий файл?",
+    "Daha köhnə fayllar": "Более старые файлы",
   },
   az: {}
 };
@@ -1917,6 +1953,83 @@ async function igStickerToggleFavorite(stickerId) {
   } catch (error) { alert(error.message || "Sevimli sticker yenilənmədi."); }
 }
 
+const igFilesState = { files: [], before: "", request: 0, searchTimer: null };
+function igFilesRender() {
+  const box = igEl("tcSharedFilesList");
+  const query = igEl("tcSharedFilesFilter").value.trim().toLocaleLowerCase();
+  const files = igFilesState.files.filter(file => !query || String(file.name || "").toLocaleLowerCase().includes(query));
+  if (!files.length) {
+    box.innerHTML = '<p class="tc-shared-files-empty">' + (query ? "Uyğun fayl tapılmadı." : "Hələ fayl paylaşılmayıb.") + '</p>';
+    return;
+  }
+  box.innerHTML = files.map(file => {
+    const preview = String(file.type || "").startsWith("image/")
+      ? `<img src="${esc(file.url)}" alt="" loading="lazy">`
+      : String(file.type || "").startsWith("video/") ? "▶" : String(file.type || "").startsWith("audio/") ? "♫" : "📎";
+    const sender = file.from === me ? "Sən" : "@" + file.from;
+    return `<article class="tc-shared-file" role="listitem">
+      <div class="tc-shared-file-thumb">${preview}</div>
+      <div class="tc-shared-file-main"><strong title="${esc(file.name)}">${esc(file.name)}</strong><small>${esc(sender)} · ${esc(igTime(file.createdAt))}</small></div>
+      <div class="tc-shared-file-actions">
+        <a href="${esc(file.url)}" target="_blank" rel="noopener noreferrer">Faylı aç</a>
+        <a href="${esc(file.downloadUrl)}">Yüklə</a>
+        ${file.canDelete ? `<button type="button" data-file-delete="${esc(file.id)}">Faylı sil</button>` : ""}
+      </div>
+    </article>`;
+  }).join("");
+}
+async function igFilesLoad(reset = true) {
+  const conversationId = activeConversation;
+  if (!conversationId) return;
+  const request = ++igFilesState.request;
+  if (reset) {
+    igFilesState.files = [];
+    igFilesState.before = "";
+    igEl("tcSharedFilesStatus").textContent = "Fayllar yüklənir…";
+    igFilesRender();
+  }
+  const params = new URLSearchParams({ limit: "50", q: igEl("tcSharedFilesFilter").value.trim() });
+  if (!reset && igFilesState.before) params.set("before", igFilesState.before);
+  igEl("tcSharedFilesMore").disabled = true;
+  try {
+    const data = await api(`/api/conversations/${encodeURIComponent(conversationId)}/files?${params.toString()}`);
+    if (request !== igFilesState.request || conversationId !== activeConversation) return;
+    const incoming = Array.isArray(data.files) ? data.files : [];
+    const existing = new Set(igFilesState.files.map(file => file.id));
+    igFilesState.files = reset ? incoming : [...igFilesState.files, ...incoming.filter(file => !existing.has(file.id))];
+    igFilesState.before = data.nextCursor || "";
+    igEl("tcSharedFilesStatus").textContent = "";
+    igEl("tcSharedFilesMore").hidden = !igFilesState.before;
+    igFilesRender();
+  } catch (error) {
+    if (request !== igFilesState.request) return;
+    igEl("tcSharedFilesStatus").textContent = error.message || "Fayllar yüklənə bilmədi.";
+    igEl("tcSharedFilesMore").hidden = true;
+  } finally {
+    if (request === igFilesState.request) igEl("tcSharedFilesMore").disabled = false;
+  }
+}
+async function igFilesOpen() {
+  if (!activeConversation) return alert("Əvvəlcə söhbət seç.");
+  const dialog = igEl("tcSharedFilesDialog");
+  if (!dialog.open) dialog.showModal();
+  igEl("tcSharedFilesFilter").value = "";
+  igEl("tcSharedFilesMore").hidden = true;
+  await igFilesLoad(true);
+  igEl("tcSharedFilesFilter").focus();
+}
+async function igFilesDelete(messageId) {
+  if (!activeConversation || !confirm("Bu mesajı və paylaşılmış faylı silmək istəyirsən?")) return;
+  try {
+    await api(`/api/conversations/${encodeURIComponent(activeConversation)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" });
+    igFilesState.files = igFilesState.files.filter(file => file.id !== messageId);
+    igFilesRender();
+    await Promise.all([igLoadMessages(false), loadConversations()]);
+  } catch (error) {
+    alert(error.message || "Fayl silinə bilmədi.");
+  }
+}
+
 async function igSendTo(text) {
   const fd = new FormData();
   fd.append("text", text);
@@ -2229,6 +2342,19 @@ async function igStartWith(username) {
     igRenderList();
     igRenderHead();
   });
+  igEl("tcFilesOpen").addEventListener("click", igFilesOpen);
+  igEl("tcSharedFilesClose").addEventListener("click", () => igEl("tcSharedFilesDialog").close());
+  igEl("tcSharedFilesDialog").addEventListener("click", event => {
+    if (event.target === igEl("tcSharedFilesDialog")) igEl("tcSharedFilesDialog").close();
+    const remove = event.target.closest("[data-file-delete]");
+    if (remove) igFilesDelete(remove.dataset.fileDelete);
+  });
+  igEl("tcSharedFilesFilter").addEventListener("input", () => {
+    clearTimeout(igFilesState.searchTimer);
+    igFilesState.searchTimer = setTimeout(() => igFilesLoad(true), 250);
+    igFilesRender();
+  });
+  igEl("tcSharedFilesMore").addEventListener("click", () => igFilesLoad(false));
   igEl("igGifButton").addEventListener("click", igGifOpen);
   igEl("igGifClose").addEventListener("click", () => igEl("igGifDialog").close());
   igEl("igGifDialog").addEventListener("click", event => {

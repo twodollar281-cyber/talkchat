@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="social.css?v=1">
   <link rel="stylesheet" href="talkchat-premium.css?v=2">
   <link rel="stylesheet" href="gif-picker.css?v=2">
+  <link rel="stylesheet" href="chat-files.css?v=1">
   <link rel="stylesheet" href="sticker-picker.css?v=1">
   <link rel="stylesheet" href="admin.css?v=1">
 </head>
@@ -222,6 +223,9 @@
                   <span class="ig-hmid"><strong id="chatTitle"></strong><small id="chatSub"></small></span>
                 </button>
                 <div class="ig-hacts">
+                  <button type="button" id="tcFilesOpen" class="ig-hbtn tc-files-open" aria-label="Söhbət faylları" title="Söhbət faylları">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg>
+                  </button>
                   <button type="button" id="tcMessageSearchToggle" class="ig-hbtn" aria-label="Mesajlarda axtar">⌕</button>
                   <button type="button" id="tcCallBtn" class="ig-hbtn" aria-label="Səsli zəng">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1-2-2z"/></svg>
@@ -233,6 +237,18 @@
               </header>
 
               <div id="tcMessageSearchPanel" class="tc-msg-search" hidden><div class="tc-msg-search-toolbar"><input id="tcMessageSearchInput" type="search" maxlength="100" placeholder="Mesajlarda axtar..." autocomplete="off"><button type="button" id="tcMessageSearchClose" class="ig-hbtn" aria-label="Axtarışı bağla">×</button></div><div id="tcMessageSearchResults" class="tc-msg-search-results" role="list" aria-live="polite"></div><button type="button" id="tcMessageSearchMore" class="ig-sheet-btn" hidden>Daha çox nəticə</button></div>
+              <dialog id="tcSharedFilesDialog" class="tc-shared-files-dialog" aria-labelledby="tcSharedFilesTitle">
+                <section class="tc-shared-files-panel">
+                  <header class="tc-shared-files-header">
+                    <div><h2 id="tcSharedFilesTitle">Söhbət faylları</h2><p>Paylaşılan fayllara bax, yüklə və idarə et</p></div>
+                    <button type="button" id="tcSharedFilesClose" class="ig-hbtn" aria-label="Bağla">×</button>
+                  </header>
+                  <label class="tc-shared-files-search"><span aria-hidden="true">⌕</span><input id="tcSharedFilesFilter" type="search" maxlength="100" placeholder="Fayl adında axtar..." autocomplete="off"></label>
+                  <p id="tcSharedFilesStatus" class="tc-shared-files-status" role="status" aria-live="polite"></p>
+                  <div id="tcSharedFilesList" class="tc-shared-files-list" role="list"></div>
+                  <button type="button" id="tcSharedFilesMore" class="tc-shared-files-more" hidden>Daha köhnə fayllar</button>
+                </section>
+              </dialog>
 
               <div id="chatMessages" class="ig-msgs"></div>
 
