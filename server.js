@@ -27,6 +27,10 @@ const supa = require("./supabaseStorage");
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+const PROFILE_THEMES = new Set(["violet", "ocean", "sunset", "forest"]);
+function normalizeProfileColor(value) {
+    return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : "#8257ff";
+}
 
 const DATA = path.join(__dirname, "data");
 const UPLOADS = path.join(__dirname, "public", "uploads");
@@ -709,6 +713,8 @@ function publicUser(user) {
         bio: user.bio || "",
         avatar: user.avatar || "",
         link: user.link || "",
+        profileTheme: PROFILE_THEMES.has(user.profileTheme) ? user.profileTheme : "violet",
+        profileColor: normalizeProfileColor(user.profileColor),
         verified: user.verified === true,
         followersCount: (user.followers || []).length,
         followingCount: (user.following || []).length,
@@ -969,7 +975,7 @@ app.post("/api/register", async (req, res) => {
         const user = {
             username: name, password: await bcrypt.hash(password, 12),
             role: "member", displayName: "", bio: "", avatar: "", avatarStoragePath: "",
-            link: "", followers: [], following: [],
+            link: "", profileTheme: "violet", profileColor: "#8257ff", followers: [], following: [],
             createdAt: new Date().toISOString()
         };
         list.push(user);
@@ -1055,6 +1061,10 @@ app.put("/api/profile", requireAuth, (req, res) => {
         return res.status(400).json({ error: "Bio maksimum 160 simvol ola bilər." });
     if (body.displayName !== undefined && (typeof body.displayName !== "string" || body.displayName.length > 50))
         return res.status(400).json({ error: "Ad maksimum 50 simvol ola bilər." });
+    if (body.profileTheme !== undefined && (typeof body.profileTheme !== "string" || !PROFILE_THEMES.has(body.profileTheme)))
+        return res.status(400).json({ error: "Profil mövzusu düzgün deyil." });
+    if (body.profileColor !== undefined && (typeof body.profileColor !== "string" || !/^#[0-9a-fA-F]{6}$/.test(body.profileColor)))
+        return res.status(400).json({ error: "Profil rəngi düzgün hex formatında olmalıdır." });
     let link = "";
     if (body.link !== undefined) {
         if (typeof body.link !== "string" || body.link.length > 200)
@@ -1076,6 +1086,8 @@ app.put("/api/profile", requireAuth, (req, res) => {
     if (body.bio !== undefined) user.bio = body.bio.trim();
     if (body.displayName !== undefined) user.displayName = body.displayName.trim();
     if (body.link !== undefined) user.link = link;
+    if (body.profileTheme !== undefined) user.profileTheme = body.profileTheme;
+    if (body.profileColor !== undefined) user.profileColor = body.profileColor.toLowerCase();
     saveUsers(list);
     res.json(publicUser(user));
 });

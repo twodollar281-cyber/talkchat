@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="chat-files.css?v=1">
   <link rel="stylesheet" href="sticker-picker.css?v=1">
   <link rel="stylesheet" href="admin.css?v=1">
+  <link rel="stylesheet" href="profile-customization.css?v=1">
 </head>
 <body>
   <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -349,6 +350,15 @@
           <textarea id="myBio" maxlength="160" placeholder="Özün haqqında yaz..."></textarea>
           <label class="profile-field-label" for="myLink">Link əlavə et</label>
           <input id="myLink" type="url" maxlength="200" placeholder="https://...">
+          <label class="profile-field-label" for="profileTheme">Profil mövzusu</label>
+          <select id="profileTheme">
+            <option value="violet">Bənövşəyi</option>
+            <option value="ocean">Okean</option>
+            <option value="sunset">Gün batımı</option>
+            <option value="forest">Meşə</option>
+          </select>
+          <label class="profile-field-label" for="profileColor">Vurğu rəngi</label>
+          <input id="profileColor" type="color" value="#8257ff" aria-label="Profil vurğu rəngi">
           <button id="saveBio" class="primary full">Profili yadda saxla</button>
           <p id="profileStatus" class="status"></p>
           <button id="logoutButton" class="secondary full">Çıxış</button>

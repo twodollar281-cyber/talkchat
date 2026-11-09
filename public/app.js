@@ -156,6 +156,13 @@ function verifiedBadge() {
   return '<span class="tc-verified-badge" role="img" aria-label="Təsdiqlənmiş hesab" title="Təsdiqlənmiş hesab">✓</span>';
 }
 window.TalkChatVerifiedBadge = verifiedBadge;
+const profileThemeNames = new Set(["violet", "ocean", "sunset", "forest"]);
+function applyProfileCustomization(node, profile) {
+  if (!node) return;
+  node.dataset.profileTheme = profileThemeNames.has(profile.profileTheme) ? profile.profileTheme : "violet";
+  const color = /^#[0-9a-fA-F]{6}$/.test(String(profile.profileColor || "")) ? profile.profileColor : "#8257ff";
+  node.style.setProperty("--profile-accent", color);
+}
 function postHTML(p) {
   const liked=(p.likes||[]).includes(me);
   const isReel=p.kind==="reel";
@@ -233,6 +240,9 @@ async function loadMyProfile(){
     window.talkChatRole=u.role||"member";
     window.TalkChatAdmin?.syncRole(window.talkChatRole);
     $("myUsername").innerHTML="@"+esc(u.username)+(u.verified?verifiedBadge():"");
+    $("profileTheme").value=profileThemeNames.has(u.profileTheme)?u.profileTheme:"violet";
+    $("profileColor").value=/^#[0-9a-fA-F]{6}$/.test(String(u.profileColor||""))?u.profileColor:"#8257ff";
+    applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
     $("myDisplayName").value=u.displayName||"";
     $("myLink").value=u.link||"";
@@ -260,8 +270,9 @@ async function loadMyPosts(){
 }
 $("saveBio").onclick=async()=>{
   try{
-    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value})});
+    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value,profileTheme:$("profileTheme").value,profileColor:$("profileColor").value})});
     $("profileStatus").textContent="Profil yadda saxlanıldı!";
+    applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
     $("myProfileLink").href=u.link||"";
     $("myProfileLink").textContent=u.link?u.link.replace(/^https?:\/\//i,""):"";
@@ -291,6 +302,7 @@ async function openPublicProfile(name){
     $("homePage").hidden=true;$("discoverPage").hidden=true;$("messagesPage").hidden=true;$("notificationsPage").hidden=true;$("profilePage").hidden=true;$("publicProfilePage").hidden=false;
     const profileLink=u.link?`<a class="profile-link" href="${esc(u.link)}" target="_blank" rel="noopener noreferrer">${esc(u.link.replace(/^https?:\/\//i,""))}</a>`:"";
     $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)} ${u.verified?verifiedBadge():""}</h2><p class="public-username">@${esc(u.username)} ${roleBadge(u.role)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button>`}`;
+    applyProfileCustomization($("publicProfile"),u);
     $("friendButton")?.addEventListener("click", async()=>{
       try {
         if(incoming) {
