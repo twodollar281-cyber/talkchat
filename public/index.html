@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="talkchat-2027.css?v=1">
   <link rel="stylesheet" href="social.css?v=1">
   <link rel="stylesheet" href="talkchat-premium.css?v=2">
-  <link rel="stylesheet" href="gif-picker.css?v=1">
+  <link rel="stylesheet" href="gif-picker.css?v=2">
   <link rel="stylesheet" href="sticker-picker.css?v=1">
   <link rel="stylesheet" href="admin.css?v=1">
 </head>
@@ -265,18 +265,19 @@
               </form>
               <dialog id="igGifDialog" class="ig-gif-dialog" aria-labelledby="igGifTitle">
                 <section class="ig-gif-panel">
-                  <header class="ig-gif-header"><div><h2 id="igGifTitle">GIF-lər</h2><p>Tenor-dan axtar və söhbətə göndər</p></div><button type="button" id="igGifClose" class="ig-gif-close" aria-label="Bağla">×</button></header>
+                  <header class="ig-gif-header"><div><h2 id="igGifTitle">GIF-lər</h2><p>GIPHY-dən axtar və söhbətə göndər</p></div><button type="button" id="igGifClose" class="ig-gif-close" aria-label="Bağla">×</button></header>
                   <nav class="ig-gif-tabs" aria-label="GIF bölmələri">
                     <button type="button" class="active" data-gif-tab="search">Axtar</button>
                     <button type="button" data-gif-tab="recent">Son istifadə</button>
                     <button type="button" data-gif-tab="favorites">Sevimlilər</button>
                   </nav>
                   <div id="igGifSearchControls" class="ig-gif-search-controls">
-                    <label class="ig-gif-search"><span aria-hidden="true">⌕</span><input id="igGifSearch" type="search" placeholder="GIF axtar..." autocomplete="off"></label>
+                    <label class="ig-gif-search"><span aria-hidden="true">⌕</span><input id="igGifSearch" type="search" maxlength="50" placeholder="GIF axtar..." autocomplete="off"></label>
                     <div id="igGifCategories" class="ig-gif-categories" aria-label="GIF kateqoriyaları"></div>
                   </div>
                   <p id="igGifStatus" class="ig-gif-status" role="status" aria-live="polite"></p>
                   <div id="igGifGrid" class="ig-gif-grid"></div>
+                  <a class="ig-gif-attribution" href="https://giphy.com/" target="_blank" rel="noopener noreferrer">Powered by GIPHY</a>
                 </section>
               </dialog>
               <dialog id="igStickerDialog" class="tc-sticker-dialog" aria-labelledby="igStickerTitle">
