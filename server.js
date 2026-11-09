@@ -474,7 +474,7 @@ app.get("/api/calls/ice", requireAuth, async (req, res) => {
                 headers: {
                     "Authorization": `Bearer ${token}`,
                     "Content-Type": "application/json",
-                    "Accept": "application/json"
+                    "Accept": "application/json",
                     "X-TURN-CLIENT-IP": req.ip
                 },
                 body: JSON.stringify({ ttl: 3600 }),
