@@ -23,6 +23,7 @@
   <link rel="stylesheet" href="profile-customization.css?v=1">
   <link rel="stylesheet" href="live-streams.css?v=1">
   <link rel="stylesheet" href="saved-collections.css?v=1">
+  <link rel="stylesheet" href="chat-themes.css?v=1">
 </head>
 <body>
   <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -250,6 +251,7 @@
                   <span class="ig-hmid"><strong id="chatTitle"></strong><small id="chatSub"></small></span>
                 </button>
                 <div class="ig-hacts">
+                  <button type="button" id="tcChatThemeButton" class="ig-hbtn tc-chat-theme-button" aria-label="Çat mövzusu" title="Çat mövzusu">◐</button>
                   <button type="button" id="tcFilesOpen" class="ig-hbtn tc-files-open" aria-label="Söhbət faylları" title="Söhbət faylları">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg>
                   </button>
@@ -534,6 +536,29 @@
       <p id="savedCollectionPickerStatus" class="status" aria-live="polite"></p>
     </section>
   </dialog>
+  <dialog id="tcChatThemeDialog" class="tc-chat-theme-dialog" aria-labelledby="tcChatThemeTitle">
+    <section class="tc-chat-theme-panel">
+      <header><div><span class="eyebrow">TALKCHAT · CHAT</span><h2 id="tcChatThemeTitle">Söhbət mövzusu</h2></div><button id="tcChatThemeClose" type="button" class="icon-button" aria-label="Bağla">×</button></header>
+      <p id="tcChatThemeScope" class="muted">Standart mövzu</p>
+      <div class="tc-chat-theme-grid">
+        <label for="tcThemeBackground">Söhbət fonu<input id="tcThemeBackground" type="color" value="#10101a"></label>
+        <label for="tcThemeIncoming">Gələn bubble<input id="tcThemeIncoming" type="color" value="#202033"></label>
+        <label for="tcThemeOutgoing">Göndərilən bubble<input id="tcThemeOutgoing" type="color" value="#36c5ff"></label>
+        <label for="tcThemeIncomingText">Gələn mətn<input id="tcThemeIncomingText" type="color" value="#ffffff"></label>
+        <label for="tcThemeOutgoingText">Göndərilən mətn<input id="tcThemeOutgoingText" type="color" value="#ffffff"></label>
+        <label for="tcThemeBubbleStyle">Bubble forması
+          <select id="tcThemeBubbleStyle"><option value="rounded">Dairəvi</option><option value="soft">Yumşaq</option><option value="square">Kvadrat</option></select>
+        </label>
+      </div>
+      <div class="tc-chat-theme-actions">
+        <button id="tcThemeSaveDefault" class="secondary" type="button">Standart olaraq saxla</button>
+        <button id="tcThemeSaveConversation" class="primary" type="button">Bu söhbətə saxla</button>
+        <button id="tcThemeResetConversation" class="secondary" type="button">Bu söhbəti sıfırla</button>
+        <button id="tcThemeResetDefault" class="text-button" type="button">Standartı sıfırla</button>
+      </div>
+      <p id="tcChatThemeStatus" class="status" aria-live="polite"></p>
+    </section>
+  </dialog>
   <dialog id="shareDialog" class="tc-share-dialog">
     <div class="tc-share-panel">
       <header class="tc-share-header">
@@ -591,6 +616,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="talkchat-2027.js?v=1"></script>
   <script src="app.js?v=2027sticker1"></script>
+  <script src="chat-themes.js?v=1"></script>
   <script src="social.js?v=1"></script>
   <script src="saved-collections.js?v=1"></script>
   <script src="admin.js?v=1"></script>

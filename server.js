@@ -1115,6 +1115,9 @@ require("./savedCollections").install({
     app, posts, readJSON, saveJSON, requireAuth, currentUser,
     canViewContent, isBlockedBetween, publicPost
 });
+require("./chatThemes").install({
+    app, readJSON, saveJSON, conversations, requireAuth, currentUser
+});
 
 const allowedMime = new Set([
     "image/jpeg", "image/png", "image/webp", "image/gif",
