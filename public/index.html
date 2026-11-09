@@ -21,6 +21,10 @@
   <link rel="stylesheet" href="sticker-picker.css?v=1">
   <link rel="stylesheet" href="admin.css?v=1">
   <link rel="stylesheet" href="profile-customization.css?v=1">
+  <link rel="stylesheet" href="live-streams.css?v=1">
+  <link rel="stylesheet" href="saved-collections.css?v=1">
+  <link rel="stylesheet" href="chat-themes.css?v=1">
+  <link rel="stylesheet" href="ai-assistant.css?v=1">
 </head>
 <body>
   <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -114,6 +118,7 @@
         <button type="button" data-page="home" class="nav-item active"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></span><span class="nav-item-label">Ana səhifə</span></button>
         <button type="button" data-page="discover" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5M10.8 7.5v6.6M7.5 10.8h6.6"/></svg></span><span class="nav-item-label">Discover</span></button>
         <button type="button" data-page="messages" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.5a8.5 8.5 0 0 1-12.2 7.7L3 21l1.7-4.8a8.5 8.5 0 1 1 15.8-4.7Z"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg></span><span class="nav-item-label">Mesajlar</span></button>
+         <button type="button" data-page="ai" class="nav-item"><span class="nav-item-icon" aria-hidden="true">✦</span><span class="nav-item-label">TalkChat AI</span></button>
         <button type="button" data-page="notifications" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg></span><span class="nav-item-label">Bildirişlər</span></button>
         <button type="button" data-page="profile" class="nav-item"><span class="nav-item-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c.8-3.6 3.4-5.5 7.5-5.5s6.7 1.9 7.5 5.5"/></svg></span><span class="nav-item-label">Profil</span></button>
       </nav>
@@ -158,6 +163,30 @@
           </button>
         </div>
         <div id="reelsFeed" class="reels-feed" aria-label="Reels lenti"></div>
+      </section>
+
+      <section id="livePage" class="page tc-live-page" hidden>
+        <header class="tc-live-heading">
+          <div><span class="eyebrow">TALKCHAT · REALTIME</span><h1>Canlı yayımlar</h1><p class="muted">Brauzer WebRTC bağlantısı ilə canlı yayım.</p></div>
+          <button id="liveCreateButton" class="primary" type="button">＋ Canlı yayım yarat</button>
+        </header>
+        <p id="liveStatus" class="status" aria-live="polite"></p>
+        <section id="liveComposer" class="tc-live-composer" aria-label="Canlı yayım önizləməsi" hidden>
+          <div class="tc-live-video-wrap"><video id="livePreviewVideo" autoplay muted playsinline aria-label="Kamera önizləməsi"></video><span class="tc-live-preview-label">Önizləmə — hələ canlı deyil</span></div>
+          <label class="profile-field-label" for="liveTitle">Yayım başlığı</label>
+          <input id="liveTitle" maxlength="120" minlength="3" placeholder="Nədən danışacaqsan?" autocomplete="off">
+          <div class="tc-live-actions"><button id="liveStartButton" class="primary" type="button">Canlı başlat</button><button id="liveCancelButton" class="secondary" type="button">Ləğv et</button></div>
+        </section>
+        <section id="liveRoom" class="tc-live-room" aria-label="Canlı yayım" hidden>
+          <div class="tc-live-stage"><video id="liveRoomVideo" autoplay playsinline aria-label="Canlı yayım videosu"></video><div id="liveRoomEmpty" class="tc-live-video-empty">Video bağlantısı gözlənilir…</div></div>
+          <div class="tc-live-room-meta"><div><span class="tc-live-badge">● CANLI</span><h2 id="liveRoomTitle"></h2><p id="liveRoomHost" class="muted"></p></div><span id="liveViewerCount" class="tc-live-viewer-count">0 izləyici</span></div>
+          <p id="liveRoomStatus" class="status" aria-live="polite"></p>
+          <div class="tc-live-comments" id="liveComments" role="log" aria-live="polite" aria-label="Canlı şərhlər"></div>
+          <form id="liveCommentForm" class="tc-live-comment-form"><label class="sr-only" for="liveCommentInput">Canlı şərh</label><input id="liveCommentInput" maxlength="500" autocomplete="off" placeholder="Şərh yaz…" required><button class="primary" type="submit">Göndər</button></form>
+          <div class="tc-live-actions"><button id="liveEndButton" class="tc-live-end-button" type="button" hidden>Yayımı bitir</button><button id="liveLeaveButton" class="secondary" type="button">Canlı yayım siyahısına qayıt</button></div>
+        </section>
+        <div id="liveStreamList" class="tc-live-list" aria-live="polite"></div>
+        <p class="tc-live-disclosure">Media cihazlar arasında birbaşa ötürülür, TalkChat serverində qeydə alınmır. Bu pulsuz, kiçik auditoriyaya uyğun WebRTC yayımıdır; bəzi şəbəkələr TURN xidməti olmadan qoşulmaya bilər və yayımlar maksimum 10 izləyici ilə məhdudlaşır.</p>
       </section>
 
       <section id="discoverPage" class="page" hidden>
@@ -224,6 +253,7 @@
                   <span class="ig-hmid"><strong id="chatTitle"></strong><small id="chatSub"></small></span>
                 </button>
                 <div class="ig-hacts">
+                  <button type="button" id="tcChatThemeButton" class="ig-hbtn tc-chat-theme-button" aria-label="Çat mövzusu" title="Çat mövzusu">◐</button>
                   <button type="button" id="tcFilesOpen" class="ig-hbtn tc-files-open" aria-label="Söhbət faylları" title="Söhbət faylları">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg>
                   </button>
@@ -260,6 +290,7 @@
                 </button>
               </div>
               <div id="igPending" class="ig-pending" hidden></div>
+              <p id="igBlockNotice" class="ig-block-notice" role="status" hidden>Bu söhbətdə blok səbəbindən mesaj göndərmək olmur.</p>
 
               <form id="dmForm" class="ig-compose">
                 <label class="ig-ibtn" aria-label="Kamera">
@@ -322,6 +353,21 @@
         </div>
       </section>
 
+      <section id="aiPage" class="page tc-ai-page" hidden>
+        <header class="tc-ai-heading">
+          <div><span class="eyebrow">TALKCHAT · AI</span><h1>TalkChat AI</h1><p class="muted">Cloudflare Workers AI ilə suallarına cavab al.</p></div>
+          <button id="aiClearHistory" class="secondary" type="button" disabled>Tarixçəni sil</button>
+        </header>
+        <p class="tc-ai-disclosure">Bu tarixçə yalnız sənin TalkChat hesabında saxlanılır və digər istifadəçilərə göstərilmir. Suallar cavab yaratmaq üçün Cloudflare Workers AI-a göndərilir. Cloudflare standart, vəziyyətsiz inference sorğuları üçün məlumatı cavab verildikdən sonra saxlamadığını bildirir; əməliyyat metadatası yenə saxlanıla bilər. Model: @cf/zai-org/glm-4.7-flash. Limitlər: hesab üzrə gündə 8 sorğu (konfiqurasiya edilə bilər, maksimum 40), istifadəçi üzrə dəqiqədə 3 (maksimum 6). Bu limitlər billing zəmanəti deyil. AI yalnız hesab sahibi billing tənzimləmələrini yoxlayıb serverdə aktiv etdikdən sonra işləyir. <a href="https://developers.cloudflare.com/workers-ai/platform/pricing/" target="_blank" rel="noopener noreferrer">Workers AI qiymətləri</a>.</p>
+        <div id="aiAssistantMessages" class="tc-ai-messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
+        <form id="aiAssistantForm" class="tc-ai-form">
+          <label class="sr-only" for="aiAssistantInput">TalkChat AI-a mesaj</label>
+          <textarea id="aiAssistantInput" maxlength="2000" rows="3" placeholder="Sualını yaz…" required></textarea>
+          <button id="aiAssistantSend" class="primary" type="submit">Göndər</button>
+        </form>
+        <p id="aiAssistantStatus" class="status" role="status" aria-live="polite"></p>
+      </section>
+
       <section id="notificationsPage" class="page" hidden>
         <h1>Bildirişlər</h1><div id="notificationList" class="stack"></div>
       </section>
@@ -371,6 +417,41 @@
             <option value="friends">Yalnız dostlar</option>
             <option value="nobody">Heç kim</option>
           </select>
+          <label class="profile-field-label" for="privacyProfile">Profili kimlər görə bilər?</label>
+          <select id="privacyProfile">
+            <option value="everyone">Hamı</option>
+            <option value="followers">İzləyicilər</option>
+            <option value="friends">Dostlar</option>
+            <option value="nobody">Heç kim</option>
+          </select>
+          <label class="profile-field-label" for="privacyPosts">Post və Reels-i kimlər görə bilər?</label>
+          <select id="privacyPosts">
+            <option value="everyone">Hamı</option>
+            <option value="followers">İzləyicilər</option>
+            <option value="friends">Dostlar</option>
+            <option value="nobody">Heç kim</option>
+          </select>
+          <label class="profile-field-label" for="privacyStories">Story-ləri kimlər görə bilər?</label>
+          <select id="privacyStories">
+            <option value="everyone">Hamı</option>
+            <option value="followers">İzləyicilər</option>
+            <option value="friends">Dostlar</option>
+            <option value="nobody">Heç kim</option>
+          </select>
+          <label class="profile-field-label" for="privacyMessages">Kimlər mesaj sorğusu göndərə bilər?</label>
+          <select id="privacyMessages">
+            <option value="everyone">Hamı</option>
+            <option value="followers">İzləyicilərim</option>
+            <option value="friends">Dostlar</option>
+            <option value="nobody">Heç kim</option>
+          </select>
+          <label class="profile-field-label" for="privacyFriends">Kimlər dostluq sorğusu göndərə bilər?</label>
+          <select id="privacyFriends">
+            <option value="everyone">Hamı</option>
+            <option value="followers">İzləyicilərim</option>
+            <option value="friends">Dostlar</option>
+            <option value="nobody">Heç kim</option>
+          </select>
           <button id="saveBio" class="primary full">Profili yadda saxla</button>
           <p id="profileStatus" class="status"></p>
           <button id="logoutButton" class="secondary full">Çıxış</button>
@@ -378,6 +459,16 @@
         <section class="profile-posts-section">
           <h2>Paylaşımlarım</h2>
           <div id="myPosts" class="feed"></div>
+        </section>
+        <section class="tc-collections-section" aria-labelledby="savedCollectionsTitle">
+          <div class="tc-collections-heading"><div><span class="eyebrow">ŞƏXSİ KİTABI</span><h2 id="savedCollectionsTitle">Yadda saxlanmış kolleksiyalar</h2></div></div>
+          <form id="savedCollectionCreateForm" class="tc-collection-create">
+            <label class="sr-only" for="savedCollectionName">Kolleksiya adı</label>
+            <input id="savedCollectionName" maxlength="60" placeholder="Məsələn, Sonra oxu" required>
+            <button class="primary" type="submit">Kolleksiya yarat</button>
+          </form>
+          <p id="savedCollectionsStatus" class="status" aria-live="polite"></p>
+          <div id="savedCollectionsList" class="tc-collections-list" aria-live="polite"></div>
         </section>
       </section>
 
@@ -401,7 +492,7 @@
             <div id="adminProfile" class="tc-admin-profile" hidden></div>
           </section>
           <section class="tc-admin-card">
-            <div class="tc-admin-card-head"><div><span class="eyebrow">İNCELEME</span><h2>Şikayətlər</h2></div><select id="adminReportFilter" aria-label="Şikayət statusu"><option value="pending">Gözləyən</option><option value="resolved">Həll edildi</option><option value="rejected">Rədd edildi</option><option value="all">Hamısı</option></select></div>
+            <div class="tc-admin-card-head"><div><span class="eyebrow">İNCELEME</span><h2>Şikayətlər</h2></div><div class="tc-admin-report-filters"><select id="adminReportFilter" aria-label="Şikayət statusu"><option value="pending">Gözləyən</option><option value="resolved">Həll edildi</option><option value="rejected">Rədd edildi</option><option value="all">Hamısı</option></select><select id="adminReportTypeFilter" aria-label="Şikayət növü"><option value="all">Bütün növlər</option><option value="user">Hesablar</option><option value="post">Paylaşımlar</option><option value="reel">Reels</option><option value="comment">Şərhlər</option><option value="story">Stories</option><option value="message">Mesajlar</option></select></div></div>
             <div id="adminReportList" class="tc-admin-list"></div>
           </section>
         </div>
@@ -435,8 +526,10 @@
       <nav class="tc-menu-links" aria-label="Əsas menyu">
         <button type="button" data-page="home"><span aria-hidden="true">⌂</span>Ana Səhifə</button>
         <button type="button" data-page="discover"><span aria-hidden="true">⌕</span>Discover</button>
+        <button type="button" data-page="live"><span aria-hidden="true">●</span>Canlı yayımlar</button>
         <button type="button" data-page="reels"><span aria-hidden="true">▶</span>Reels</button>
         <button type="button" data-page="messages"><span aria-hidden="true">▣</span>Mesajlar</button>
+        <button type="button" data-page="ai"><span aria-hidden="true">✦</span>TalkChat AI</button>
         <button type="button" data-page="notifications"><span aria-hidden="true">♧</span>Bildirişlər</button>
         <button type="button" data-page="profile"><span aria-hidden="true">◉</span>Profil</button>
         <button type="button" data-page="admin" id="adminMenuLink" hidden><span aria-hidden="true">⚙</span>Admin Paneli</button>
@@ -448,6 +541,41 @@
         <button class="share-action share-reel" type="button" data-open-share="reel"><span class="share-action-icon" aria-hidden="true">▶</span><span>Reels Paylaş</span><span class="share-action-arrow">↗</span></button>
       </div>
     </div>
+  </dialog>
+  <dialog id="savedCollectionPicker" class="tc-collection-picker" aria-labelledby="savedCollectionPickerTitle">
+    <section class="tc-collection-picker-panel">
+      <header><div><span class="eyebrow">ŞƏXSİ KİTABI</span><h2 id="savedCollectionPickerTitle">Kolleksiyaya yadda saxla</h2></div><button id="savedCollectionPickerClose" type="button" class="icon-button" aria-label="Bağla">×</button></header>
+      <div id="savedCollectionPickerOptions" class="tc-collection-picker-options"></div>
+      <form id="savedCollectionPickerCreateForm" class="tc-collection-create">
+        <label class="sr-only" for="savedCollectionPickerName">Yeni kolleksiya adı</label>
+        <input id="savedCollectionPickerName" maxlength="60" placeholder="Yeni kolleksiya adı" required>
+        <button class="secondary" type="submit">Yarat və yadda saxla</button>
+      </form>
+      <p id="savedCollectionPickerStatus" class="status" aria-live="polite"></p>
+    </section>
+  </dialog>
+  <dialog id="tcChatThemeDialog" class="tc-chat-theme-dialog" aria-labelledby="tcChatThemeTitle">
+    <section class="tc-chat-theme-panel">
+      <header><div><span class="eyebrow">TALKCHAT · CHAT</span><h2 id="tcChatThemeTitle">Söhbət mövzusu</h2></div><button id="tcChatThemeClose" type="button" class="icon-button" aria-label="Bağla">×</button></header>
+      <p id="tcChatThemeScope" class="muted">Standart mövzu</p>
+      <div class="tc-chat-theme-grid">
+        <label for="tcThemeBackground">Söhbət fonu<input id="tcThemeBackground" type="color" value="#10101a"></label>
+        <label for="tcThemeIncoming">Gələn bubble<input id="tcThemeIncoming" type="color" value="#202033"></label>
+        <label for="tcThemeOutgoing">Göndərilən bubble<input id="tcThemeOutgoing" type="color" value="#36c5ff"></label>
+        <label for="tcThemeIncomingText">Gələn mətn<input id="tcThemeIncomingText" type="color" value="#ffffff"></label>
+        <label for="tcThemeOutgoingText">Göndərilən mətn<input id="tcThemeOutgoingText" type="color" value="#ffffff"></label>
+        <label for="tcThemeBubbleStyle">Bubble forması
+          <select id="tcThemeBubbleStyle"><option value="rounded">Dairəvi</option><option value="soft">Yumşaq</option><option value="square">Kvadrat</option></select>
+        </label>
+      </div>
+      <div class="tc-chat-theme-actions">
+        <button id="tcThemeSaveDefault" class="secondary" type="button">Standart olaraq saxla</button>
+        <button id="tcThemeSaveConversation" class="primary" type="button">Bu söhbətə saxla</button>
+        <button id="tcThemeResetConversation" class="secondary" type="button">Bu söhbəti sıfırla</button>
+        <button id="tcThemeResetDefault" class="text-button" type="button">Standartı sıfırla</button>
+      </div>
+      <p id="tcChatThemeStatus" class="status" aria-live="polite"></p>
+    </section>
   </dialog>
   <dialog id="shareDialog" class="tc-share-dialog">
     <div class="tc-share-panel">
@@ -506,10 +634,14 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="talkchat-2027.js?v=1"></script>
   <script src="app.js?v=2027sticker1"></script>
+  <script src="ai-assistant.js?v=1"></script>
+  <script src="chat-themes.js?v=1"></script>
   <script src="social.js?v=1"></script>
+  <script src="saved-collections.js?v=1"></script>
   <script src="admin.js?v=1"></script>
   <script src="tc-mobile-chat.js?v=1"></script>
   <script src="calls.js?v=5"></script>
 <script src="group-calls.js?v=3"></script>
+  <script src="live-streams.js?v=1"></script>
 </body>
 </html>
