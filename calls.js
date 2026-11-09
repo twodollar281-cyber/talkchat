@@ -9,6 +9,7 @@
   "use strict";
   if (typeof socket === "undefined" || window.__tccLoaded) return;
   window.__tccLoaded = true;
+  const RING_MS = window.TCC_RING_MS || 40000;
 
   const FALLBACK_ICE = [
     {
