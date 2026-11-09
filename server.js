@@ -475,6 +475,7 @@ app.get("/api/calls/ice", requireAuth, async (req, res) => {
                     "Authorization": `Bearer ${token}`,
                     "Content-Type": "application/json",
                     "Accept": "application/json"
+                    "X-TURN-CLIENT-IP": req.ip
                 },
                 body: JSON.stringify({ ttl: 3600 }),
                 signal: AbortSignal.timeout(10000)
@@ -482,10 +483,22 @@ app.get("/api/calls/ice", requireAuth, async (req, res) => {
         );
 
         if (!response.ok) {
-            console.error("Turnix request failed:", response.status);
-            return res.status(502).json({
-                error: "Could not get TURN credentials"
-            });
+    if (response.status === 429) {
+        console.error("Turnix usage limit reached (429)");
+        return res.status(503).json({
+            error: "TURN usage limit reached"
+        });
+    }
+
+    if (response.status === 401) {
+        console.error("Turnix rejected TURNIX_API_TOKEN (401)");
+    } else {
+        console.error("Turnix request failed:", response.status);
+    }
+
+    return res.status(502).json({
+        error: "Could not get TURN credentials"
+    });
         }
 
         const data = await response.json();
@@ -498,9 +511,10 @@ app.get("/api/calls/ice", requireAuth, async (req, res) => {
         }
 
         res.set("Cache-Control", "private, no-store");
-        return res.json({
-            iceServers: data.iceServers
-        });
+return res.json({
+    iceServers: data.iceServers,
+    ...(data.expiresAt ? { expiresAt: data.expiresAt } : {})
+});
 
     } catch (error) {
         console.error("Turnix error:", error.name);
