@@ -15,10 +15,18 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { createCallRegistry, validateSignal } = require("./call-registry");
+const {
+    OWNER_USERNAME, ROLE_LEVEL, roleOf, canAssignRole,
+    canModerateUser, normalizeBanDuration, objectKey
+} = require("./moderationPolicy");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const multer = require("multer");
 const supa = require("./supabaseStorage");
+
+if (process.env.NODE_ENV === "production" && !supa.enabled) {
+    throw new Error("Supabase Storage konfiqurasiyası production mühitində tələb olunur; lokal diskə fayl yazılmayacaq.");
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -102,15 +110,31 @@ const sessionMiddleware = require("cookie-session")({
     secure: process.env.NODE_ENV === "production"
 });
 app.use(sessionMiddleware);
-app.use(express.static(path.join(__dirname, "public")));
-app.get("/uploads/:name", (req, res, next) => {
-    if (!supa.enabled) return next();
-    res.redirect(302, supa.publicUrl(req.params.name));
+app.get("/uploads/:name", requireAuth, async (req, res) => {
+    const filename = req.params.name;
+    if (!/^[a-zA-Z0-9._-]{1,180}$/.test(filename) ||
+        !canAccessUpload(filename, currentUser(req))) {
+        return res.status(404).json({ error: "Fayl tapılmadı." });
+    }
+    res.set("Cache-Control", "private, no-store");
+    if (supa.enabled) {
+        try {
+            return res.redirect(302, await supa.createSignedUrl(filename));
+        } catch (error) {
+            console.error("Supabase signed URL xətası:", error.message);
+            return res.status(503).json({ error: "Fayla hazırda giriş mümkün deyil." });
+        }
+    }
+    const file = path.join(UPLOADS, filename);
+    if (!fs.existsSync(file)) return res.status(404).json({ error: "Fayl tapılmadı." });
+    return res.sendFile(file);
 });
+app.use(express.static(path.join(__dirname, "public")));
 
 io.use((socket, next) => sessionMiddleware(socket.request, {}, next));
 io.use((socket, next) => {
     if (!socket.request.session.username) return next(new Error("Giriş tələb olunur"));
+    if (activeBanForUsername(socket.request.session.username)) return next(new Error("Hesab müvəqqəti məhdudlaşdırılıb."));
     next();
 });
 // TALKCHAT_PRESENCE_READ_V1
@@ -197,13 +221,13 @@ io.on("connection", socket => {
         socket.emit("call:resumed", payload);
         io.to("user:" + peer).emit("call:peer-reconnected", payload);
     }
-        function getCallPeer(conversationId) {
+    function getCallPeer(conversationId) {
         const c = conversations().find(x =>
             x.id === conversationId && x.type === "direct" &&
             Array.isArray(x.participants) && x.participants.includes(name));
         return c ? (c.participants.find(p => p !== name) || null) : null;
-        }
-       
+    }
+
     const ringingCall = directCallRegistry.findForUser(name);
     if (ringingCall && ringingCall.status === "ringing" && ringingCall.callee === name) {
         socket.emit("call:incoming", { callId: ringingCall.id, conversationId: ringingCall.conversationId, from: ringingCall.caller, to: name, mediaType: ringingCall.mediaType });
@@ -217,7 +241,7 @@ socket.on("call:invite", data => {
   if (!data || typeof data.conversationId !== "string") return;
   const target = getCallPeer(data.conversationId);
   if (!target) { socket.emit("call:error", { conversationId: data.conversationId, code: "not-authorized" }); return; }
-  const opened = directCallRegistry.invite({ conversationId: data.conversationId, caller: name, callee: target, mediaType: data.mediaType || "audio" });
+  const opened = directCallRegistry.invite({ conversationId: data.conversationId, caller: name, callee: target, mediaType: data.mediaType === "video" ? "video" : "audio" });
   if (!opened.ok) { socket.emit("call:error", { conversationId: data.conversationId, code: opened.code }); return; }
   const call = opened.call;
   const payload = { callId: call.id, conversationId: call.conversationId, from: name, to: target, mediaType: call.mediaType };
@@ -457,6 +481,15 @@ app.use("/api/login", authLimiter);
 function currentUser(req) { return req.session?.username || null; }
 function requireAuth(req, res, next) {
     if (!currentUser(req)) return res.status(401).json({ error: "Əvvəlcə giriş et." });
+    expireBans();
+    const account = users().find(user => user.username === currentUser(req));
+    if (!account) return res.status(401).json({ error: "Hesab tapılmadı. Yenidən daxil ol." });
+    const ban = activeBan(account);
+    if (ban) return res.status(403).json({
+        error: ban.until ? `Hesabın ${new Date(ban.until).toLocaleString("az-AZ")} tarixinədək məhdudlaşdırılıb.` : "Hesabın daimi məhdudlaşdırılıb.",
+        banned: true,
+        ban: { reason: ban.reason || "", until: ban.until || null }
+    });
     next();
 }
 
@@ -531,6 +564,7 @@ return res.json({
 function publicUser(user) {
     return {
         username: user.username,
+        role: roleOf(user),
         displayName: user.displayName || "",
         bio: user.bio || "",
         avatar: user.avatar || "",
@@ -545,16 +579,170 @@ function publicPost(post, userList = users()) {
     return {
         ...post,
         kind: post.kind === "reel" ? "reel" : "post",
+        comments: (post.comments || []).map(comment => ({
+            ...comment,
+            role: roleOf(userList.find(user => user.username === comment.username))
+        })),
         authorName: author?.displayName || "",
-        authorAvatar: author?.avatar || ""
+        authorAvatar: author?.avatar || "",
+        authorRole: roleOf(author)
     };
 }
-function removeLocalUpload(media) {
-    if (typeof media !== "string" || !media.startsWith("/uploads/")) return;
-    const filename = path.basename(media);
-    if (!filename || filename === "." || filename === "..") return;
-    supa.remove(filename);
-    fs.unlink(path.join(UPLOADS, filename), () => {});
+function activeBan(user) {
+    const ban = user?.ban;
+    if (!ban || !Object.prototype.hasOwnProperty.call(ban, "until")) return null;
+    if (ban.until === null) return ban;
+    const end = Date.parse(ban.until);
+    return Number.isFinite(end) && end > Date.now() ? ban : null;
+}
+function activeBanForUsername(username) {
+    const account = users().find(user => user.username === username);
+    const ban = activeBan(account);
+    if (account?.ban && !ban) expireBans();
+    return ban;
+}
+function expireBans() {
+    const list = users();
+    const now = Date.now();
+    const expired = list.filter(user => {
+        if (!user.ban || user.ban.until === null) return false;
+        const end = Date.parse(user.ban.until);
+        return Number.isFinite(end) && end <= now;
+    });
+    if (!expired.length) return;
+    for (const user of expired) {
+        user.ban = null;
+        appendAudit({
+            actorUsername: "system",
+            targetUsername: user.username,
+            actionType: "ban_expired",
+            reason: "Müddətli banın vaxtı bitdi."
+        });
+    }
+    saveUsers(list);
+}
+function canAccessUpload(filename, username) {
+    const matches = (record, pathField, fallbackField) => objectKey(record, pathField, fallbackField) === filename;
+    if (users().some(user => matches(user, "avatarStoragePath", "avatar"))) return true;
+    if (posts().some(post => matches(post, "storagePath", "media"))) return true;
+    if (stories().some(story => Date.parse(story.expiresAt) > Date.now() && matches(story, "storagePath", "media"))) return true;
+    const ownedMessage = messages().some(message => {
+        if (!matches(message, "attachmentStoragePath", "attachment")) return false;
+        const convo = conversations().find(item => item.id === message.conversationId);
+        return !!convo && Array.isArray(convo.participants) && convo.participants.includes(username);
+    });
+    return ownedMessage;
+}
+async function removeLocalUpload(media, storagePath = "") {
+    const raw = storagePath || (typeof media === "string" && media.startsWith("/uploads/") ? media.slice("/uploads/".length) : "");
+    if (!raw || raw.split("/").some(part => part === "." || part === "..")) return { ok: true, skipped: true };
+    const filename = path.basename(raw);
+    if (!filename || filename === "." || filename === "..") return { ok: true, skipped: true };
+    let storageResult = { ok: true, skipped: true };
+    if (supa.enabled) {
+        try { storageResult = await supa.remove(raw); }
+        catch (error) {
+            console.error("Supabase silmə xətası:", error.message);
+            storageResult = { ok: false, error };
+        }
+    }
+    await fs.promises.unlink(path.join(UPLOADS, filename)).catch(() => {});
+    return storageResult;
+}
+function appendAudit(entry) {
+    const log = readJSON("auditLogs.json");
+    log.unshift({ id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...entry });
+    saveJSON("auditLogs.json", log.slice(0, 2000));
+}
+function requireRole(minimumRole) {
+    return (req, res, next) => {
+        const actor = users().find(user => user.username === currentUser(req));
+        if (!actor || ROLE_LEVEL[roleOf(actor)] < ROLE_LEVEL[minimumRole])
+            return res.status(403).json({ error: "Bu əməliyyat üçün icazən yoxdur." });
+        req.talkchatActor = actor;
+        next();
+    };
+}
+function canUseDuration(value) {
+    return normalizeBanDuration(value) !== undefined;
+}
+function applyBan(actor, target, duration, reason) {
+    if (!canModerateUser(actor, target)) return { status: 403, error: "Bu istifadəçiyə ban tətbiq etmək icazən yoxdur." };
+    const durationMs = normalizeBanDuration(duration);
+    if (durationMs === undefined) return { status: 400, error: "Ban müddəti düzgün deyil." };
+    const trimmedReason = String(reason || "").trim().slice(0, 500);
+    if (trimmedReason.length < 3) return { status: 400, error: "Ban səbəbi ən azı 3 simvol olmalıdır." };
+    const list = users();
+    const account = list.find(user => user.username === target.username);
+    if (!account) return { status: 404, error: "İstifadəçi tapılmadı." };
+    const ban = {
+        reason: trimmedReason,
+        until: durationMs === null ? null : new Date(Date.now() + durationMs).toISOString(),
+        createdAt: new Date().toISOString(),
+        createdBy: actor.username
+    };
+    account.ban = ban;
+    saveUsers(list);
+    appendAudit({
+        actorUsername: actor.username,
+        targetUsername: account.username,
+        actionType: "user_banned",
+        reason: trimmedReason
+    });
+    io.to(`user:${account.username}`).emit("account:banned", { reason: ban.reason, until: ban.until });
+    io.in(`user:${account.username}`).disconnectSockets(true);
+    return { status: 200, ban };
+}
+function findAccount(name) {
+    const normalized = String(name || "").replace(/^@/, "").toLowerCase();
+    return users().find(user => user.username.toLowerCase() === normalized) || null;
+}
+async function deleteModeratedContent(type, id, actorUsername, reason) {
+    const list = posts();
+    if (type === "comment") {
+        for (const post of list) {
+            const index = (post.comments || []).findIndex(comment => comment.id === id);
+            if (index < 0) continue;
+            const [comment] = post.comments.splice(index, 1);
+            savePosts(list);
+            appendAudit({
+                actorUsername, targetUsername: comment.username,
+                actionType: "comment_deleted", targetType: "comment", targetId: id, reason
+            });
+            return { ok: true, targetUsername: comment.username, postId: post.id };
+        }
+        return { status: 404, error: "Şərh tapılmadı." };
+    }
+    if (type !== "post" && type !== "reel") return { status: 400, error: "Məzmun növü düzgün deyil." };
+    const post = list.find(item => item.id === id && (type !== "reel" || item.kind === "reel") && (type !== "post" || item.kind !== "reel"));
+    if (!post) return { status: 404, error: "Paylaşım tapılmadı." };
+    const removed = await removeLocalUpload(post.media, post.storagePath);
+    if (!removed.ok) return { status: 503, error: "Fayl Storage-dan silinmədi; paylaşım saxlanıldı." };
+    savePosts(list.filter(item => item.id !== post.id));
+    appendAudit({
+        actorUsername, targetUsername: post.username,
+        actionType: type === "reel" ? "reel_deleted" : "post_deleted",
+        targetType: type, targetId: id, reason
+    });
+    return { ok: true, targetUsername: post.username };
+}
+function reportContent(report) {
+    const type = report.itemType || "post";
+    if (type === "comment") {
+        const post = posts().find(item => item.id === report.postId);
+        const comment = post?.comments?.find(item => item.id === (report.itemId || report.commentId));
+        return comment ? {
+            type, id: comment.id, postId: post.id, owner: comment.username,
+            text: comment.text, createdAt: comment.createdAt
+        } : null;
+    }
+    const post = posts().find(item => item.id === (report.itemId || report.postId));
+    return post ? {
+        type: post.kind === "reel" ? "reel" : "post",
+        id: post.id, owner: post.username, text: post.text || "",
+        media: post.media || "", mediaType: post.mediaType || "",
+        createdAt: post.createdAt
+    } : null;
 }
 function addNotification(to, from, type, extra = {}) {
     if (!to || to === from) return;
@@ -626,7 +814,8 @@ app.post("/api/register", async (req, res) => {
             return res.status(409).json({ error: "Bu istifadəçi adı artıq mövcuddur." });
         const user = {
             username: name, password: await bcrypt.hash(password, 12),
-            displayName: "", bio: "", avatar: "", link: "", followers: [], following: [],
+            role: "member", displayName: "", bio: "", avatar: "", avatarStoragePath: "",
+            link: "", followers: [], following: [],
             createdAt: new Date().toISOString()
         };
         list.push(user);
@@ -644,6 +833,13 @@ app.post("/api/login", async (req, res) => {
         const user = users().find(u => u.username.toLowerCase() === username.trim().replace(/^@/, "").toLowerCase());
         if (!user || !(await bcrypt.compare(password, user.password)))
             return res.status(401).json({ error: "İstifadəçi adı və ya şifrə yanlışdır." });
+        expireBans();
+        const ban = activeBan(user);
+        if (ban) return res.status(403).json({
+            error: ban.until ? `Hesabın ${new Date(ban.until).toLocaleString("az-AZ")} tarixinədək məhdudlaşdırılıb.` : "Hesabın daimi məhdudlaşdırılıb.",
+            banned: true,
+            ban: { reason: ban.reason || "", until: ban.until || null }
+        });
         req.session = { username: user.username };
         res.json({ username: user.username });
     } catch { res.status(500).json({ error: "Server xətası." }); }
@@ -651,11 +847,47 @@ app.post("/api/login", async (req, res) => {
 
 app.get("/api/me", (req, res) => {
     if (!currentUser(req)) return res.status(401).json({ error: "Giriş edilməyib." });
-    res.json({ username: currentUser(req) });
+    expireBans();
+    const user = users().find(item => item.username === currentUser(req));
+    if (!user) return res.status(401).json({ error: "Hesab tapılmadı." });
+    const ban = activeBan(user);
+    res.json({
+        username: user.username,
+        role: roleOf(user),
+        ban: ban ? { reason: ban.reason || "", until: ban.until || null } : null
+    });
 });
 app.post("/api/logout", (req, res) => {
     req.session = null;
     res.json({ message: "Çıxış edildi." });
+});
+
+app.post("/api/owner/bootstrap", requireAuth, (req, res) => {
+    const actor = users().find(user => user.username === currentUser(req));
+    const expected = process.env.TALKCHAT_OWNER_BOOTSTRAP_SECRET || "";
+    const supplied = typeof req.body?.secret === "string" ? req.body.secret : "";
+    const expectedBytes = Buffer.from(expected);
+    const suppliedBytes = Buffer.from(supplied);
+    const secretMatches = expectedBytes.length > 0 &&
+        expectedBytes.length === suppliedBytes.length &&
+        crypto.timingSafeEqual(expectedBytes, suppliedBytes);
+    if (!expectedBytes.length) return res.status(503).json({ error: "Owner doğrulama sirri server mühitində qurulmayıb." });
+    if (!secretMatches || actor?.username !== OWNER_USERNAME)
+        return res.status(403).json({ error: "Owner hesabı təsdiqlənmədi." });
+    if (roleOf(actor) === "owner") return res.json({ role: "owner" });
+    const list = users();
+    const user = list.find(item => item.username === OWNER_USERNAME);
+    if (!user) return res.status(404).json({ error: "DevQrxyz hesabı tapılmadı." });
+    user.role = "owner";
+    user.ownerVerifiedAt = new Date().toISOString();
+    saveUsers(list);
+    appendAudit({
+        actorUsername: OWNER_USERNAME,
+        targetUsername: OWNER_USERNAME,
+        actionType: "owner_verified",
+        reason: "Server owner secret ilə təsdiqləndi."
+    });
+    res.json({ role: "owner" });
 });
 
 app.get("/api/profile", requireAuth, (req, res) => {
@@ -693,7 +925,7 @@ app.put("/api/profile", requireAuth, (req, res) => {
     saveUsers(list);
     res.json(publicUser(user));
 });
-app.post("/api/profile/avatar", requireAuth, socialUpload.single("file"), (req, res) => {
+app.post("/api/profile/avatar", requireAuth, socialUpload.single("file"), async (req, res) => {
     if (!req.file || !req.file.mimetype.startsWith("image/")) {
         if (req.file) removeLocalUpload(`/uploads/${req.file.filename}`);
         return res.status(400).json({ error: "Profil şəkli üçün şəkil faylı seç." });
@@ -708,8 +940,9 @@ app.post("/api/profile/avatar", requireAuth, socialUpload.single("file"), (req, 
         removeLocalUpload(`/uploads/${req.file.filename}`);
         return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     }
-    removeLocalUpload(user.avatar);
+    await removeLocalUpload(user.avatar, user.avatarStoragePath);
     user.avatar = `/uploads/${req.file.filename}`;
+    user.avatarStoragePath = req.file.filename;
     saveUsers(list);
     res.json({ avatar: user.avatar });
 });
@@ -923,6 +1156,7 @@ app.post("/api/posts", requireAuth, socialUpload.single("media"), (req, res) => 
     const post = {
         id: crypto.randomUUID(), username: currentUser(req), text,
         media: req.file ? `/uploads/${req.file.filename}` : "",
+        storagePath: req.file ? req.file.filename : "",
         mediaType, kind: "post", likes: [], comments: [], createdAt: new Date().toISOString()
     };
     list.unshift(post); savePosts(list);
@@ -937,7 +1171,8 @@ app.post("/api/reels", requireAuth, socialUpload.single("media"), (req, res) => 
     }
     const reel = {
         id: crypto.randomUUID(), username: currentUser(req), text: caption,
-        media: `/uploads/${req.file.filename}`, mediaType: "video", kind: "reel",
+        media: `/uploads/${req.file.filename}`, storagePath: req.file.filename,
+        mediaType: "video", kind: "reel",
         likes: [], comments: [], createdAt: new Date().toISOString()
     };
     const list = posts();
@@ -981,12 +1216,13 @@ app.put("/api/posts/:id", requireAuth, (req, res) => {
     savePosts(list);
     res.json(publicPost(post));
 });
-app.delete("/api/posts/:id", requireAuth, (req, res) => {
+app.delete("/api/posts/:id", requireAuth, async (req, res) => {
     const list = posts();
     const post = list.find(p => p.id === req.params.id);
     if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
     if (post.username !== currentUser(req)) return res.status(403).json({ error: "Yalnız öz paylaşımını silə bilərsən." });
-    removeLocalUpload(post.media);
+    const removed = await removeLocalUpload(post.media, post.storagePath);
+    if (!removed.ok) return res.status(503).json({ error: "Fayl Storage-dan silinmədi; paylaşım saxlanıldı." });
     savePosts(list.filter(p => p.id !== post.id));
     res.json({ ok: true });
 });
@@ -996,15 +1232,175 @@ app.post("/api/posts/:id/report", requireAuth, (req, res) => {
     if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
     if (post.username === me) return res.status(400).json({ error: "Öz paylaşımını şikayət edə bilməzsən." });
     const list = reports();
-    if (list.some(report => report.postId === post.id && report.reporter === me))
+    if (list.some(report => report.reporter === me &&
+        (report.itemId === post.id || report.postId === post.id) &&
+        (report.itemType === "comment" ? false : true)))
         return res.status(409).json({ error: "Bu paylaşımı artıq şikayət etmisən." });
-    const reason = String((req.body || {}).reason || "").trim().slice(0, 200);
+    const reason = String((req.body || {}).reason || "").trim();
+    if (!["Spam", "Taciz", "Uygunsuz içerik", "Sahte hesap", "Diğer"].includes(reason))
+        return res.status(400).json({ error: "Şikayət səbəbini siyahıdan seç." });
     list.unshift({
-        id: crypto.randomUUID(), postId: post.id, owner: post.username,
-        reporter: me, reason, createdAt: new Date().toISOString()
+        id: crypto.randomUUID(),
+        itemType: post.kind === "reel" ? "reel" : "post",
+        itemId: post.id, postId: post.id, owner: post.username,
+        reporter: me, reason, status: "pending", createdAt: new Date().toISOString()
     });
     saveReports(list.slice(0, 5000));
     res.status(201).json({ ok: true });
+});
+app.post("/api/posts/:id/comments/:commentId/report", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const post = posts().find(item => item.id === req.params.id);
+    const comment = post?.comments?.find(item => item.id === req.params.commentId);
+    if (!comment) return res.status(404).json({ error: "Şərh tapılmadı." });
+    if (comment.username === me) return res.status(400).json({ error: "Öz şərhini şikayət edə bilməzsən." });
+    const reason = String((req.body || {}).reason || "").trim();
+    if (!["Spam", "Taciz", "Uygunsuz içerik", "Sahte hesap", "Diğer"].includes(reason))
+        return res.status(400).json({ error: "Şikayət səbəbini siyahıdan seç." });
+    const list = reports();
+    if (list.some(report => report.reporter === me && report.itemType === "comment" && report.itemId === comment.id))
+        return res.status(409).json({ error: "Bu şərhi artıq şikayət etmisən." });
+    list.unshift({
+        id: crypto.randomUUID(), itemType: "comment", itemId: comment.id,
+        postId: post.id, owner: comment.username, reporter: me, reason,
+        status: "pending", createdAt: new Date().toISOString()
+    });
+    saveReports(list.slice(0, 5000));
+    res.status(201).json({ ok: true });
+});
+app.get("/api/admin/summary", requireAuth, requireRole("moderator"), (_req, res) => {
+    expireBans();
+    const userList = users();
+    const reportList = reports();
+    const pending = reportList.filter(report => !report.status || report.status === "pending");
+    const pendingTypes = pending.map(report => reportContent(report)?.type || report.itemType || "post");
+    const audit = readJSON("auditLogs.json");
+    res.json({
+        users: userList.length,
+        admins: userList.filter(user => roleOf(user) === "admin").length,
+        moderators: userList.filter(user => roleOf(user) === "moderator").length,
+        banned: userList.filter(user => !!activeBan(user)).length,
+        reports: pending.length,
+        reportedPosts: pendingTypes.filter(type => type === "post").length,
+        reportedReels: pendingTypes.filter(type => type === "reel").length,
+        recentActions: audit.slice(0, 12)
+    });
+});
+app.get("/api/admin/users", requireAuth, requireRole("moderator"), (req, res) => {
+    expireBans();
+    const query = String(req.query.q || "").trim().replace(/^@/, "").toLowerCase();
+    const result = users().filter(user => !query ||
+        user.username.toLowerCase().includes(query) ||
+        String(user.displayName || "").toLowerCase().includes(query))
+        .slice(0, 50)
+        .map(user => ({
+            ...publicUser(user),
+            createdAt: user.createdAt || "",
+            ban: activeBan(user) ? { ...activeBan(user) } : null
+        }));
+    res.json(result);
+});
+app.get("/api/admin/reports", requireAuth, requireRole("moderator"), (req, res) => {
+    const status = String(req.query.status || "pending");
+    const list = reports().filter(report => status === "all"
+        ? true
+        : (report.status || "pending") === status)
+        .slice(0, 200)
+        .map(report => ({ ...report, content: reportContent(report) }));
+    res.json(list);
+});
+app.get("/api/admin/audit", requireAuth, requireRole("moderator"), (req, res) => {
+    const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit, 10) || 50));
+    res.json(readJSON("auditLogs.json").slice(0, limit));
+});
+app.post("/api/admin/users/:username/role", requireAuth, requireRole("owner"), (req, res) => {
+    const actor = req.talkchatActor;
+    const target = findAccount(req.params.username);
+    const desiredRole = String(req.body?.role || "");
+    const reason = String(req.body?.reason || "").trim().slice(0, 500);
+    if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (!canAssignRole(actor, target, desiredRole))
+        return res.status(403).json({ error: "Bu rol dəyişikliyinə icazən yoxdur." });
+    if (reason.length < 3) return res.status(400).json({ error: "Səbəb ən azı 3 simvol olmalıdır." });
+    target.role = desiredRole;
+    const list = users();
+    const index = list.findIndex(user => user.username === target.username);
+    list[index] = target;
+    saveUsers(list);
+    appendAudit({
+        actorUsername: actor.username, targetUsername: target.username,
+        actionType: "role_changed", reason: `${reason} (${roleOf(target)})`
+    });
+    res.json({ username: target.username, role: roleOf(target) });
+});
+app.post("/api/admin/users/:username/ban", requireAuth, requireRole("moderator"), (req, res) => {
+    const target = findAccount(req.params.username);
+    if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    const result = applyBan(req.talkchatActor, target, req.body?.duration, req.body?.reason);
+    if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+    res.json({ ok: true, ban: result.ban });
+});
+app.post("/api/admin/users/:username/unban", requireAuth, requireRole("moderator"), (req, res) => {
+    const target = findAccount(req.params.username);
+    if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (!canModerateUser(req.talkchatActor, target))
+        return res.status(403).json({ error: "Bu istifadəçinin banını qaldırmağa icazən yoxdur." });
+    const reason = String(req.body?.reason || "").trim().slice(0, 500);
+    if (reason.length < 3) return res.status(400).json({ error: "Səbəb ən azı 3 simvol olmalıdır." });
+    if (!activeBan(target)) return res.status(409).json({ error: "İstifadəçinin aktiv banı yoxdur." });
+    const list = users();
+    const account = list.find(user => user.username === target.username);
+    account.ban = null;
+    saveUsers(list);
+    appendAudit({
+        actorUsername: req.talkchatActor.username, targetUsername: account.username,
+        actionType: "ban_lifted", reason
+    });
+    res.json({ ok: true });
+});
+app.delete("/api/admin/content/:type/:id", requireAuth, requireRole("moderator"), async (req, res) => {
+    const reason = String(req.body?.reason || "").trim().slice(0, 500);
+    if (reason.length < 3) return res.status(400).json({ error: "Səbəb ən azı 3 simvol olmalıdır." });
+    const result = await deleteModeratedContent(req.params.type, req.params.id, req.talkchatActor.username, reason);
+    if (!result.ok) return res.status(result.status || 400).json({ error: result.error || "Məzmun silinmədi." });
+    res.json({ ok: true });
+});
+app.post("/api/admin/reports/:id/action", requireAuth, requireRole("moderator"), async (req, res) => {
+    const reportList = reports();
+    const report = reportList.find(item => item.id === req.params.id);
+    if (!report) return res.status(404).json({ error: "Şikayət tapılmadı." });
+    if (report.status && report.status !== "pending")
+        return res.status(409).json({ error: "Bu şikayət artıq işlənib." });
+    const action = String(req.body?.action || "");
+    const reason = String(req.body?.reason || "").trim().slice(0, 500);
+    if (!["resolve", "reject", "delete", "ban"].includes(action))
+        return res.status(400).json({ error: "Şikayət əməliyyatı düzgün deyil." });
+    if (reason.length < 3) return res.status(400).json({ error: "Səbəb ən azı 3 simvol olmalıdır." });
+    const content = reportContent(report);
+    if (!content) return res.status(404).json({ error: "Şikayət edilən məzmun artıq mövcud deyil." });
+    const actor = req.talkchatActor;
+    if (action === "delete") {
+        const deleted = await deleteModeratedContent(content.type, content.id, actor.username, reason);
+        if (!deleted.ok) return res.status(deleted.status || 400).json({ error: deleted.error || "Məzmun silinmədi." });
+    }
+    if (action === "ban") {
+        const target = findAccount(content.owner);
+        if (!target) return res.status(404).json({ error: "Məzmun sahibi tapılmadı." });
+        const banned = applyBan(actor, target, req.body?.duration, reason);
+        if (banned.status !== 200) return res.status(banned.status).json({ error: banned.error });
+    }
+    report.status = action === "reject" ? "rejected" : "resolved";
+    report.action = action;
+    report.actionBy = actor.username;
+    report.actionAt = new Date().toISOString();
+    report.actionReason = reason;
+    saveReports(reportList);
+    appendAudit({
+        actorUsername: actor.username, targetUsername: content.owner,
+        actionType: action === "reject" ? "report_rejected" : "report_resolved",
+        targetType: content.type, targetId: content.id, reason
+    });
+    res.json({ ok: true, status: report.status });
 });
 app.post("/api/posts/:id/share", requireAuth, (req, res) => {
     const me = currentUser(req);
@@ -1109,6 +1505,7 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
     const message = {
         id: crypto.randomUUID(), conversationId: convo.id, from: currentUser(req), text,
         attachment: req.file ? `/uploads/${req.file.filename}` : "",
+        attachmentStoragePath: req.file ? req.file.filename : "",
         attachmentName: req.file ? req.file.originalname.slice(0, 100) : "",
         attachmentType: req.file ? req.file.mimetype : "",
         replyTo: replyTarget ? replyTarget.id : "",
@@ -1141,7 +1538,7 @@ app.post("/api/conversations/:id/read", requireAuth, (req, res) => {
 });
 
 // Öz mesajını sil (mətn və fayl təmizlənir, "Mesaj silindi" qalır)
-app.delete("/api/conversations/:id/messages/:mid", requireAuth, (req, res) => {
+app.delete("/api/conversations/:id/messages/:mid", requireAuth, async (req, res) => {
     const me = currentUser(req);
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
@@ -1149,9 +1546,12 @@ app.delete("/api/conversations/:id/messages/:mid", requireAuth, (req, res) => {
     const m = list.find(x => x.id === req.params.mid && x.conversationId === convo.id);
     if (!m) return res.status(404).json({ error: "Mesaj tapılmadı." });
     if (m.from !== me) return res.status(403).json({ error: "Yalnız öz mesajını silə bilərsən." });
-    if (m.attachment) fs.unlink(path.join(UPLOADS, path.basename(m.attachment)), () => {});
-    if (m.attachment) supa.remove(path.basename(m.attachment));
+    if (m.attachment) {
+        const removed = await removeLocalUpload(m.attachment, m.attachmentStoragePath);
+        if (!removed.ok) return res.status(503).json({ error: "Fayl Storage-dan silinmədi; mesaj saxlanıldı." });
+    }
     Object.assign(m, { deleted: true, text: "", attachment: "", attachmentName: "", attachmentType: "" });
+    m.attachmentStoragePath = "";
     saveMessages(list);
     convo.participants.forEach(to => io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
     res.json({ ok: true });
@@ -1173,9 +1573,12 @@ app.get("/api/presence", requireAuth, (req, res) => {
 });
 
 // TALKCHAT_STORIES_V1
-app.get("/api/stories", requireAuth, (req, res) => {
+app.get("/api/stories", requireAuth, async (req, res) => {
     const now = Date.now();
-    const list = stories().filter(x => new Date(x.expiresAt).getTime() > now);
+    const existing = stories();
+    const list = existing.filter(x => new Date(x.expiresAt).getTime() > now);
+    for (const expired of existing.filter(x => new Date(x.expiresAt).getTime() <= now))
+        await removeLocalUpload(expired.media, expired.storagePath);
     saveStories(list);
     const me = currentUser(req);
     const result = list.map(x => {
@@ -1208,6 +1611,8 @@ app.post("/api/stories", requireAuth, socialUpload.single("media"), (req, res) =
         id: crypto.randomUUID(),
         username: currentUser(req),
         media: "/uploads/" + req.file.filename,
+        storagePath: req.file.filename,
+        storagePath: req.file.filename,
         mediaType: req.file.mimetype.startsWith("video/") ? "video" : "image",
         text: String(req.body.text || "").trim().slice(0, 250),
         createdAt: now.toISOString(),
@@ -1220,11 +1625,13 @@ app.post("/api/stories", requireAuth, socialUpload.single("media"), (req, res) =
     res.json({ok:true, story:{...item, views:undefined}});
 });
 
-app.delete("/api/stories/:id", requireAuth, (req, res) => {
+app.delete("/api/stories/:id", requireAuth, async (req, res) => {
     const list = stories();
     const item = list.find(x => x.id === req.params.id);
     if (!item) return res.status(404).json({error:"Story tapılmadı."});
     if (item.username !== currentUser(req)) return res.status(403).json({error:"Bu Story sənə aid deyil."});
+    const removed = await removeLocalUpload(item.media, item.storagePath);
+    if (!removed.ok) return res.status(503).json({error:"Fayl Storage-dan silinmədi; Story saxlanıldı."});
     saveStories(list.filter(x => x.id !== item.id));
     res.json({ok:true});
 });
@@ -1393,4 +1800,11 @@ app.post("/api/rooms/:id/messages/:messageId/react", requireAuth, (req, res) => 
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, "0.0.0.0", () => console.log(`TalkChat V2 işləyir: http://localhost:${PORT}`));
+async function startServer() {
+    if (supa.enabled) await supa.ensurePrivateBucket();
+    server.listen(PORT, "0.0.0.0", () => console.log(`TalkChat V2 işləyir: http://localhost:${PORT}`));
+}
+startServer().catch(error => {
+    console.error("Storage təhlükəsizliyini yoxlamaq mümkün olmadı:", error.message);
+    process.exit(1);
+});

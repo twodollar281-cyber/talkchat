@@ -40,14 +40,33 @@ function engine() {
     };
 }
 
-function publicUrl(filename) {
-    return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${encodeURIComponent(filename)}`;
+async function createSignedUrl(filename, expiresIn = 900) {
+    if (!enabled || !filename) throw new Error("Supabase Storage aktiv deyil.");
+    const { data, error } = await client.storage.from(BUCKET).createSignedUrl(filename, expiresIn);
+    if (error) throw error;
+    if (!data?.signedUrl) throw new Error("Supabase imzalı fayl linki yaratmadı.");
+    return /^https?:\/\//i.test(data.signedUrl)
+        ? data.signedUrl
+        : `${SUPABASE_URL}${data.signedUrl.startsWith("/") ? "" : "/"}${data.signedUrl}`;
+}
+
+async function ensurePrivateBucket() {
+    if (!enabled) throw new Error("Supabase Storage konfiqurasiyası yoxdur.");
+    const { data, error } = await client.storage.getBucket(BUCKET);
+    if (error) throw error;
+    if (!data) throw new Error(`Supabase bucket '${BUCKET}' tapılmadı.`);
+    if (data.public === true) {
+        const { error: updateError } = await client.storage.updateBucket(BUCKET, { public: false });
+        if (updateError) throw updateError;
+    }
+    return true;
 }
 
 async function remove(filename) {
-    if (!enabled || !filename) return;
-    try { await client.storage.from(BUCKET).remove([filename]); }
-    catch (e) { console.error("Supabase silmə xətası:", e.message); }
+    if (!enabled || !filename) return { ok: true, skipped: true };
+    const { error } = await client.storage.from(BUCKET).remove([filename]);
+    if (error) throw error;
+    return { ok: true };
 }
 
-module.exports = { enabled, engine, publicUrl, remove, origin: enabled ? new URL(SUPABASE_URL).origin : "" };
+module.exports = { enabled, engine, createSignedUrl, ensurePrivateBucket, remove, origin: enabled ? new URL(SUPABASE_URL).origin : "" };
