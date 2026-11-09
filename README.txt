@@ -70,3 +70,7 @@ SINIRLAR
 GIF MESSAGING
 -------------
 GIF search uses the official GIPHY API through the TalkChat server. Set the server-side environment variable GIPHY_API_KEY in the host secret store; never add the key to browser code or commit its value. Without the key, search and category endpoints return a clear configuration error; existing messages, favorites, recent GIFs, and sticker messaging remain available. The picker displays the required Powered by GIPHY attribution. Historical Tenor GIF URLs remain supported so previously stored messages and favorites continue to display; no Tenor API calls remain.
+
+LIVE STREAMING
+--------------
+Live streams use peer-to-peer WebRTC without a paid provider or API key. Browser HTTPS, a camera/microphone permission, and a compatible network are required. The current implementation supports up to 10 viewers; see docs/live-streaming.md for limitations and setup details.

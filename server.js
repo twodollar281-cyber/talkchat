@@ -1106,6 +1106,12 @@ function addNotification(to, from, type, extra = {}) {
     saveNotifications(list.slice(0, 1000));
 }
 
+require("./liveStreams").install({
+    app, io, users, readJSON, saveJSON, requireAuth, currentUser,
+    canViewProfile, canViewContent, isBlockedBetween,
+    roleOf, canModerateUser, appendAudit
+});
+
 const allowedMime = new Set([
     "image/jpeg", "image/png", "image/webp", "image/gif",
     "video/mp4", "video/webm",

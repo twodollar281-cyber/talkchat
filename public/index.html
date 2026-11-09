@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="sticker-picker.css?v=1">
   <link rel="stylesheet" href="admin.css?v=1">
   <link rel="stylesheet" href="profile-customization.css?v=1">
+  <link rel="stylesheet" href="live-streams.css?v=1">
 </head>
 <body>
   <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -158,6 +159,30 @@
           </button>
         </div>
         <div id="reelsFeed" class="reels-feed" aria-label="Reels lenti"></div>
+      </section>
+
+      <section id="livePage" class="page tc-live-page" hidden>
+        <header class="tc-live-heading">
+          <div><span class="eyebrow">TALKCHAT · REALTIME</span><h1>Canlı yayımlar</h1><p class="muted">Brauzer WebRTC bağlantısı ilə canlı yayım.</p></div>
+          <button id="liveCreateButton" class="primary" type="button">＋ Canlı yayım yarat</button>
+        </header>
+        <p id="liveStatus" class="status" aria-live="polite"></p>
+        <section id="liveComposer" class="tc-live-composer" aria-label="Canlı yayım önizləməsi" hidden>
+          <div class="tc-live-video-wrap"><video id="livePreviewVideo" autoplay muted playsinline aria-label="Kamera önizləməsi"></video><span class="tc-live-preview-label">Önizləmə — hələ canlı deyil</span></div>
+          <label class="profile-field-label" for="liveTitle">Yayım başlığı</label>
+          <input id="liveTitle" maxlength="120" minlength="3" placeholder="Nədən danışacaqsan?" autocomplete="off">
+          <div class="tc-live-actions"><button id="liveStartButton" class="primary" type="button">Canlı başlat</button><button id="liveCancelButton" class="secondary" type="button">Ləğv et</button></div>
+        </section>
+        <section id="liveRoom" class="tc-live-room" aria-label="Canlı yayım" hidden>
+          <div class="tc-live-stage"><video id="liveRoomVideo" autoplay playsinline aria-label="Canlı yayım videosu"></video><div id="liveRoomEmpty" class="tc-live-video-empty">Video bağlantısı gözlənilir…</div></div>
+          <div class="tc-live-room-meta"><div><span class="tc-live-badge">● CANLI</span><h2 id="liveRoomTitle"></h2><p id="liveRoomHost" class="muted"></p></div><span id="liveViewerCount" class="tc-live-viewer-count">0 izləyici</span></div>
+          <p id="liveRoomStatus" class="status" aria-live="polite"></p>
+          <div class="tc-live-comments" id="liveComments" role="log" aria-live="polite" aria-label="Canlı şərhlər"></div>
+          <form id="liveCommentForm" class="tc-live-comment-form"><label class="sr-only" for="liveCommentInput">Canlı şərh</label><input id="liveCommentInput" maxlength="500" autocomplete="off" placeholder="Şərh yaz…" required><button class="primary" type="submit">Göndər</button></form>
+          <div class="tc-live-actions"><button id="liveEndButton" class="tc-live-end-button" type="button" hidden>Yayımı bitir</button><button id="liveLeaveButton" class="secondary" type="button">Canlı yayım siyahısına qayıt</button></div>
+        </section>
+        <div id="liveStreamList" class="tc-live-list" aria-live="polite"></div>
+        <p class="tc-live-disclosure">Media cihazlar arasında birbaşa ötürülür, TalkChat serverində qeydə alınmır. Bu pulsuz, kiçik auditoriyaya uyğun WebRTC yayımıdır; bəzi şəbəkələr TURN xidməti olmadan qoşulmaya bilər və yayımlar maksimum 10 izləyici ilə məhdudlaşır.</p>
       </section>
 
       <section id="discoverPage" class="page" hidden>
@@ -471,6 +496,7 @@
       <nav class="tc-menu-links" aria-label="Əsas menyu">
         <button type="button" data-page="home"><span aria-hidden="true">⌂</span>Ana Səhifə</button>
         <button type="button" data-page="discover"><span aria-hidden="true">⌕</span>Discover</button>
+        <button type="button" data-page="live"><span aria-hidden="true">●</span>Canlı yayımlar</button>
         <button type="button" data-page="reels"><span aria-hidden="true">▶</span>Reels</button>
         <button type="button" data-page="messages"><span aria-hidden="true">▣</span>Mesajlar</button>
         <button type="button" data-page="notifications"><span aria-hidden="true">♧</span>Bildirişlər</button>
@@ -547,5 +573,6 @@
   <script src="tc-mobile-chat.js?v=1"></script>
   <script src="calls.js?v=5"></script>
 <script src="group-calls.js?v=3"></script>
+  <script src="live-streams.js?v=1"></script>
 </body>
 </html>

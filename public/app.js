@@ -4,6 +4,7 @@ window.addEventListener("error", e => {
 });
 const $ = id => document.getElementById(id);
 const socket = io();
+window.TalkChatSocket = socket;
 let me = "";
 let scope = "all";
 let activeConversation = null;
@@ -39,6 +40,7 @@ function showPage(name) {
   if (name === "reels") window.TalkChatSocial?.loadReels();
   if (name === "profile") loadMyPosts();
   if (name === "admin") window.TalkChatAdmin?.load();
+  if (name === "live") window.TalkChatLive?.load();
 }
 document.querySelectorAll("[data-page]").forEach(b => b.addEventListener("click", () => showPage(b.dataset.page)));
 $("loginTab").onclick = () => setAuthMode("login");
@@ -82,6 +84,7 @@ function updateOwnerBootstrapField() {
 $("authUsername").addEventListener("input", updateOwnerBootstrapField);
 $("authUsername").addEventListener("change", updateOwnerBootstrapField);
 function enterApp() {
+  window.TalkChatCurrentUsername = me;
   $("authPage").hidden = true; $("app").hidden = false;
   socket.connect(); showPage("home");
   window.TalkChatSocial?.refreshMenuProfile?.();
