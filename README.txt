@@ -65,3 +65,8 @@ SINIRLAR
 - Zil, sayfa açıkken çalar; sayfa arka plandaysa tarayıcı bildirimi gösterilir (izin verilmişse).
 - Cevapsız arama kaydı sohbete düşmez (bunun için sunucu tarafı gerekir).
 - Kodda ayrıca iki yerde "newMessage" dinleyicisi var; bu her mesajda sohbetin iki kez yenilenmesine yol açar (bu yama ona dokunmadı).
+
+
+GIF MESSAGING
+-------------
+GIF search uses the Tenor API from the TalkChat server. Set the server-side environment variable TENOR_API_KEY before enabling GIF search and categories. Keep the key in the host secret store; never add it to browser code or commit its value. Without the key, search and category endpoints return a clear configuration error; existing messages, favorites, and other messaging remain available.
