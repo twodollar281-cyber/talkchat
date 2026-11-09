@@ -1,0 +1,23 @@
+#messagesPage.tc-chat-themed.ig-dm .ig-main { background: var(--tc-chat-background) !important; }
+#messagesPage.tc-chat-themed .ig-bub:not(.img):not(.del) { background: var(--tc-chat-incoming) !important; color: var(--tc-chat-incomingText) !important; border-radius: var(--tc-chat-bubble-radius) !important; }
+#messagesPage.tc-chat-themed .ig-row.me .ig-bub:not(.img):not(.del) { background: var(--tc-chat-outgoing) !important; color: var(--tc-chat-outgoingText) !important; }
+.tc-chat-theme-dialog { width: min(520px,calc(100vw - 24px)); max-width: 520px; max-height: 90dvh; padding: 0; border: 1px solid rgba(255,255,255,.14); border-radius: 20px; color: #F7F6FC; background: #141420; box-shadow: 0 24px 90px rgba(0,0,0,.55); overflow: auto; }
+.tc-chat-theme-dialog::backdrop { background: rgba(4,4,12,.78); backdrop-filter: blur(7px); }
+.tc-chat-theme-panel { padding: clamp(17px,4vw,24px); }
+.tc-chat-theme-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.tc-chat-theme-panel h2 { margin: 5px 0 0; font-size: 21px; }
+.tc-chat-theme-panel > .muted { margin: 8px 0 16px; font-size: 12px; }
+.tc-chat-theme-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.tc-chat-theme-grid label { display: grid; gap: 7px; color: #C9C6D8; font-size: 12px; }
+.tc-chat-theme-grid input[type="color"] { width: 100%; height: 42px; padding: 4px; border: 1px solid rgba(255,255,255,.15); border-radius: 10px; background: #1D1D2C; cursor: pointer; }
+.tc-chat-theme-grid select { width: 100%; min-height: 42px; margin: 0; color: #F7F6FC; background: #1D1D2C; }
+.tc-chat-theme-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; margin-top: 17px; }
+.tc-chat-theme-actions button { min-height: 42px; }
+.tc-chat-theme-actions .text-button { grid-column: 1 / -1; }
+.tc-chat-theme-actions button:disabled { opacity: .48; cursor: not-allowed; }
+.tc-chat-theme-panel .status { min-height: 18px; margin: 10px 0 0; font-size: 12px; }
+.tc-chat-theme-panel .status.error { color: #FFADB8; }
+@media (max-width: 400px) {
+  .tc-chat-theme-grid, .tc-chat-theme-actions { grid-template-columns: 1fr; }
+  .tc-chat-theme-actions .text-button { grid-column: auto; }
+}
