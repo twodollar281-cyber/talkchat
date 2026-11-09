@@ -1111,7 +1111,7 @@ require("./liveStreams").install({
     canViewProfile, canViewContent, isBlockedBetween,
     roleOf, canModerateUser, appendAudit
 });
-require("./savedCollections").install({
+require("./savedCollections").installSavedCollections({
     app, posts, readJSON, saveJSON, requireAuth, currentUser,
     canViewContent, isBlockedBetween, publicPost
 });
