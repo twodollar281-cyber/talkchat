@@ -9,10 +9,48 @@
   "use strict";
   if (typeof socket === "undefined" || window.__tccLoaded) return;
   window.__tccLoaded = true;
+  const RING_MS = window.TCC_RING_MS || 40000;
 
-  const RING_MS = window.TCC_RING_MS || 40000; // arayan bu kadar bekler
-  // Farklı ağlar (mobil veri <-> Wi-Fi) için TURN eklemek istersen: window.TC_ICE_SERVERS = [...]
-  const ICE = window.TC_ICE_SERVERS || [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
+  const FALLBACK_ICE = [
+    {
+      urls: [
+        "stun:stun.l.google.com:19302",
+        "stun:stun1.l.google.com:19302"
+      ]
+    }
+  ];
+
+  const ICE = Array.isArray(window.TC_ICE_SERVERS) && window.TC_ICE_SERVERS.length
+    ? window.TC_ICE_SERVERS
+    : FALLBACK_ICE;
+
+  async function loadIceServers() {
+    if (ICE !== FALLBACK_ICE) return ICE;
+
+    try {
+      const response = await fetch("/api/calls/ice", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "Accept": "application/json" }
+      });
+
+      if (!response.ok) {
+        throw new Error("ICE config HTTP " + response.status);
+      }
+
+      const data = await response.json();
+
+      if (!data || !Array.isArray(data.iceServers) || !data.iceServers.length) {
+        throw new Error("ICE config is empty");
+      }
+
+      return data.iceServers;
+        } catch (error) {
+      console.error("TURN konfiqurasiyası alınmadı:", error);
+      throw new Error("TURN_SERVER_UNAVAILABLE");
+    }
+  }
 
   /* ---------- metinler (tr / az / en) ---------- */
   const LANG = () => { try { return localStorage.getItem("talkchat-language") || "tr"; } catch { return "tr"; } };
@@ -170,7 +208,8 @@
   const getMic = () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
 
   async function createPC(c) {
-    const pc = new RTCPeerConnection({ iceServers: ICE });
+    const iceServers = await loadIceServers();
+  const pc = new RTCPeerConnection({ iceServers });
     c.pc = pc;
     c.local.getTracks().forEach((t) => pc.addTrack(t, c.local));
     // Ekran paylaşımı için baştan hazır video hattı: paylaşırken yeniden pazarlık gerekmez
