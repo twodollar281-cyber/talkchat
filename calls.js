@@ -170,14 +170,17 @@
   const busy = () => (cur && !cur.over) || !!inc;
   const newCall = (o) => ({ callId: null, mediaType: "audio", pc: null, vTrans: null, pending: [], cands: [], remoteSet: false, making: false, ignore: false,
     accepted: false, muted: false, sharing: false, remoteMuted: false, remoteSharing: false, over: false, connectedAt: 0,
-    tick: null, ringTimer: null, warn: "", endText: "", screenTrack: null, relayCount: 0, turn: false, restartCount: 0,
+    tick: null, ringTimer: null, warn: "", endText: "", screenTrack: null, relayCount: 0, turn: false, restartCount: 0, dg: { so: 0, sa: 0, ro: 0, ra: 0, cs: 0, cr: 0, err: "" },
     connectTimer: null, failTimer: null, dropTimer: null, ...o });
   const emit = (ev, convo, extra) => {
     const active = cur && cur.convo === convo ? cur : inc && inc.convo === convo ? inc : null;
     socket.emit(ev, { conversationId: convo, ...(active && active.callId ? { callId: active.callId } : {}), ...(extra || {}) });
   };
   const matchesCall = (call, data) => !!call && !!data && data.conversationId === call.convo && (!data.callId || !call.callId || data.callId === call.callId);
-  const sig = (c, signal) => emit("call:signal", c.convo, { signal });
+  const sig = (c, signal) => {
+    try { if (signal.description) { if (signal.description.type === "offer") c.dg.so++; else c.dg.sa++; } else if (signal.candidate) c.dg.cs++; } catch {}
+    emit("call:signal", c.convo, { signal });
+  };
 
   function paint() {
     const c = cur, i = inc, who = c ? c.peer : i ? i.peer : "";
@@ -201,6 +204,11 @@
     if (c && c.remoteMuted && !c.over) notes.push(tx("remoteMuted"));
     if (c && c.remoteCameraOn === false && c.mediaType === "video" && !c.over) notes.push(tx("cameraOff"));
     if (c && c.sharing && !c.over) notes.push(tx("youShare"));
+    if (c && !c.over && !c.connectedAt && c.pc && window.TCC_DIAG !== false) {
+      const p = c.pc, t = c.candTypes || {}, d = c.dg;
+      notes.push("ICE " + p.iceConnectionState + " | conn " + p.connectionState + " | sig " + p.signalingState + " | TURN " + (c.turn ? "var" : "YOK") + " | tr " + p.getTransceivers().length +
+        " | aday h" + (t.host || 0) + " s" + (t.srflx || 0) + " r" + (t.relay || 0) + " | gonder o" + d.so + " a" + d.sa + " c" + d.cs + " | al o" + d.ro + " a" + d.ra + " c" + d.cr + (d.err ? " | HATA " + d.err : ""));
+    }
     setText(el.note, notes.join(" · "));
     setIcon(el.accept, "phone"); label(el.accept, tx("accept"));
     setIcon(el.decline, "hang"); label(el.decline, tx("decline"));
@@ -328,7 +336,7 @@
       if (c.over || c.pc !== pc) return;
       if (c.role === "callee" && !c.remoteSet) return;
       try { c.making = true; await pc.setLocalDescription(); sig(c, { description: pc.localDescription }); }
-      catch (e) { console.error("Zəng təklifi:", e); } finally { c.making = false; }
+      catch (e) { c.dg.err = "offer " + (e && e.name) + ": " + (e && e.message); console.error("Zəng təklifi:", e); } finally { c.making = false; }
     };
     pc.onnegotiationneeded = negotiate;
     pc.onicecandidate = (e) => {
@@ -338,6 +346,7 @@
       if (m && m[1] === "relay") c.relayCount++;
       sig(c, { candidate: e.candidate });
     };
+    clearInterval(c.tick); c.tick = setInterval(paint, 1000);
     pc.onicecandidateerror = (e) => console.warn("TalkChat ICE aday hatası:", e.errorCode, e.errorText, e.url || "");
     pc.ontrack = (e) => {
       const stream = (e.streams && e.streams[0]) || new MediaStream([e.track]);
@@ -354,7 +363,7 @@
       const s = pc.connectionState;
       if (s === "connected") {
         c.warn = ""; logPath(c, "connected"); clearTimeout(c.connectTimer); clearTimeout(c.failTimer); clearTimeout(c.dropTimer);
-        if (!c.connectedAt) { c.connectedAt = Date.now(); c.tick = setInterval(paint, 1000); takeWake(); }
+        if (!c.connectedAt) { c.connectedAt = Date.now(); clearInterval(c.tick); c.tick = setInterval(paint, 1000); takeWake(); }
       } else if (s === "disconnected") {
         c.warn = tx("weak");
         clearTimeout(c.dropTimer);
@@ -395,6 +404,7 @@
     const pc = c.pc;
     try {
       if (s.description) {
+        if (s.description.type === "offer") c.dg.ro++; else c.dg.ra++;
         const collision = s.description.type === "offer" && (c.making || pc.signalingState !== "stable");
         c.ignore = c.role !== "callee" && collision;
         if (c.ignore) return;
@@ -407,12 +417,13 @@
           sig(c, { description: pc.localDescription });
         }
       } else if (s.candidate) {
+        c.dg.cr++;
         if (!c.remoteSet) c.cands.push(s.candidate);
         else await pc.addIceCandidate(s.candidate).catch((e) => { if (!c.ignore) console.warn("ICE:", e); });
       } else if ("muted" in s) { c.remoteMuted = !!s.muted; paint(); }
       else if ("screen" in s) { c.remoteSharing = !!s.screen; paint(); }
       else if ("camera" in s) { c.remoteCameraOn = !!s.camera; paint(); }
-    } catch (e) { console.error("Zəng siqnalı:", e); }
+    } catch (e) { c.dg.err = (e && e.name) + ": " + (e && e.message); console.error("Zəng siqnalı:", e); }
   }
 
   /* ---------- arama akışı ---------- */
