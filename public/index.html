@@ -355,10 +355,10 @@
 
       <section id="aiPage" class="page tc-ai-page" hidden>
         <header class="tc-ai-heading">
-          <div><span class="eyebrow">TALKCHAT · AI</span><h1>TalkChat AI</h1><p class="muted">OpenAI ilə suallarına cavab al.</p></div>
+          <div><span class="eyebrow">TALKCHAT · AI</span><h1>TalkChat AI</h1><p class="muted">Cloudflare Workers AI ilə suallarına cavab al.</p></div>
           <button id="aiClearHistory" class="secondary" type="button" disabled>Tarixçəni sil</button>
         </header>
-        <p class="tc-ai-disclosure">Bu tarixçə yalnız sənin TalkChat hesabında saxlanılır və digər istifadəçilərə göstərilmir. Cavab hazırlamaq üçün yazdıqların OpenAI-a göndərilir. API istifadəsi ödənişlidir; qiymət modelə və token istifadəsinə görə dəyişir. Model: gpt-4.1-mini. Limit: dəqiqədə 6, gündə 40 sorğu; OpenAI-a göndərilən uğursuz cəhdlər də limitə sayılır. <a href="https://openai.com/api/pricing/" target="_blank" rel="noopener noreferrer">OpenAI API qiymətləri</a>.</p>
+        <p class="tc-ai-disclosure">Bu tarixçə yalnız sənin TalkChat hesabında saxlanılır və digər istifadəçilərə göstərilmir. Suallar cavab yaratmaq üçün Cloudflare Workers AI-a göndərilir. Cloudflare standart, vəziyyətsiz inference sorğuları üçün məlumatı cavab verildikdən sonra saxlamadığını bildirir; əməliyyat metadatası yenə saxlanıla bilər. Model: @cf/zai-org/glm-4.7-flash. Limitlər: hesab üzrə gündə 8 sorğu (konfiqurasiya edilə bilər, maksimum 40), istifadəçi üzrə dəqiqədə 3 (maksimum 6). Bu limitlər billing zəmanəti deyil. AI yalnız hesab sahibi billing tənzimləmələrini yoxlayıb serverdə aktiv etdikdən sonra işləyir. <a href="https://developers.cloudflare.com/workers-ai/platform/pricing/" target="_blank" rel="noopener noreferrer">Workers AI qiymətləri</a>.</p>
         <div id="aiAssistantMessages" class="tc-ai-messages" role="log" aria-live="polite" aria-relevant="additions text"></div>
         <form id="aiAssistantForm" class="tc-ai-form">
           <label class="sr-only" for="aiAssistantInput">TalkChat AI-a mesaj</label>
