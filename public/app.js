@@ -1674,7 +1674,10 @@ function igBubble(m, byId) {
   let quote = "";
   if (m.replyTo) {
     const r = byId.get(m.replyTo);
-    quote = `<span class="ig-quote"><b>${esc(r ? (r.from === me ? "Sən" : "@" + r.from) : "Mesaj")}</b>${esc(igShort(r))}</span>`;
+    const saved = m.replyPreview && typeof m.replyPreview === "object" ? m.replyPreview : null;
+    const author = r?.from || saved?.from || "";
+    const preview = r ? igShort(r) : (saved?.text || "Mesaj");
+    quote = `<span class="ig-quote"><b>${esc(author ? (author === me ? "Sən" : "@" + author) : "Mesaj")}</b>${esc(preview)}</span>`;
   }
   const isImg = (m.attachmentType || "").startsWith("image/");
   const isAudio = (m.attachmentType || "").startsWith("audio/");

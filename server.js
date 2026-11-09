@@ -279,6 +279,17 @@ function previewOf(m) {
     return "📎 " + (m.attachmentName || "Fayl");
 }
 
+function replyPreviewOf(message) {
+    if (!message || message.deleted) return "Mesaj silindi";
+    if (message.text) return String(message.text).replace(/\s+/g, " ").trim().slice(0, 160);
+    if (message.sticker) return "◆ " + String(message.sticker.label || "Sticker").slice(0, 140);
+    if (message.gif) return "🎞 GIF";
+    if (message.sharedPost) return message.sharedPost.kind === "reel" ? "↗ Reels göndərildi" : "↗ Paylaşım göndərildi";
+    if ((message.attachmentType || "").startsWith("image/")) return "📷 Şəkil";
+    if ((message.attachmentType || "").startsWith("audio/")) return "♫ Səsli mesaj";
+    return "📎 " + String(message.attachmentName || "Fayl").replace(/\s+/g, " ").trim().slice(0, 140);
+}
+
 // İstifadəçi qoşulanda ona gələn, hələ çatdırılmamış mesajları "çatdırıldı" edir
 function deliverPending(name) {
     const ids = new Set(conversations().filter(c => c.participants.includes(name)).map(c => c.id));
@@ -1867,6 +1878,7 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
         ...(gif ? { gif } : {}),
         ...(sticker ? { sticker: { id: sticker.id, category: sticker.category, emoji: sticker.emoji, label: sticker.label } } : {}),
         replyTo: replyTarget ? replyTarget.id : "",
+        replyPreview: replyTarget ? { from: replyTarget.from, text: replyPreviewOf(replyTarget) } : null,
         deleted: false,
         deliveredAt: recipients.some(to => onlineUsers.has(to)) ? new Date().toISOString() : "",
         createdAt: new Date().toISOString()
@@ -1976,6 +1988,9 @@ app.delete("/api/conversations/:id/messages/:mid", requireAuth, async (req, res)
     }
     Object.assign(m, { deleted: true, text: "", attachment: "", attachmentName: "", attachmentType: "" });
     m.attachmentStoragePath = "";
+    for (const reply of list) {
+        if (reply.replyTo === m.id) reply.replyPreview = { from: m.from, text: "Mesaj silindi" };
+    }
     saveMessages(list);
     convo.participants.forEach(to => io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
     res.json({ ok: true });
