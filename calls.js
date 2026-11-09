@@ -1,93 +1,120 @@
-/* TALKCHAT_CALLS_V3
+/* TALKCHAT_CALLS_V4
    Sesli arama: sessize alma + ekran paylaşımı (WebRTC).
    app.js'ten SONRA yüklenir; app.js'teki socket, me, conversationsCache, activeConversation değişkenlerini kullanır.
    Mevcut socket olay adlarıyla uyumludur:
    call:invite / call:incoming / call:accept / call:accepted / call:reject / call:rejected / call:signal / call:end / call:ended
    (hepsi { conversationId } taşır; call:signal ayrıca { signal } taşır)
-   Yeni: signal içinde { muted: true|false } ve { screen: true|false } alanları da gönderilir. */
+   Yeni: signal içinde { muted: true|false } ve { screen: true|false } alanları da gönderilir.
+   V4: TURN bilgisi süre dolunca yenilenir, hata önbelleğe alınmaz; bağlantı zaman aşımı + ICE yeniden başlatma;
+       olay işleyicileri artık await'lerden ÖNCE atanır; anlaşılır hata mesajları. */
 (() => {
   "use strict";
   if (typeof socket === "undefined" || window.__tccLoaded) return;
   window.__tccLoaded = true;
-  const RING_MS = window.TCC_RING_MS || 40000;
 
-  const FALLBACK_ICE = [
-    {
-      urls: [
-        "stun:stun.l.google.com:19302",
-        "stun:stun1.l.google.com:19302"
-      ]
-    }
-  ];
-
-  const ICE = Array.isArray(window.TC_ICE_SERVERS) && window.TC_ICE_SERVERS.length
-    ? window.TC_ICE_SERVERS
-    : FALLBACK_ICE;
-
-  async function loadIceServers() {
-    if (ICE !== FALLBACK_ICE) return ICE;
-
-    try {
-      const response = await fetch("/api/calls/ice", {
-        method: "GET",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { "Accept": "application/json" }
+  const RING_MS = window.TCC_RING_MS || 40000; // arayan bu kadar bekler
+  const CONNECT_MS = window.TCC_CONNECT_MS || 30000; // kabul edildikten sonra bağlantı kurulma süresi
+  // Farklı ağlar (mobil veri <-> Wi-Fi) için TURN: sunucudaki /api/calls/ice (Turnix) kullanılır.
+  const STUN_ONLY = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
+  const ICE = window.TC_ICE_SERVERS || STUN_ONLY;
+  /* ICE_LOADER_START */
+  const iceState = { servers: null, expires: 0, pending: null, turn: false };
+  const hasTurn = (list) => Array.isArray(list) && list.some((s) => [].concat((s && s.urls) || []).some((u) => /^turns?:/i.test(String(u))));
+  const getIceServers = () => {
+    if (Array.isArray(window.TC_ICE_SERVERS) && window.TC_ICE_SERVERS.length) { iceState.turn = hasTurn(window.TC_ICE_SERVERS); return Promise.resolve(window.TC_ICE_SERVERS); }
+    if (iceState.servers && Date.now() < iceState.expires) return Promise.resolve(iceState.servers);
+    if (iceState.pending) return iceState.pending;
+    const ctl = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), 12000) : null;
+    iceState.pending = fetch("/api/calls/ice", { credentials: "same-origin", cache: "no-store", signal: ctl ? ctl.signal : undefined })
+      .then((r) => { if (!r.ok) throw new Error("ICE HTTP " + r.status); return r.json(); })
+      .then((d) => {
+        if (!d || !Array.isArray(d.iceServers) || !d.iceServers.length) throw new Error("ICE response invalid");
+        const exp = d.expiresAt ? Date.parse(d.expiresAt) : NaN;
+        const ttl = Number.isFinite(exp) ? Math.max(exp - Date.now() - 90000, 0) : 50 * 60 * 1000;
+        iceState.servers = d.iceServers; iceState.expires = Date.now() + ttl; iceState.turn = hasTurn(d.iceServers);
+        return d.iceServers;
+      })
+      .catch((e) => { console.warn("TalkChat: TURN bilgisi alınamadı, yalnız STUN kullanılacak (" + (e && e.message) + ")"); iceState.turn = false; return ICE; })
+      .finally(() => { clearTimeout(timer); iceState.pending = null; });
+    return iceState.pending;
+  };
+  /* ICE_LOADER_END */
+  window.TalkChatICE = window.TalkChatICE || {};
+  window.TalkChatICE.get = getIceServers;
+  window.TalkChatICE.hasTurn = () => iceState.turn;
+  window.TalkChatNativeScreen = window.TalkChatNativeScreen || {
+    async start(onStopped) {
+      const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CallService;
+      if (!P || !P.startScreenShare || !P.addListener || !HTMLCanvasElement.prototype.captureStream) throw new Error("Android screen capture is not installed in this app build.");
+      const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { alpha: false });
+      canvas.width = 960; canvas.height = 540;
+      let stopped = false, decoding = false;
+      const frameHandle = await P.addListener("screenFrame", data => {
+        if (stopped || decoding || !data || !data.frame) return;
+        decoding = true;
+        const image = new Image();
+        image.onload = () => { if (!stopped) { canvas.width = image.naturalWidth || canvas.width; canvas.height = image.naturalHeight || canvas.height; ctx.drawImage(image, 0, 0, canvas.width, canvas.height); } decoding = false; };
+        image.onerror = () => { decoding = false; };
+        image.src = "data:image/jpeg;base64," + data.frame;
       });
-
-      if (!response.ok) {
-        throw new Error("ICE config HTTP " + response.status);
-      }
-
-      const data = await response.json();
-
-      if (!data || !Array.isArray(data.iceServers) || !data.iceServers.length) {
-        throw new Error("ICE config is empty");
-      }
-
-      return data.iceServers;
-        } catch (error) {
-      console.error("TURN konfiqurasiyası alınmadı:", error);
-      throw new Error("TURN_SERVER_UNAVAILABLE");
+      const stopHandle = await P.addListener("screenCaptureStopped", () => { if (!stopped && onStopped) onStopped(); });
+      const stream = canvas.captureStream(12);
+      try { await P.startScreenShare(); }
+      catch (error) { stopped = true; frameHandle.remove(); stopHandle.remove(); stream.getTracks().forEach(t => t.stop()); throw error; }
+      return { stream, async stop(nativeStopped = false) { if (stopped) return; stopped = true; frameHandle.remove(); stopHandle.remove(); stream.getTracks().forEach(t => t.stop()); if (!nativeStopped && P.stopScreenShare) await P.stopScreenShare(); } };
     }
-  }
+  };
+
 
   /* ---------- metinler (tr / az / en) ---------- */
   const LANG = () => { try { return localStorage.getItem("talkchat-language") || "tr"; } catch { return "tr"; } };
   const S = {
-    calling:    { tr: "Aranıyor…", az: "Zəng edilir…", en: "Calling…" },
-    connecting: { tr: "Bağlanıyor…", az: "Qoşulur…", en: "Connecting…" },
-    incoming:   { tr: "Sesli arama", az: "Səsli zəng", en: "Voice call" },
-    accept:     { tr: "Cevapla", az: "Qəbul et", en: "Answer" },
-    decline:    { tr: "Reddet", az: "Rədd et", en: "Decline" },
-    mute:       { tr: "Sessize al", az: "Səssiz", en: "Mute" },
-    unmute:     { tr: "Sesi aç", az: "Səsi aç", en: "Unmute" },
-    share:      { tr: "Ekran paylaş", az: "Ekranı paylaş", en: "Share screen" },
-    stopShare:  { tr: "Paylaşımı durdur", az: "Paylaşımı dayandır", en: "Stop sharing" },
-    hangup:     { tr: "Bitir", az: "Bitir", en: "End" },
-    remoteMuted:{ tr: "Karşı taraf mikrofonu kapattı", az: "Qarşı tərəf mikrofonu bağladı", en: "They muted their microphone" },
-    youShare:   { tr: "Ekranını paylaşıyorsun", az: "Ekranını paylaşırsan", en: "You are sharing your screen" },
-    ended:      { tr: "Arama bitti", az: "Zəng bitdi", en: "Call ended" },
-    noAnswer:   { tr: "Yanıt vermedi", az: "Cavab vermədi", en: "No answer" },
-    declined:   { tr: "Arama reddedildi", az: "Zəng rədd edildi", en: "Call declined" },
-    dropped:    { tr: "Bağlantı koptu", az: "Bağlantı kəsildi", en: "Connection lost" },
-    weak:       { tr: "Bağlantı zayıf…", az: "Bağlantı zəifdir…", en: "Weak connection…" },
-    failed:     { tr: "Bağlantı kurulamadı", az: "Bağlantı qurulmadı", en: "Could not connect" },
+    calling:    { tr: "Aranıyor…", az: "Zəng edilir…", en: "Calling…", ru: "Вызов…" },
+    connecting: { tr: "Bağlanıyor…", az: "Qoşulur…", en: "Connecting…", ru: "Подключение…" },
+    incoming:   { tr: "Sesli arama", az: "Səsli zəng", en: "Voice call", ru: "Голосовой звонок" },
+    accept:     { tr: "Cevapla", az: "Qəbul et", en: "Answer", ru: "Ответить" },
+    decline:    { tr: "Reddet", az: "Rədd et", en: "Decline", ru: "Отклонить" },
+    mute:       { tr: "Sessize al", az: "Səssiz", en: "Mute", ru: "Без звука" },
+    unmute:     { tr: "Sesi aç", az: "Səsi aç", en: "Unmute", ru: "Включить звук" },
+    share:      { tr: "Ekran paylaş", az: "Ekranı paylaş", en: "Share screen", ru: "Поделиться экраном" },
+    stopShare:  { tr: "Paylaşımı durdur", az: "Paylaşımı dayandır", en: "Stop sharing", ru: "Остановить показ" },
+    hangup:     { tr: "Bitir", az: "Bitir", en: "End", ru: "Завершить" },
+    videoIncoming:{ tr: "Görüntülü arama", az: "Video zəng", en: "Video call", ru: "Видеозвонок" },
+    cameraOn:   { tr: "Kamerayı kapat", az: "Kameranı bağla", en: "Turn camera off", ru: "Выключить камеру" },
+    cameraOff:  { tr: "Kamerayı aç", az: "Kameranı aç", en: "Turn camera on", ru: "Включить камеру" },
+    switchCamera:{ tr: "Kamerayı değiştir", az: "Kameranı dəyiş", en: "Switch camera", ru: "Переключить камеру" },
+    cameraFail: { tr: "Kamera açılamadı.", az: "Kamera açıla bilmədi.", en: "Could not access the camera.", ru: "Не удалось включить камеру." },
+    reconnecting:{ tr: "Bağlantı yenileniyor…", az: "Bağlantı yenilənir…", en: "Reconnecting…", ru: "Переподключение…" },
+    remoteMuted:{ tr: "Karşı taraf mikrofonu kapattı", az: "Qarşı tərəf mikrofonu bağladı", en: "They muted their microphone", ru: "Собеседник выключил микрофон" },
+    youShare:   { tr: "Ekranını paylaşıyorsun", az: "Ekranını paylaşırsan", en: "You are sharing your screen", ru: "Вы показываете экран" },
+    ended:      { tr: "Arama bitti", az: "Zəng bitdi", en: "Call ended", ru: "Звонок завершён" },
+    noAnswer:   { tr: "Yanıt vermedi", az: "Cavab vermədi", en: "No answer", ru: "Нет ответа" },
+    declined:   { tr: "Arama reddedildi", az: "Zəng rədd edildi", en: "Call declined", ru: "Звонок отклонён" },
+    dropped:    { tr: "Bağlantı koptu", az: "Bağlantı kəsildi", en: "Connection lost", ru: "Соединение прервано" },
+    weak:       { tr: "Bağlantı zayıf…", az: "Bağlantı zəifdir…", en: "Weak connection…", ru: "Слабое соединение…" },
+    failed:     { tr: "Bağlantı kurulamadı", az: "Bağlantı qurulmadı", en: "Could not connect", ru: "Не удалось соединиться" },
+    noTurn:     { tr: "Bağlantı kurulamadı. Farklı ağlardaki cihazlar için TURN sunucusuna ulaşılamadı.",
+                  az: "Bağlantı qurulmadı. Fərqli şəbəkələrdəki cihazlar üçün TURN serverinə çatmaq mümkün olmadı.",
+                  en: "Could not connect. The TURN relay server was unavailable for devices on different networks.", ru: "Не удалось соединиться. Сервер TURN для устройств в разных сетях недоступен." },
     micDenied:  { tr: "Mikrofon izni verilmedi. Tarayıcı ayarlarından mikrofona izin ver.",
                   az: "Mikrofon icazəsi verilmədi. Brauzer ayarlarından mikrofona icazə ver.",
-                  en: "Microphone permission was denied. Allow the microphone in your browser settings." },
+                  en: "Microphone permission was denied. Allow the microphone in your browser settings.", ru: "Нет доступа к микрофону. Разрешите его в настройках браузера." },
     needHttps:  { tr: "Sesli arama için güvenli bağlantı (HTTPS) gerekli.\n\nAynı cihazdaysan http://localhost kullan. Başka cihazdan bağlanıyorsan sunucuyu HTTPS ile aç.",
                   az: "Səsli zəng üçün təhlükəsiz bağlantı (HTTPS) lazımdır.\n\nEyni cihazdasansa http://localhost istifadə et. Başqa cihazdan qoşulursansa serveri HTTPS ilə aç.",
-                  en: "Voice calls need a secure connection (HTTPS).\n\nOn the same device use http://localhost. From another device, run the server over HTTPS." },
-    noRtc:      { tr: "Bu tarayıcı sesli aramayı desteklemiyor.", az: "Bu brauzer səsli zəngi dəstəkləmir.", en: "This browser does not support voice calls." },
+                  en: "Voice calls need a secure connection (HTTPS).\n\nOn the same device use http://localhost. From another device, run the server over HTTPS.", ru: "Для голосового звонка нужно защищённое соединение (HTTPS).\n\nНа этом же устройстве используйте http://localhost. С другого устройства откройте сервер по HTTPS." },
+    noRtc:      { tr: "Bu tarayıcı sesli aramayı desteklemiyor.", az: "Bu brauzer səsli zəngi dəstəkləmir.", en: "This browser does not support voice calls.", ru: "Этот браузер не поддерживает голосовые звонки." },
     noScreen:   { tr: "Bu tarayıcı ekran paylaşımını desteklemiyor.\n\nGenelde bilgisayardaki Chrome, Edge, Firefox ve Safari destekler; telefon tarayıcılarının çoğu desteklemez. Karşı tarafın paylaştığı ekranı ise yine de görebilirsin.",
                   az: "Bu brauzer ekran paylaşımını dəstəkləmir.\n\nÇox vaxt kompüterdəki Chrome, Edge, Firefox və Safari dəstəkləyir; telefon brauzerlərinin çoxu dəstəkləmir. Qarşı tərəfin paylaşdığı ekranı isə görə bilərsən.",
-                  en: "This browser does not support screen sharing.\n\nDesktop Chrome, Edge, Firefox and Safari usually do; most phone browsers do not. You can still see a screen the other person shares." },
-    group:      { tr: "Arama sadece birebir sohbetlerde yapılabilir.", az: "Zəng yalnız şəxsi söhbətdə mümkündür.", en: "Calls are only available in one-to-one chats." },
-    already:    { tr: "Zaten bir aramadasın.", az: "Artıq zəngdəsən.", en: "You are already in a call." },
-    noPeer:     { tr: "Önce bir sohbet seç.", az: "Əvvəlcə söhbət seç.", en: "Select a chat first." },
-    offline:    { tr: "Sunucuya bağlı değilsin. Birazdan tekrar dene.", az: "Serverə qoşulu deyilsən. Bir az sonra yenidən yoxla.", en: "You are not connected to the server. Try again shortly." },
-    shareFail:  { tr: "Ekran paylaşımı başlatılamadı: ", az: "Ekran paylaşımı başlamadı: ", en: "Could not start screen sharing: " },
+                  en: "This browser does not support screen sharing.\n\nDesktop Chrome, Edge, Firefox and Safari usually do; most phone browsers do not. You can still see a screen the other person shares.", ru: "Этот браузер не поддерживает показ экрана.\n\nОбычно поддерживают Chrome, Edge, Firefox и Safari на компьютере; большинство браузеров телефонов — нет. Экран собеседника вы всё равно сможете видеть." },
+    group:      { tr: "Arama sadece birebir sohbetlerde yapılabilir.", az: "Zəng yalnız şəxsi söhbətdə mümkündür.", en: "Calls are only available in one-to-one chats.", ru: "Звонки доступны только в чатах один на один." },
+    already:    { tr: "Zaten bir aramadasın.", az: "Artıq zəngdəsən.", en: "You are already in a call.", ru: "Вы уже в звонке." },
+    noPeer:     { tr: "Önce bir sohbet seç.", az: "Əvvəlcə söhbət seç.", en: "Select a chat first.", ru: "Сначала выберите чат." },
+    offline:    { tr: "Sunucuya bağlı değilsin. Birazdan tekrar dene.", az: "Serverə qoşulu deyilsən. Bir az sonra yenidən yoxla.", en: "You are not connected to the server. Try again shortly.", ru: "Нет подключения к серверу. Попробуйте позже." },
+    busy: { tr: "Karşı taraf şu anda başka bir aramada.", az: "Qarşı tərəf hazırda başqa zəngdədir.", en: "The other person is already in a call.", ru: "Собеседник уже разговаривает." },
+  callDenied: { tr: "Bu sohbet için arama iznin yok.", az: "Bu söhbət üçün zəng icazən yoxdur.", en: "You are not allowed to call from this chat.", ru: "Вам нельзя звонить из этого чата." },
+  callFailed: { tr: "Arama başlatılamadı. Tekrar dene.", az: "Zəng başlatmaq alınmadı. Yenidən yoxla.", en: "The call could not start. Try again.", ru: "Не удалось начать звонок. Попробуйте ещё раз." },
+  shareFail:  { tr: "Ekran paylaşımı başlatılamadı: ", az: "Ekran paylaşımı başlamadı: ", en: "Could not start screen sharing: ", ru: "Не удалось начать показ экрана: " },
   };
   const tx = (k) => (S[k] && (S[k][LANG()] || S[k].tr)) || k;
 
@@ -97,6 +124,9 @@
     hang:  '<svg viewBox="0 0 24 24"><path d="M3 14c5-5 13-5 18 0l-2.5 2.5-3-1.5v-2.5a10 10 0 0 0-7 0V15l-3 1.5z"/></svg>',
     mic:   '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
     micoff:'<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M4 4l16 16"/></svg>',
+    camera:'<svg viewBox="0 0 24 24"><path d="M14 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zM16 10l5-3v10l-5-3"/></svg>',
+    cameraOff:'<svg viewBox="0 0 24 24"><path d="M14 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zM16 10l5-3v10l-5-3M3 3l18 18"/></svg>',
+    switch:'<svg viewBox="0 0 24 24"><path d="M7 7h13l-3-3M17 17H4l3 3M20 7l-3 3M4 17l3-3"/></svg>',
     screen:'<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M9 11l3-3 3 3M12 8v6"/></svg>',
   };
   const btn = (id, cls) => `<button type="button" id="${id}" class="tcc-btn ${cls}"><span class="tcc-ic"></span><span class="tcc-lb"></span></button>`;
@@ -114,12 +144,20 @@
       <p id="tccNote" class="tcc-note"></p>
     </div>
     <div class="tcc-bar tcc-bar-in">${btn("tccDecline", "end")}${btn("tccAccept", "ok")}</div>
-    <div class="tcc-bar tcc-bar-call">${btn("tccMute", "")}${btn("tccScreen", "")}${btn("tccHang", "end")}</div>
+    <div class="tcc-bar tcc-bar-call">${btn("tccMute", "")}${btn("tccCamera", "")}${btn("tccSwitch", "")}${btn("tccScreen", "")}${btn("tccHang", "end")}</div>
     <audio id="tccAudio" autoplay playsinline></audio>`;
   document.body.appendChild(box);
+  const screenVideo = document.createElement("video");
+  screenVideo.id = "tccScreenVideo"; screenVideo.className = "tcc-video tcc-screen-video";
+  screenVideo.autoplay = true; screenVideo.playsInline = true; screenVideo.muted = true; screenVideo.hidden = true;
+  box.insertBefore(screenVideo, box.querySelector(".tcc-mid"));
+  const localVideo = document.createElement("video");
+  localVideo.id = "tccLocalVideo"; localVideo.className = "tcc-local-video";
+  localVideo.autoplay = true; localVideo.playsInline = true; localVideo.muted = true; localVideo.hidden = true;
+  box.appendChild(localVideo);
   const $ = (id) => document.getElementById(id);
-  const el = { video: $("tccVideo"), avatar: $("tccAvatar"), name: $("tccName"), status: $("tccStatus"), note: $("tccNote"),
-               audio: $("tccAudio"), mute: $("tccMute"), screen: $("tccScreen"), accept: $("tccAccept"), decline: $("tccDecline"), hang: $("tccHang") };
+  const el = { video: $("tccVideo"), screenVideo, localVideo, avatar: $("tccAvatar"), name: $("tccName"), status: $("tccStatus"), note: $("tccNote"),
+               audio: $("tccAudio"), mute: $("tccMute"), camera: $("tccCamera"), switchCamera: $("tccSwitch"), screen: $("tccScreen"), accept: $("tccAccept"), decline: $("tccDecline"), hang: $("tccHang") };
   const setText = (node, t) => { if (node.textContent !== t) node.textContent = t; };
   const setIcon = (b, svg) => { const s = b.querySelector(".tcc-ic"); if (s.dataset.i !== svg) { s.innerHTML = IC[svg]; s.dataset.i = svg; } };
   const label = (b, t) => setText(b.querySelector(".tcc-lb"), t);
@@ -129,42 +167,52 @@
   let cur = null; // aktif arama
   let inc = null; // gelen arama (henüz cevaplanmadı)
   const busy = () => (cur && !cur.over) || !!inc;
-  const newCall = (o) => ({ pc: null, vTrans: null, pending: [], cands: [], remoteSet: false, making: false, ignore: false,
+  const newCall = (o) => ({ callId: null, mediaType: "audio", pc: null, vTrans: null, pending: [], cands: [], remoteSet: false, making: false, ignore: false,
     accepted: false, muted: false, sharing: false, remoteMuted: false, remoteSharing: false, over: false, connectedAt: 0,
-    tick: null, ringTimer: null, warn: "", endText: "", screenTrack: null, ...o });
-  const emit = (ev, convo, extra) => socket.emit(ev, { conversationId: convo, ...(extra || {}) });
+    tick: null, ringTimer: null, warn: "", endText: "", screenTrack: null, relayCount: 0, turn: false, restartCount: 0,
+    connectTimer: null, failTimer: null, dropTimer: null, ...o });
+  const emit = (ev, convo, extra) => {
+    const active = cur && cur.convo === convo ? cur : inc && inc.convo === convo ? inc : null;
+    socket.emit(ev, { conversationId: convo, ...(active && active.callId ? { callId: active.callId } : {}), ...(extra || {}) });
+  };
+  const matchesCall = (call, data) => !!call && !!data && data.conversationId === call.convo && (!data.callId || !call.callId || data.callId === call.callId);
   const sig = (c, signal) => emit("call:signal", c.convo, { signal });
 
   function paint() {
-    const c = cur, i = inc;
-    const who = c ? c.peer : i ? i.peer : "";
-    box.hidden = !who;
-    if (!who) return;
-    const video = !!(c && c.remoteSharing && !c.over);
+    const c = cur, i = inc, who = c ? c.peer : i ? i.peer : "";
+    box.hidden = !who; if (!who) return;
+    const remoteCamera = !!(c && !c.over && c.mediaType === "video" && c.remoteCameraOn && el.video.srcObject);
+    const remoteScreen = !!(c && !c.over && c.remoteSharing && el.screenVideo.srcObject);
+    const localCamera = !!(c && !c.over && c.mediaType === "video" && c.cameraOn && c.local.getVideoTracks().length);
     box.classList.toggle("is-incoming", !c && !!i);
-    box.classList.toggle("has-video", video);
-    el.video.hidden = !video;
-    setText(el.avatar, who[0].toUpperCase());
-    setText(el.name, who);
+    box.classList.toggle("has-video", remoteCamera || remoteScreen);
+    box.classList.toggle("is-sharing", remoteScreen);
+    el.video.hidden = !remoteCamera; el.screenVideo.hidden = !remoteScreen; el.localVideo.hidden = !localCamera;
+    el.avatar.hidden = remoteCamera || remoteScreen;
+    setText(el.avatar, who[0].toUpperCase()); setText(el.name, who);
     let status;
-    if (!c) status = tx("incoming");
+    if (!c) status = tx(i.mediaType === "video" ? "videoIncoming" : "incoming");
     else if (c.over) status = c.endText || tx("ended");
     else if (c.connectedAt) status = c.warn || fmt(Math.floor((Date.now() - c.connectedAt) / 1000));
-    else status = tx(c.stage);
+    else status = c.warn || tx(c.stage);
     setText(el.status, status);
     const notes = [];
     if (c && c.remoteMuted && !c.over) notes.push(tx("remoteMuted"));
+    if (c && c.remoteCameraOn === false && c.mediaType === "video" && !c.over) notes.push(tx("cameraOff"));
     if (c && c.sharing && !c.over) notes.push(tx("youShare"));
     setText(el.note, notes.join(" · "));
-
     setIcon(el.accept, "phone"); label(el.accept, tx("accept"));
     setIcon(el.decline, "hang"); label(el.decline, tx("decline"));
     setIcon(el.hang, "hang"); label(el.hang, tx("hangup"));
-    setIcon(el.mute, c && c.muted ? "micoff" : "mic");
-    label(el.mute, c && c.muted ? tx("unmute") : tx("mute"));
+    setIcon(el.mute, c && c.muted ? "micoff" : "mic"); label(el.mute, c && c.muted ? tx("unmute") : tx("mute"));
     el.mute.classList.toggle("on", !!(c && c.muted));
-    setIcon(el.screen, "screen");
-    label(el.screen, c && c.sharing ? tx("stopShare") : tx("share"));
+    const hasCamera = !!(c && c.mediaType === "video" && c.local.getVideoTracks().length);
+    el.camera.hidden = !hasCamera; el.switchCamera.hidden = !hasCamera;
+    setIcon(el.camera, c && c.cameraOn ? "camera" : "cameraOff");
+    label(el.camera, c && c.cameraOn ? tx("cameraOn") : tx("cameraOff"));
+    el.camera.classList.toggle("on", !!(c && !c.cameraOn));
+    setIcon(el.switchCamera, "switch"); label(el.switchCamera, tx("switchCamera"));
+    setIcon(el.screen, "screen"); label(el.screen, c && c.sharing ? tx("stopShare") : tx("share"));
     el.screen.classList.toggle("on", !!(c && c.sharing));
   }
 
@@ -205,42 +253,99 @@
     if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return tx("needHttps");
     return "";
   };
-  const getMic = () => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
+  const getMedia = (mode, facing = "user") => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: mode === "video" ? { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } } : false });
+  const NATIVE_T = { tr: "Arama devam ediyor", az: "Zəng davam edir", en: "Call in progress", ru: "Идёт звонок" };
+  const nativeCall = (m, args) => {
+    try {
+      const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CallService;
+      if (P && P[m]) P[m](args || {}).catch(() => {});
+    } catch {}
+  };
+  const MIC_T = {
+    tr: ["Mikrofon izni alınamadı.", "Hata", "Ek bilgi yok."],
+    az: ["Mikrofon icazəsi alınmadı.", "Xəta", "Əlavə məlumat yoxdur."],
+    en: ["Could not get microphone access.", "Error", "No additional information."],
+    ru: ["Не удалось получить доступ к микрофону.", "Ошибка", "Дополнительных данных нет."],
+  };
+  const micErrorText = (e) => { const t = MIC_T[LANG()] || MIC_T.tr; return `${t[0]}\n\n${t[1]}: ${e && e.name ? e.name : "UnknownError"}\n${e && e.message ? e.message : t[2]}`; };
+
+  // Otomatik oynatma engellenirse bir sonraki dokunuşta yeniden dene (ses gelmeme sorunu)
+  const playMedia = (node) => {
+    const p = node.play();
+    if (p && p.catch) p.catch(() => { document.addEventListener("pointerdown", () => { node.play().catch(() => {}); }, { once: true }); });
+  };
+  // Bağlantı kurulamazsa: TURN yoksa / röle adayı hiç oluşmadıysa bunu açıkça söyle
+  const failureText = (c) => (!c.turn || c.relayCount === 0 ? tx("noTurn") : tx("failed"));
+  const clearTimers = (c) => { clearTimeout(c.ringTimer); clearTimeout(c.connectTimer); clearTimeout(c.failTimer); clearTimeout(c.dropTimer); clearInterval(c.tick); };
+  // ICE yeniden başlatma yalnız arayan tarafta (teklifi o verir) ve en fazla 2 kez
+  function restartIce(c) {
+    if (!c || c.over || !c.pc || c.role !== "caller" || c.restartCount >= 2) return false;
+    c.restartCount++;
+    getIceServers().then((list) => {
+      if (c.over || !c.pc) return;
+      try { c.pc.setConfiguration({ ...c.pc.getConfiguration(), iceServers: list }); } catch (e) { console.warn("ICE yapılandırması:", e && e.message); }
+      try { c.pc.restartIce(); } catch (e) { console.warn("restartIce:", e && e.message); }
+    });
+    return true;
+  }
 
   async function createPC(c) {
-    const iceServers = await loadIceServers();
-  const pc = new RTCPeerConnection({ iceServers });
+    const iceServers = await getIceServers();
+    c.turn = hasTurn(iceServers);
+    const pc = new RTCPeerConnection({ iceServers });
     c.pc = pc;
-    c.local.getTracks().forEach((t) => pc.addTrack(t, c.local));
-    // Ekran paylaşımı için baştan hazır video hattı: paylaşırken yeniden pazarlık gerekmez
-    c.vTrans = pc.addTransceiver("video", { direction: "sendrecv" });
-
+    // Olay işleyicileri HER ZAMAN await'lerden önce atanır: aksi halde negotiationneeded kaçabilir ve teklif hiç gönderilmez.
+    const negotiate = async () => {
+      if (c.over || c.pc !== pc) return;
+      if (c.role === "callee" && !c.remoteSet) return;
+      try { c.making = true; await pc.setLocalDescription(); sig(c, { description: pc.localDescription }); }
+      catch (e) { console.error("Zəng təklifi:", e); } finally { c.making = false; }
+    };
+    pc.onnegotiationneeded = negotiate;
+    pc.onicecandidate = (e) => {
+      if (!e.candidate) return;
+      if (/ typ relay/.test(e.candidate.candidate || "")) c.relayCount++;
+      sig(c, { candidate: e.candidate });
+    };
     pc.ontrack = (e) => {
       const stream = (e.streams && e.streams[0]) || new MediaStream([e.track]);
-      if (e.track.kind === "audio") { el.audio.srcObject = stream; el.audio.play().catch(() => {}); }
-      else { el.video.srcObject = new MediaStream([e.track]); el.video.play().catch(() => {}); }
+      if (e.track.kind === "audio") { el.audio.srcObject = stream; playMedia(el.audio); }
+      else if (e.transceiver === c.cameraTrans) { el.video.srcObject = stream; el.video.play().catch(() => {}); }
+      else if (e.transceiver === c.screenTrans) { el.screenVideo.srcObject = stream; el.screenVideo.play().catch(() => {}); }
+      paint();
     };
-    pc.onicecandidate = (e) => { if (e.candidate) sig(c, { candidate: e.candidate }); };
-    pc.onnegotiationneeded = async () => {
-      if (c.role === "callee" && !c.remoteSet) return; // ilk teklifi arayan verir
-      try {
-        c.making = true;
-        await pc.setLocalDescription();
-        sig(c, { description: pc.localDescription });
-      } catch (e) { console.error("Zəng təklifi:", e); } finally { c.making = false; }
-    };
+    pc.oniceconnectionstatechange = () => console.info("TalkChat ICE:", pc.iceConnectionState, "| relay adayı:", c.relayCount, "| TURN:", c.turn);
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
       if (s === "connected") {
-        c.warn = "";
+        c.warn = ""; clearTimeout(c.connectTimer); clearTimeout(c.failTimer); clearTimeout(c.dropTimer);
         if (!c.connectedAt) { c.connectedAt = Date.now(); c.tick = setInterval(paint, 1000); takeWake(); }
-      } else if (s === "disconnected") c.warn = tx("weak");
-      else if (s === "failed") {
-        c.warn = tx("failed");
-        setTimeout(() => { if (cur === c && !c.over) hangUp(tx("failed")); }, 2500);
+      } else if (s === "disconnected") {
+        c.warn = tx("weak");
+        clearTimeout(c.dropTimer);
+        c.dropTimer = setTimeout(() => { if (cur === c && !c.over && pc.connectionState === "disconnected") restartIce(c); }, 4000);
+      } else if (s === "failed") {
+        c.warn = tx("reconnecting");
+        if (!restartIce(c)) {
+          clearTimeout(c.failTimer);
+          c.failTimer = setTimeout(() => { if (cur === c && !c.over && pc.connectionState === "failed") hangUp(failureText(c), 4500); }, c.role === "callee" ? 12000 : 2500);
+        }
       }
       paint();
     };
+    c.audioTrans = pc.addTransceiver("audio", { direction: "sendrecv" });
+    c.cameraTrans = pc.addTransceiver("video", { direction: "sendrecv" });
+    c.screenTrans = pc.addTransceiver("video", { direction: "sendrecv" });
+    const audioTrack = c.local.getAudioTracks()[0], cameraTrack = c.local.getVideoTracks()[0];
+    if (audioTrack) await c.audioTrans.sender.replaceTrack(audioTrack);
+    if (cameraTrack) await c.cameraTrans.sender.replaceTrack(cameraTrack);
+    c.cameraOn = !!cameraTrack;
+    if (cameraTrack) { el.localVideo.srcObject = new MediaStream([cameraTrack]); el.localVideo.play().catch(() => {}); }
+    nativeCall("start", { title: "TalkChat", text: NATIVE_T[LANG()] || NATIVE_T.tr, camera: c.mediaType === "video" });
+    // Güvence: negotiationneeded gelmediyse arayan taraf teklifi kendisi başlatır
+    if (c.role === "caller") setTimeout(() => { if (!c.over && c.pc === pc && !c.making && !pc.localDescription && pc.signalingState === "stable") negotiate(); }, 400);
+    // Bağlantı belirli sürede kurulmazsa sonsuza kadar "Bağlanıyor…" kalma
+    c.connectTimer = setTimeout(() => { if (cur === c && !c.over && !c.connectedAt) hangUp(failureText(c), 4500); }, CONNECT_MS);
     for (const s of c.pending.splice(0)) await handleSignal(c, s);
   }
 
@@ -266,11 +371,12 @@
         else await pc.addIceCandidate(s.candidate).catch((e) => { if (!c.ignore) console.warn("ICE:", e); });
       } else if ("muted" in s) { c.remoteMuted = !!s.muted; paint(); }
       else if ("screen" in s) { c.remoteSharing = !!s.screen; paint(); }
+      else if ("camera" in s) { c.remoteCameraOn = !!s.camera; paint(); }
     } catch (e) { console.error("Zəng siqnalı:", e); }
   }
 
   /* ---------- arama akışı ---------- */
-  async function startCall() {
+  async function startCall(mode = "audio") {
     if (busy()) return alert(tx("already"));
     const conv = conversationsCache.find((x) => x.id === activeConversation);
     if (!conv || conv.type === "group") return alert(conv ? tx("group") : tx("noPeer"));
@@ -280,17 +386,20 @@
     if (p) return alert(p);
     if (!socket.connected) return alert(tx("offline"));
     askNotify();
+    getIceServers().catch(() => {}); // TURN bilgisini önceden ısıt
     let local;
-    try { local = await getMic(); } catch { return alert(tx("micDenied")); }
+    try { local = await getMedia(mode); } catch (e) { console.error("TalkChat media error:", e); return alert(micErrorText(e)); }
     if (busy()) { local.getTracks().forEach((t) => t.stop()); return; }
-    const c = (cur = newCall({ convo: conv.id, peer, role: "caller", local, stage: "calling" }));
+    const mediaType = mode === "video" ? "video" : "audio";
+    const c = (cur = newCall({ convo: conv.id, peer, role: "caller", local, stage: "calling", mediaType, cameraOn: mediaType === "video", remoteCameraOn: true, facing: "user" }));
     paint();
-    emit("call:invite", c.convo);
+    emit("call:invite", c.convo, { mediaType: c.mediaType });
     c.ringTimer = setTimeout(() => { if (cur === c && !c.accepted && !c.over) hangUp(tx("noAnswer")); }, RING_MS);
   }
 
   function showIncoming(d) {
-    inc = { convo: d.conversationId, peer: d.from || "?" };
+    inc = { callId: d.callId || null, mediaType: d.mediaType === "video" ? "video" : "audio", convo: d.conversationId, peer: d.from || "?" };
+    getIceServers().catch(() => {}); // kabul edilince beklememek için zil çalarken yükle
     paint();
     startRing();
     notify(inc.peer);
@@ -313,39 +422,34 @@
     const p = problem();
     if (p) { alert(p); return declineIncoming(); }
     let local;
-    try { local = await getMic(); } catch { alert(tx("micDenied")); return declineIncoming(); }
+    try { local = await getMedia(i.mediaType); } catch (e) { console.error("TalkChat media error:", e); alert(micErrorText(e)); return declineIncoming(); }
     if (inc !== i) { local.getTracks().forEach((t) => t.stop()); return; } // bu arada arama bitti
     inc = null;
     stopRing();
-    const c = (cur = newCall({ convo: i.convo, peer: i.peer, role: "callee", local, stage: "connecting", accepted: true }));
+    const c = (cur = newCall({ callId: i.callId, mediaType: i.mediaType, convo: i.convo, peer: i.peer, role: "callee", local, stage: "connecting", accepted: true, cameraOn: i.mediaType === "video", remoteCameraOn: true, facing: "user" }));
     paint();
     try { await createPC(c); } catch (e) { emit("call:end", c.convo); endLocal(c, tx("failed")); return; }
     if (c.over) return;
     emit("call:accept", c.convo); // hazır olduktan sonra kabul et ki arayanın teklifi kaçmasın
   }
 
-  function endLocal(c, text) {
+  function endLocal(c, text, hold) {
     if (c.over) return;
-    c.over = true;
-    c.endText = text || "";
-    clearTimeout(c.ringTimer);
-    clearInterval(c.tick);
-    if (c.sharing) { c.sharing = false; }
+    c.over = true; c.endText = text || ""; clearTimers(c); c.sharing = false;
+    try { if (c.nativeShare) c.nativeShare.stop().catch(() => {}); } catch {}
     try { if (c.screenTrack) c.screenTrack.stop(); } catch {}
-    try { c.local.getTracks().forEach((t) => t.stop()); } catch {}
+    try { if (c.local) c.local.getTracks().forEach((t) => t.stop()); } catch {}
     try { if (c.pc) c.pc.close(); } catch {}
-    el.audio.srcObject = null;
-    el.video.srcObject = null;
-    dropWake();
-    paint();
-    setTimeout(() => { if (cur === c) { cur = null; paint(); } }, text ? 1400 : 0);
+    el.audio.srcObject = null; el.video.srcObject = null; el.screenVideo.srcObject = null; el.localVideo.srcObject = null;
+    dropWake(); nativeCall("stop", { camera: c.mediaType === "video" }); paint();
+    setTimeout(() => { if (cur === c) { cur = null; paint(); } }, text ? (hold || 1400) : 0);
   }
 
-  function hangUp(text) {
+  function hangUp(text, hold) {
     const c = cur;
     if (!c || c.over) return;
     emit("call:end", c.convo);
-    endLocal(c, typeof text === "string" ? text : "");
+    endLocal(c, typeof text === "string" ? text : "", hold);
   }
 
   /* ---------- mikrofon & ekran paylaşımı ---------- */
@@ -358,48 +462,80 @@
     paint();
   }
 
+  function toggleCamera() {
+    const c = cur, track = c && c.local && c.local.getVideoTracks()[0];
+    if (!c || c.over || c.mediaType !== "video" || !track) return;
+    c.cameraOn = !c.cameraOn; track.enabled = c.cameraOn; sig(c, { camera: c.cameraOn }); paint();
+  }
+  async function switchCamera() {
+    const c = cur; if (!c || c.over || c.mediaType !== "video") return;
+    const facing = c.facing === "environment" ? "user" : "environment";
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }); }
+    catch (e) { alert(tx("cameraFail") + " " + (e.message || "")); return; }
+    const next = stream.getVideoTracks()[0], old = c.local.getVideoTracks()[0];
+    try { await c.cameraTrans.sender.replaceTrack(next); } catch (e) { next.stop(); alert(tx("cameraFail")); return; }
+    if (old) { c.local.removeTrack(old); old.stop(); }
+    c.local.addTrack(next); c.facing = facing; next.enabled = c.cameraOn;
+    el.localVideo.srcObject = new MediaStream([next]); el.localVideo.play().catch(() => {}); paint();
+  }
   async function toggleShare() {
-    const c = cur;
-    if (!c || c.over) return;
+    const c = cur; if (!c || c.over || !c.screenTrans) return;
     if (c.sharing) return stopShare(c);
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) return alert(tx("noScreen"));
-    if (!c.vTrans) return;
+    let stream = null, nativeShare = null;
     try {
-      const ds = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
-      const t = ds.getVideoTracks()[0];
-      if ("contentHint" in t) t.contentHint = "detail";
-      await c.vTrans.sender.replaceTrack(t);
-      c.screenTrack = t;
-      c.sharing = true;
-      t.onended = () => stopShare(c); // tarayıcının "Paylaşımı durdur" düğmesi
-      sig(c, { screen: true });
-      paint();
+      if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+      else if (window.TalkChatNativeScreen) { nativeShare = await window.TalkChatNativeScreen.start(() => stopShare(c, true)); stream = nativeShare.stream; }
+      else return alert(tx("noScreen"));
+      if (!cur || cur !== c || c.over) { stream.getTracks().forEach(t => t.stop()); if (nativeShare) await nativeShare.stop(); return; }
+      const track = stream.getVideoTracks()[0]; if (!track) throw new Error("No screen video track");
+      if ("contentHint" in track) track.contentHint = "detail";
+      await c.screenTrans.sender.replaceTrack(track);
+      c.screenStream = stream; c.screenTrack = track; c.nativeShare = nativeShare; c.sharing = true;
+      track.onended = () => stopShare(c, true); sig(c, { screen: true }); paint();
     } catch (e) {
-      if (e && e.name !== "NotAllowedError" && e.name !== "AbortError") alert(tx("shareFail") + e.message);
+      if (nativeShare) await nativeShare.stop().catch(() => {});
+      if (e && e.name !== "NotAllowedError" && e.name !== "AbortError") alert(tx("shareFail") + (e.message || ""));
     }
   }
-  function stopShare(c) {
-    if (!c.sharing) return;
-    c.sharing = false;
-    try { c.screenTrack.stop(); } catch {}
-    c.screenTrack = null;
-    if (!c.over) {
-      c.vTrans.sender.replaceTrack(null).catch(() => {});
-      sig(c, { screen: false });
-    }
+  async function stopShare(c, nativeStopped = false) {
+    if (!c || !c.sharing) return;
+    c.sharing = false; const share = c.nativeShare, track = c.screenTrack;
+    c.nativeShare = null; c.screenTrack = null; c.screenStream = null;
+    try { if (track && track.readyState !== "ended") track.stop(); } catch {}
+    try { if (share) await share.stop(nativeStopped); } catch {}
+    if (!c.over && c.screenTrans) { c.screenTrans.sender.replaceTrack(null).catch(() => {}); sig(c, { screen: false }); }
     paint();
   }
 
   /* ---------- socket olayları ---------- */
+  socket.on("call:created", (d) => {
+    const c = cur;
+    if (!c || c.over || !d || d.conversationId !== c.convo || typeof d.callId !== "string") return;
+    c.callId = d.callId;
+    c.mediaType = d.mediaType === "video" ? "video" : "audio";
+    paint();
+  });
+  socket.on("call:answered", (d) => { if (inc && matchesCall(inc, d)) dismissIncoming(); });
+  socket.on("call:error", (d) => {
+    const c = cur;
+    if (!c || c.over || !matchesCall(c, d)) return;
+    const key = d.code === "busy" ? "busy" : d.code === "not-authorized" ? "callDenied" : "callFailed";
+    endLocal(c, tx(key));
+  });
   socket.on("call:incoming", (d) => {
     if (!d || !d.conversationId) return;
+    // Sunucu aynı çağrıyı yeniden gönderdiyse (yeniden bağlanma) tekrar işleme / reddetme
+    if (d.callId && ((inc && inc.callId === d.callId) || (cur && !cur.over && cur.callId === d.callId))) return;
     if (busy()) { emit("call:reject", d.conversationId); return; } // meşgul: arayan boşuna beklemesin
     if (cur && cur.over) cur = null;
     showIncoming(d);
   });
   socket.on("call:accepted", async (d) => {
     const c = cur;
-    if (!c || c.over || c.role !== "caller" || !d || d.conversationId !== c.convo) return;
+    if (!c || c.over || c.role !== "caller" || !matchesCall(c, d)) return;
+    c.callId = d.callId || c.callId;
+    c.mediaType = d.mediaType === "video" ? "video" : c.mediaType;
     c.accepted = true;
     clearTimeout(c.ringTimer);
     c.stage = "connecting";
@@ -408,33 +544,63 @@
   });
   socket.on("call:signal", (d) => {
     const c = cur;
-    if (c && !c.over && d && d.conversationId === c.convo) handleSignal(c, d.signal);
+    if (c && !c.over && matchesCall(c, d)) handleSignal(c, d.signal);
   });
   socket.on("call:rejected", (d) => {
     const c = cur;
-    if (c && !c.over && d && d.conversationId === c.convo) endLocal(c, tx("declined"));
+    if (c && !c.over && matchesCall(c, d)) endLocal(c, tx("declined"));
   });
   socket.on("call:ended", (d) => {
     if (!d) return;
-    if (inc && inc.convo === d.conversationId) dismissIncoming();
+    if (inc && matchesCall(inc, d)) dismissIncoming();
     const c = cur;
-    if (c && !c.over && c.convo === d.conversationId) endLocal(c, c.connectedAt ? "" : tx("noAnswer"));
+    if (c && !c.over && matchesCall(c, d)) {
+      // Kabul edilmiş ama hiç bağlanamamış çağrıda karşı taraf kapattıysa "Yanıt vermedi" değil, bağlantı hatası göster
+      const text = d.reason === "disconnected" ? tx("dropped") : d.reason === "no-answer" ? tx("noAnswer") : c.connectedAt ? "" : c.accepted ? failureText(c) : tx("noAnswer");
+      endLocal(c, text, c.accepted && !c.connectedAt ? 4500 : undefined);
+    }
   });
   socket.on("disconnect", () => {
     if (inc) dismissIncoming();
     const c = cur;
-    if (c && !c.over && !c.connectedAt) endLocal(c, tx("dropped")); // bağlanmış arama p2p devam eder
+    if (c && !c.over) { c.warn = tx("reconnecting"); paint(); }
+  });
+  socket.on("call:peer-reconnecting", d => {
+    const c = cur; if (!c || c.over || !matchesCall(c, d)) return;
+    c.warn = tx("reconnecting"); paint();
+  });
+  socket.on("call:peer-reconnected", d => {
+    const c = cur; if (!c || c.over || !matchesCall(c, d)) return;
+    c.warn = ""; if (c.pc && c.pc.connectionState !== "connected") restartIce(c); paint();
+  });
+  socket.on("call:resumed", d => {
+    const c = cur;
+    if (!d || !d.conversationId) return;
+    // Sayfa yenilendiyse bu cihazda arama yok: sunucuda "hayalet" arama kalıp herkesi "meşgul" yapmasın
+    if (!c || c.over || !matchesCall(c, d)) { socket.emit("call:end", { conversationId: d.conversationId, ...(d.callId ? { callId: d.callId } : {}) }); return; }
+    c.callId = d.callId || c.callId; c.warn = "";
+    if (c.pc && c.pc.connectionState !== "connected") restartIce(c); paint();
   });
 
   /* ---------- düğmeler ---------- */
   el.accept.onclick = acceptIncoming;
   el.decline.onclick = declineIncoming;
   el.mute.onclick = toggleMute;
+  el.camera.onclick = toggleCamera;
+  el.switchCamera.onclick = switchCamera;
   el.screen.onclick = toggleShare;
   el.hang.onclick = () => hangUp();
   // Sohbet başlığındaki telefon düğmesi (id ile; eski aria-label de çalışır, dil çevirisi aria-label'i değiştirse bile id yeter)
   document.addEventListener("click", (e) => {
-    if (e.target.closest('#tcCallBtn, [data-talk-original-aria-label="Səsli zəng"], [aria-label="Səsli zəng"]')) startCall();
+    const btn = e.target.closest('#tcCallBtn, #tcVideoCallBtn, [data-talk-original-aria-label="Səsli zəng"], [aria-label="Səsli zəng"]');
+    if (!btn) return;
+    const mode = btn.id === "tcVideoCallBtn" ? "video" : "audio";
+    const conv = conversationsCache.find(x => x.id === activeConversation);
+    if (conv && conv.type === "group") {
+      if (window.TalkChatGroupCalls) { e.preventDefault(); window.TalkChatGroupCalls.startCall(activeConversation, mode); }
+      return;
+    }
+    startCall(mode);
   });
   window.addEventListener("beforeunload", () => { if (cur && !cur.over) emit("call:end", cur.convo); });
 })();
