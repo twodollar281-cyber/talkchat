@@ -303,8 +303,16 @@ async function openPublicProfile(name){
     const outgoing = friendRequests.outgoing.some(x => x.username === u.username);
     $("homePage").hidden=true;$("discoverPage").hidden=true;$("messagesPage").hidden=true;$("notificationsPage").hidden=true;$("profilePage").hidden=true;$("publicProfilePage").hidden=false;
     const profileLink=u.link?`<a class="profile-link" href="${esc(u.link)}" target="_blank" rel="noopener noreferrer">${esc(u.link.replace(/^https?:\/\//i,""))}</a>`:"";
-    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)} ${u.verified?verifiedBadge():""}</h2><p class="public-username">@${esc(u.username)} ${roleBadge(u.role)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button>`}`;
+    $("publicProfile").innerHTML=`${avatarHTML(u,"avatar")}<h2>${esc(u.displayName||u.username)} ${u.verified?verifiedBadge():""}</h2><p class="public-username">@${esc(u.username)} ${roleBadge(u.role)}</p><p>${esc(u.bio||"")}</p>${profileLink}<div class="stats">${u.followersCount} izləyici · ${u.followingCount} izlənilən</div><button class="primary" id="followButton">${u.isFollowing?"İzləmədən çıx":"İzlə"}</button>${u.username===me?"":`<button class="secondary" id="friendButton" ${isFriend||outgoing?"disabled":""}>${isFriend?"Dostsunuz":incoming?"Dostluğu qəbul et":outgoing?"Sorğu göndərilib":"＋ Dostluq əlavə et"}</button><button type="button" id="blockUserButton" class="tc-block-button">${u.blockedByMe?"Blokdan çıxar":"Blokla"}</button>`}`;
     applyProfileCustomization($("publicProfile"),u);
+    $("blockUserButton")?.addEventListener("click",async()=>{
+      const blocked=u.blockedByMe;
+      if(!blocked&&!confirm(`@${u.username} hesabını bloklamaq istəyirsən?`))return;
+      try{
+        await api(`/api/users/${encodeURIComponent(u.username)}/block`,{method:blocked?"DELETE":"POST"});
+        await Promise.all([openPublicProfile(u.username),loadConversations()]);
+      }catch(e){alert(e.message);}
+    });
     $("friendButton")?.addEventListener("click", async()=>{
       try {
         if(incoming) {
@@ -1562,6 +1570,14 @@ socket.on("presenceUpdate", data => {
     }
   });
 });
+socket.on("blocksChanged", () => {
+  loadFeed();
+  loadConversations();
+  loadDirectStoryRail();
+  window.TalkChatSocial?.loadReels?.();
+  if (!$("profilePage").hidden) loadMyPosts();
+  if (!$("notificationsPage").hidden) loadNotifications();
+});
 
 /* =====================================================================
    TALKCHAT DIRECT — Instagram tipli mesajlaşma
@@ -1671,6 +1687,9 @@ function igRenderHead() {
   const sub = typing ? "yazır…" : group ? c.participants.length + " iştirakçı" : igStatus(c.name);
   igEl("chatSub").textContent = sub;
   igEl("chatSub").classList.toggle("on", !typing && !group && igIsOnline(c.name));
+  const blocked = !group && !!c.blocked;
+  igEl("igBlockNotice").hidden = !blocked;
+  igEl("dmForm").querySelectorAll("button,input").forEach(control => { control.disabled = blocked; });
 }
 
 /* ---------- mesajlar ---------- */

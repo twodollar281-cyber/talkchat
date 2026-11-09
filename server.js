@@ -71,6 +71,30 @@ const conversations = () => readJSON("conversations.json");
 const saveConversations = value => saveJSON("conversations.json", value);
 const messages = () => readJSON("messages.json");
 const saveMessages = value => saveJSON("messages.json", value);
+const userBlocks = () => readJSON("blocks.json");
+const saveUserBlocks = value => saveJSON("blocks.json", value);
+function isBlockedBy(blocker, blocked) {
+    const blockerName = String(blocker || "").toLowerCase();
+    const blockedName = String(blocked || "").toLowerCase();
+    return !!blockerName && !!blockedName && userBlocks().some(item =>
+        String(item.blocker || "").toLowerCase() === blockerName &&
+        String(item.blocked || "").toLowerCase() === blockedName);
+}
+function isBlockedBetween(first, second) {
+    return isBlockedBy(first, second) || isBlockedBy(second, first);
+}
+function publishBlockChange(first, second) {
+    publishPresence(first);
+    publishPresence(second);
+    io.to(`user:${first}`).emit("blocksChanged");
+    io.to(`user:${second}`).emit("blocksChanged");
+    conversations().filter(conversation => conversation.type === "direct" &&
+        conversation.participants.includes(first) && conversation.participants.includes(second))
+        .forEach(conversation => {
+            io.to(`user:${first}`).emit("messagesChanged", { conversationId: conversation.id });
+            io.to(`user:${second}`).emit("messagesChanged", { conversationId: conversation.id });
+        });
+}
 const STICKER_PACK = [
     { id: "love-purple-heart", category: "Sevgi", emoji: "💜", label: "Bənövşəyi ürək", keywords: "love heart sevgi ürək aşk kalp" },
     { id: "love-sparkling-heart", category: "Sevgi", emoji: "💖", label: "Parlaq ürək", keywords: "love heart sevgi parlaq sparkle" },
@@ -286,6 +310,10 @@ function publishPresence(username) {
     if (!target) return;
     const online = onlineUsers.has(username);
     for (const viewer of accountList) {
+        if (isBlockedBetween(viewer.username, username)) {
+            io.to(`user:${viewer.username}`).emit("presenceUpdate", { username, hidden: true });
+            continue;
+        }
         const canSeeOnline = canSeeActivity(viewer.username, target, "onlineVisibility");
         const canSeeLastSeen = canSeeActivity(viewer.username, target, "lastSeenVisibility");
         const payload = { username, online: canSeeOnline && online };
@@ -322,7 +350,7 @@ function deliverPending(name) {
     const notify = new Map();
     let changed = false;
     for (const m of list) {
-        if (!m.deliveredAt && m.from !== name && ids.has(m.conversationId)) {
+        if (!m.deliveredAt && m.from !== name && ids.has(m.conversationId) && !isBlockedBetween(name, m.from)) {
             m.deliveredAt = new Date().toISOString();
             changed = true;
             notify.set(m.from + "|" + m.conversationId, { to: m.from, conversationId: m.conversationId });
@@ -390,7 +418,8 @@ io.on("connection", socket => {
         const c = conversations().find(x =>
             x.id === conversationId && x.type === "direct" &&
             Array.isArray(x.participants) && x.participants.includes(name));
-        return c ? (c.participants.find(p => p !== name) || null) : null;
+        const peer = c ? (c.participants.find(p => p !== name) || null) : null;
+        return peer && !isBlockedBetween(name, peer) ? peer : null;
     }
 
     const ringingCall = directCallRegistry.findForUser(name);
@@ -589,7 +618,7 @@ socket.on("call:end", data => {
         const convo = conversations().find(c => c.id === data.conversationId && c.participants.includes(name));
         if (!convo) return;
         convo.participants.filter(p => p !== name).forEach(p =>
-            io.to(`user:${p}`).emit("typing", { conversationId: convo.id, from: name }));
+            { if (!isBlockedBetween(name, p)) io.to(`user:${p}`).emit("typing", { conversationId: convo.id, from: name }); });
     });
 
     socket.on("disconnect", () => {
@@ -744,12 +773,14 @@ function publicUser(user) {
         isFollowing: false
     };
 }
-function publicPost(post, userList = users()) {
+function publicPost(post, userList = users(), viewerUsername = "") {
     const author = userList.find(user => user.username === post.username);
     return {
         ...post,
         kind: post.kind === "reel" ? "reel" : "post",
-        comments: (post.comments || []).map(comment => ({
+        comments: (post.comments || []).filter(comment =>
+            !viewerUsername || !isBlockedBetween(viewerUsername, comment.username)
+        ).map(comment => ({
             ...comment,
             role: roleOf(userList.find(user => user.username === comment.username))
         })),
@@ -794,13 +825,15 @@ function expireBans() {
 }
 function canAccessUpload(filename, username) {
     const matches = (record, pathField, fallbackField) => objectKey(record, pathField, fallbackField) === filename;
-    if (users().some(user => matches(user, "avatarStoragePath", "avatar"))) return true;
-    if (posts().some(post => matches(post, "storagePath", "media"))) return true;
-    if (stories().some(story => Date.parse(story.expiresAt) > Date.now() && matches(story, "storagePath", "media"))) return true;
+    if (users().some(user => matches(user, "avatarStoragePath", "avatar") && !isBlockedBetween(username, user.username))) return true;
+    if (posts().some(post => matches(post, "storagePath", "media") && !isBlockedBetween(username, post.username))) return true;
+    if (stories().some(story => Date.parse(story.expiresAt) > Date.now() &&
+        matches(story, "storagePath", "media") && !isBlockedBetween(username, story.username))) return true;
     const ownedMessage = messages().some(message => {
         if (!matches(message, "attachmentStoragePath", "attachment")) return false;
         const convo = conversations().find(item => item.id === message.conversationId);
-        return !!convo && Array.isArray(convo.participants) && convo.participants.includes(username);
+        return !!convo && Array.isArray(convo.participants) && convo.participants.includes(username) &&
+            !isBlockedBetween(username, message.from);
     });
     return ownedMessage;
 }
@@ -916,7 +949,7 @@ function reportContent(report) {
     } : null;
 }
 function addNotification(to, from, type, extra = {}) {
-    if (!to || to === from) return;
+    if (!to || to === from || isBlockedBetween(to, from)) return;
     const list = notifications();
     list.unshift({
         id: crypto.randomUUID(), to, from, type,
@@ -1154,19 +1187,77 @@ app.get("/api/users/:username", requireAuth, (req, res) => {
     const name = req.params.username.replace(/^@/, "");
     const user = users().find(u => u.username.toLowerCase() === name.toLowerCase());
     if (!user) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (isBlockedBy(user.username, currentUser(req)) && !isBlockedBy(currentUser(req), user.username))
+        return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     const result = publicUser(user);
     result.isFollowing = (users().find(u => u.username === currentUser(req))?.following || []).includes(user.username);
+    result.blockedByMe = isBlockedBy(currentUser(req), user.username);
     res.json(result);
 });
 app.get("/api/search", requireAuth, (req, res) => {
     const q = String(req.query.q || "").trim().replace(/^@/, "").toLowerCase();
     if (!q) return res.json([]);
-    res.json(users().filter(u => u.username.toLowerCase().includes(q))
+    const me = currentUser(req);
+    res.json(users().filter(u => u.username.toLowerCase().includes(q) &&
+        (!isBlockedBy(u.username, me) || isBlockedBy(me, u.username)))
         .slice(0, 30).map(u => {
             const result = publicUser(u);
-            result.isFollowing = (users().find(x => x.username === currentUser(req))?.following || []).includes(u.username);
+            result.isFollowing = (users().find(x => x.username === me)?.following || []).includes(u.username);
+            result.blockedByMe = isBlockedBy(me, u.username);
             return result;
         }));
+});
+app.get("/api/blocks", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    res.set("Cache-Control", "private, no-store");
+    res.json(userBlocks().filter(item => item.blocker === me)
+        .map(item => ({ username: item.blocked, createdAt: item.createdAt || "" })));
+});
+app.post("/api/users/:username/block", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const target = findAccount(req.params.username);
+    if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (target.username === me) return res.status(400).json({ error: "Öz hesabını bloklaya bilməzsən." });
+    if (isBlockedBy(me, target.username)) return res.status(409).json({ error: "Bu hesab artıq bloklanıb." });
+
+    const blockList = userBlocks();
+    blockList.unshift({ id: crypto.randomUUID(), blocker: me, blocked: target.username, createdAt: new Date().toISOString() });
+    saveUserBlocks(blockList);
+    const allUsers = users();
+    const self = allUsers.find(user => user.username === me);
+    const blockedUser = allUsers.find(user => user.username === target.username);
+    if (self && blockedUser) {
+        self.following = (self.following || []).filter(name => name !== blockedUser.username);
+        self.friends = (self.friends || []).filter(name => name !== blockedUser.username);
+        blockedUser.followers = (blockedUser.followers || []).filter(name => name !== me);
+        blockedUser.following = (blockedUser.following || []).filter(name => name !== me);
+        blockedUser.friends = (blockedUser.friends || []).filter(name => name !== me);
+        saveUsers(allUsers);
+    }
+    saveFriendRequests(friendRequests().filter(request =>
+        !((request.from === me && request.to === target.username) ||
+          (request.from === target.username && request.to === me))
+    ));
+    saveMessageRequests(messageRequests().filter(request =>
+        !(request.status === "pending" &&
+          ((request.from === me && request.to === target.username) ||
+           (request.from === target.username && request.to === me)))
+    ));
+    publishBlockChange(me, target.username);
+    res.status(201).json({ blocked: true, username: target.username });
+});
+app.delete("/api/users/:username/block", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const target = findAccount(req.params.username);
+    if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    const blockList = userBlocks();
+    const updated = blockList.filter(item =>
+        !(item.blocker === me && item.blocked === target.username)
+    );
+    if (updated.length === blockList.length) return res.status(404).json({ error: "Bloklanmış hesab tapılmadı." });
+    saveUserBlocks(updated);
+    publishBlockChange(me, target.username);
+    res.json({ blocked: false, username: target.username });
 });
 app.post("/api/follow/:username", requireAuth, (req, res) => {
     const me = currentUser(req), targetName = req.params.username.replace(/^@/, "");
@@ -1175,6 +1266,7 @@ app.post("/api/follow/:username", requireAuth, (req, res) => {
     const target = list.find(u => u.username.toLowerCase() === targetName.toLowerCase());
     const self = list.find(u => u.username === me);
     if (!target || !self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (isBlockedBetween(me, target.username)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
     self.following ||= []; target.followers ||= [];
     if (!self.following.includes(target.username)) {
         self.following.push(target.username);
@@ -1208,18 +1300,18 @@ app.get("/api/friends", requireAuth, (req, res) => {
     const self = users().find(u => u.username === currentUser(req));
     if (!self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     const names = self.friends || [];
-    res.json(users().filter(u => names.includes(u.username)).map(publicUser));
+    res.json(users().filter(u => names.includes(u.username) && !isBlockedBetween(currentUser(req), u.username)).map(publicUser));
 });
 
 app.get("/api/friend-requests", requireAuth, (req, res) => {
     const me = currentUser(req);
     const allUsers = users();
     const list = friendRequests();
-    const incoming = list.filter(r => r.to === me).map(r => {
+    const incoming = list.filter(r => r.to === me && !isBlockedBetween(me, r.from)).map(r => {
         const u = allUsers.find(x => x.username === r.from);
         return u ? publicUser(u) : null;
     }).filter(Boolean);
-    const outgoing = list.filter(r => r.from === me).map(r => {
+    const outgoing = list.filter(r => r.from === me && !isBlockedBetween(me, r.to)).map(r => {
         const u = allUsers.find(x => x.username === r.to);
         return u ? publicUser(u) : null;
     }).filter(Boolean);
@@ -1235,6 +1327,7 @@ app.post("/api/friends/request/:username", requireAuth, friendRequestLimiter, (r
 
     if (!target) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     if (target.username === me) return res.status(400).json({ error: "Özünə sorğu göndərə bilməzsən." });
+    if (isBlockedBetween(me, target.username)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
 
     self.friends ||= [];
     target.friends ||= [];
@@ -1265,6 +1358,7 @@ app.post("/api/friends/accept/:username", requireAuth, (req, res) => {
     const self = allUsers.find(u => u.username === me);
     const target = allUsers.find(u => u.username.toLowerCase() === name.toLowerCase());
     if (!target || !self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    if (isBlockedBetween(me, target.username)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
 
     const list = friendRequests();
     const request = list.find(r => r.from === target.username && r.to === me);
@@ -1315,32 +1409,37 @@ app.get("/api/feed", requireAuth, (req, res) => {
     const self = users().find(u => u.username === me);
     if (!self) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
     const following = self.following || [];
-    let list = posts().filter(p => p.kind !== "reel");
+    let list = posts().filter(p => p.kind !== "reel" && !isBlockedBetween(me, p.username));
     if (scope === "following") list = list.filter(p => p.username === self.username || following.includes(p.username));
     const userList = users();
-    res.json(list.slice().sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 100).map(p => publicPost(p, userList)));
+    res.json(list.slice().sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 100).map(p => publicPost(p, userList, me)));
 });
 app.get("/api/reels", requireAuth, (req, res) => {
+    const me = currentUser(req);
     const userList = users();
-    const list = posts().filter(p => p.kind === "reel")
+    const list = posts().filter(p => p.kind === "reel" && !isBlockedBetween(me, p.username))
         .sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
         .slice(0, 100);
-    res.json(list.map(p => publicPost(p, userList)));
+    res.json(list.map(p => publicPost(p, userList, me)));
 });
 app.get("/api/profile/posts", requireAuth, (req, res) => {
+    const me = currentUser(req);
     const userList = users();
-    res.json(posts().filter(p => p.username === currentUser(req))
+    res.json(posts().filter(p => p.username === me)
         .sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
-        .slice(0, 100).map(p => publicPost(p, userList)));
+        .slice(0, 100).map(p => publicPost(p, userList, me)));
 });
 app.get("/api/users/:username/posts", requireAuth, (req, res) => {
     const name = req.params.username.replace(/^@/, "");
     const userList = users();
     const author = userList.find(u => u.username.toLowerCase() === name.toLowerCase());
     if (!author) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
-    res.json(posts().filter(p => p.username === author.username)
+    const me = currentUser(req);
+    if (isBlockedBy(author.username, me) && !isBlockedBy(me, author.username))
+        return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    res.json(posts().filter(p => p.username === author.username && !isBlockedBetween(me, author.username))
         .sort((a,b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
-        .slice(0, 100).map(p => publicPost(p, userList)));
+        .slice(0, 100).map(p => publicPost(p, userList, me)));
 });
 app.post("/api/posts", requireAuth, socialUpload.single("media"), (req, res) => {
     const text = String(req.body.text || "").trim().slice(0, 1000);
@@ -1386,6 +1485,7 @@ app.post("/api/reels", requireAuth, socialUpload.single("media"), (req, res) => 
 app.post("/api/posts/:id/like", requireAuth, (req, res) => {
     const list = posts(), post = list.find(p => p.id === req.params.id);
     if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+    if (isBlockedBetween(currentUser(req), post.username)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
     post.likes ||= [];
     const i = post.likes.indexOf(currentUser(req));
     if (i >= 0) post.likes.splice(i, 1);
@@ -1401,6 +1501,7 @@ app.post("/api/posts/:id/comments", requireAuth, (req, res) => {
     if (!text) return res.status(400).json({ error: "Şərh boş ola bilməz." });
     const list = posts(), post = list.find(p => p.id === req.params.id);
     if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+    if (isBlockedBetween(currentUser(req), post.username)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
     post.comments ||= [];
     const comment = { id: crypto.randomUUID(), username: currentUser(req), text, createdAt: new Date().toISOString() };
     post.comments.push(comment); savePosts(list);
@@ -1637,7 +1738,9 @@ app.post("/api/posts/:id/share", requireAuth, (req, res) => {
     const target = userList.find(user => user.username.toLowerCase() === name.toLowerCase());
     const post = posts().find(p => p.id === req.params.id);
     if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
+    if (isBlockedBetween(me, post.username)) return res.status(403).json({ error: "Bu paylaşım mövcud deyil." });
     if (!target || target.username === me) return res.status(400).json({ error: "Qəbul edənin istifadəçi adını yoxla." });
+    if (isBlockedBetween(me, target.username)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
     const conversationList = conversations();
     let convo = conversationList.find(c => c.type === "direct" &&
         c.participants.includes(me) && c.participants.includes(target.username));
@@ -1669,7 +1772,7 @@ app.post("/api/posts/:id/share", requireAuth, (req, res) => {
 
 app.get("/api/notifications", requireAuth, (req, res) => {
     const list = notifications();
-    const mine = list.filter(n => n.to === currentUser(req));
+    const mine = list.filter(n => n.to === currentUser(req) && !isBlockedBetween(n.to, n.from));
     mine.forEach(n => n.read = true); saveNotifications(list);
     res.json(mine.slice(0, 100));
 });
@@ -1678,7 +1781,7 @@ app.get("/api/conversations", requireAuth, (req, res) => {
     const me = currentUser(req);
     const allMessages = messages();
     res.json(conversations().filter(c => c.participants.includes(me)).map(c => {
-        const mine = allMessages.filter(m => m.conversationId === c.id);
+        const mine = allMessages.filter(m => m.conversationId === c.id && !isBlockedBetween(me, m.from));
         const last = mine[mine.length - 1] || null;
         const reads = c.reads || {};
         const readAt = reads[me] ? new Date(reads[me]).getTime() : 0;
@@ -1691,7 +1794,8 @@ app.get("/api/conversations", requireAuth, (req, res) => {
             lastMessageAt: last ? last.createdAt : "",
             lastFrom: last ? last.from : "",
             unread,
-            reads
+            reads,
+            blocked: c.type === "direct" && c.participants.some(user => user !== me && isBlockedBetween(me, user))
         };
     }));
 });
@@ -1699,6 +1803,7 @@ app.post("/api/conversations/direct", requireAuth, (req, res) => {
     const other = String((req.body || {}).username || "").replace(/^@/, "");
     if (!users().some(u => u.username.toLowerCase() === other.toLowerCase()) || other === currentUser(req))
         return res.status(400).json({ error: "İstifadəçi tapılmadı." });
+    if (isBlockedBetween(currentUser(req), other)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
     const list = conversations();
     let convo = list.find(c => c.type === "direct" && c.participants.includes(currentUser(req)) && c.participants.includes(other));
     if (!convo) {
@@ -1713,6 +1818,8 @@ app.post("/api/conversations/group", requireAuth, (req, res) => {
     const valid = users().map(u => u.username);
     const participants = [...new Set([currentUser(req), ...invited.map(x => String(x).replace(/^@/, "")).filter(x => valid.includes(x))])];
     if (!name || participants.length < 2) return res.status(400).json({ error: "Qrup adı və ən azı bir başqa iştirakçı lazımdır." });
+    if (participants.some(user => user !== currentUser(req) && isBlockedBetween(currentUser(req), user)))
+        return res.status(403).json({ error: "Bloklanmış hesabı yeni qrupa əlavə etmək olmaz." });
     const convo = { id: crypto.randomUUID(), type: "group", name, participants, createdAt: new Date().toISOString() };
     const list = conversations(); list.push(convo); saveConversations(list);
     res.json(convo);
@@ -1819,9 +1926,10 @@ app.post("/api/stickers/favorites", requireAuth, (req, res) => {
 });
 
 app.get("/api/conversations/:id/messages", requireAuth, (req, res) => {
-    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
-    const list = messages().filter(m => m.conversationId === convo.id);
+    const list = messages().filter(m => m.conversationId === convo.id && !isBlockedBetween(me, m.from));
     const aroundId = String(req.query.around || "");
     const aroundIndex = aroundId ? list.findIndex(m => m.id === aroundId) : -1;
     if (aroundIndex >= 0) {
@@ -1844,7 +1952,8 @@ app.get("/api/conversations/:id/files", requireAuth, (req, res) => {
     if (query.length > 100) return res.status(400).json({ error: "Fayl axtarışı 100 simvoldan çox ola bilməz." });
     const requestedLimit = Number.parseInt(req.query.limit, 10);
     const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 50;
-    const files = messages().filter(message => message.conversationId === convo.id && !message.deleted)
+    const files = messages().filter(message => message.conversationId === convo.id && !message.deleted &&
+        !isBlockedBetween(me, message.from))
         .map(message => {
             const rawPath = message.attachmentStoragePath ||
                 (typeof message.attachment === "string" && message.attachment.startsWith("/uploads/")
@@ -1882,6 +1991,7 @@ app.get("/api/conversations/:id/files/:mid/download", requireAuth, async (req, r
     if (!convo) return res.status(404).json({ error: "Fayl tapılmadı." });
     const message = messages().find(item => item.id === req.params.mid && item.conversationId === convo.id && !item.deleted);
     if (!message) return res.status(404).json({ error: "Fayl tapılmadı." });
+    if (isBlockedBetween(me, message.from)) return res.status(404).json({ error: "Fayl tapılmadı." });
     const rawPath = message.attachmentStoragePath ||
         (typeof message.attachment === "string" && message.attachment.startsWith("/uploads/")
             ? message.attachment.slice("/uploads/".length) : "");
@@ -1917,8 +2027,10 @@ app.get("/api/conversations/:id/messages/search", requireAuth, (req, res) => {
     const requestedLimit = Number.parseInt(req.query.limit, 10);
     const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 50)) : 20;
     const terms = [...new Set([query.toLowerCase(), query.toLocaleLowerCase("az"), query.toLocaleLowerCase("tr")])];
+    const me = currentUser(req);
     const found = messages().filter(m => {
         if (m.conversationId !== convo.id || m.deleted || typeof m.text !== "string") return false;
+        if (isBlockedBetween(me, m.from)) return false;
         if (beforeAt && !(String(m.createdAt) < beforeAt || (String(m.createdAt) === beforeAt && String(m.id) < beforeId))) return false;
         const text = m.text.normalize("NFKC");
         const forms = [text.toLowerCase(), text.toLocaleLowerCase("az"), text.toLocaleLowerCase("tr")];
@@ -1930,9 +2042,14 @@ app.get("/api/conversations/:id/messages/search", requireAuth, (req, res) => {
     const last = results[results.length - 1];
     res.json({ results, hasMore, nextCursor: hasMore && last ? `${last.createdAt}|${last.id}` : "" });
 });
-app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), (req, res) => {
-    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));
+app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), async (req, res) => {
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    if (convo.type === "direct" && convo.participants.some(user => user !== me && isBlockedBetween(me, user))) {
+        if (req.file) await removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(403).json({ error: "Bu söhbətdə blok səbəbindən mesaj göndərmək olmur." });
+    }
     const text = String(req.body.text || "").trim().slice(0, 2000);
     const gifInput = req.body && req.body.gif;
     const gif = gifInput ? normalizeGifPayload(gifInput) : null;
@@ -1968,7 +2085,7 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
         try { rememberSticker(currentUser(req), sticker); }
         catch (error) { console.error("Sticker recent save failed:", error.message); }
     }
-    convo.participants.filter(x => x !== currentUser(req)).forEach(to => {
+    convo.participants.filter(x => x !== currentUser(req) && !isBlockedBetween(currentUser(req), x)).forEach(to => {
         io.to(`user:${to}`).emit("newMessage", { conversationId: convo.id });
         addNotification(to, currentUser(req), "message");
         console.log("PUSH msg to", to, "online:", onlineUsers.has(to));
@@ -1988,6 +2105,8 @@ app.post("/api/conversations/:id/messages/:mid/forward", requireAuth, async (req
     const targetId = typeof req.body?.targetConversationId === "string" ? req.body.targetConversationId : "";
     const target = conversations().find(c => c.id === targetId && c.id !== sourceConvo.id && c.participants.includes(me));
     if (!target) return res.status(404).json({ error: "Hədəf söhbət tapılmadı." });
+    if (target.participants.some(user => user !== me && isBlockedBetween(me, user)))
+        return res.status(403).json({ error: "Bloklanmış hesabla əlaqə qurmaq olmaz." });
     const text = typeof source.text === "string" ? source.text.slice(0, 2000) : "";
     const hasSharedPost = !!source.sharedPost && typeof source.sharedPost === "object";
     const rawPath = source.attachmentStoragePath || (typeof source.attachment === "string" && source.attachment.startsWith("/uploads/") ? source.attachment.slice("/uploads/".length) : "");
@@ -2087,11 +2206,13 @@ app.get("/api/presence", requireAuth, (req, res) => {
     const viewer = currentUser(req);
     const accountList = users();
     const online = accountList
-        .filter(account => onlineUsers.has(account.username) && canSeeActivity(viewer, account, "onlineVisibility"))
+        .filter(account => onlineUsers.has(account.username) && !isBlockedBetween(viewer, account.username) &&
+            canSeeActivity(viewer, account, "onlineVisibility"))
         .map(account => account.username);
     const lastSeen = {};
     for (const account of accountList) {
-        if (account.lastSeenAt && canSeeActivity(viewer, account, "lastSeenVisibility"))
+        if (account.lastSeenAt && !isBlockedBetween(viewer, account.username) &&
+            canSeeActivity(viewer, account, "lastSeenVisibility"))
             lastSeen[account.username] = account.lastSeenAt;
     }
     res.set("Cache-Control", "private, no-store");
@@ -2107,7 +2228,7 @@ app.get("/api/stories", requireAuth, async (req, res) => {
         await removeLocalUpload(expired.media, expired.storagePath);
     saveStories(list);
     const me = currentUser(req);
-    const result = list.map(x => {
+    const result = list.filter(x => !isBlockedBetween(me, x.username)).map(x => {
         if (!x.views.includes(me) && x.username !== me) {
             x.views.push(me);
         }
@@ -2165,7 +2286,7 @@ app.delete("/api/stories/:id", requireAuth, async (req, res) => {
 // Message requests
 app.get("/api/message-requests", requireAuth, (req, res) => {
     const me = currentUser(req);
-    const list = messageRequests().filter(x => x.status === "pending");
+    const list = messageRequests().filter(x => x.status === "pending" && !isBlockedBetween(me, x.from) && !isBlockedBetween(me, x.to));
     res.json({
         incoming: list.filter(x => x.to === me),
         outgoing: list.filter(x => x.from === me)
@@ -2178,6 +2299,8 @@ app.post("/api/message-requests", requireAuth, (req, res) => {
     const target = users().find(u => u.username.toLowerCase() === to.toLowerCase());
     if (!target || target.username === from)
         return res.status(400).json({error:"İstifadəçi tapılmadı."});
+    if (isBlockedBetween(from, target.username))
+        return res.status(403).json({error:"Bu hesabla əlaqə məhdudlaşdırılıb."});
     const existing = conversations().find(x => x.type === "direct" &&
         x.participants.includes(from) && x.participants.includes(target.username));
     if (existing) return res.status(409).json({error:"Bu şəxslə artıq söhbətin var."});
@@ -2197,6 +2320,8 @@ app.post("/api/message-requests/:id/accept", requireAuth, (req, res) => {
     const list = messageRequests();
     const request = list.find(x => x.id === req.params.id && x.to === currentUser(req) && x.status === "pending");
     if (!request) return res.status(404).json({error:"Mesaj sorğusu tapılmadı."});
+    if (isBlockedBetween(request.from, request.to))
+        return res.status(403).json({error:"Bu hesabla əlaqə məhdudlaşdırılıb."});
     const convos = conversations();
     let convo = convos.find(x => x.type === "direct" &&
         x.participants.includes(request.from) && x.participants.includes(request.to));
@@ -2276,6 +2401,8 @@ app.post("/api/rooms/:id/join", requireAuth, (req, res) => {
   const room = rooms.find(r => r.id === req.params.id);
   if (!room) return res.status(404).json({error:"Otaq tapılmadı."});
   const username = currentUser(req);
+  if (room.members.some(member => member !== username && isBlockedBetween(username, member)))
+    return res.status(403).json({error:"Bloklanmış hesabla eyni otağa qoşulmaq olmaz."});
   if (!roomMember(room, username)) room.members.push(username);
   saveRooms(rooms);
   res.json(room);
@@ -2284,13 +2411,21 @@ app.post("/api/rooms/:id/join", requireAuth, (req, res) => {
 app.get("/api/rooms/:id/members", requireAuth, (req, res) => {
   const room = getRooms().find(r => r.id === req.params.id);
   if (!room || !roomMember(room, currentUser(req))) return res.status(403).json({error:"Giriş icazən yoxdur."});
-  res.json({members:room.members});
+  const me = currentUser(req);
+  res.json({members:room.members.filter(username => !isBlockedBetween(me, username))});
 });
 
 app.get("/api/rooms/:id/messages", requireAuth, (req, res) => {
   const room = getRooms().find(r => r.id === req.params.id);
   if (!room || !roomMember(room, currentUser(req))) return res.status(403).json({error:"Giriş icazən yoxdur."});
-  res.json(getRoomMessages().filter(m => m.roomId === room.id));
+  const me = currentUser(req);
+  const visible = getRoomMessages().filter(m => m.roomId === room.id && !isBlockedBetween(me, m.username));
+  res.json(visible.map(message => ({
+    ...message,
+    reactions: Object.fromEntries(Object.entries(message.reactions || {}).map(([emoji, names]) => [
+      emoji, Array.isArray(names) ? names.filter(name => !isBlockedBetween(me, name)) : []
+    ]))
+  })));
 });
 
 app.post("/api/rooms/:id/messages", requireAuth, (req, res) => {
@@ -2302,7 +2437,8 @@ app.post("/api/rooms/:id/messages", requireAuth, (req, res) => {
   const list = getRoomMessages();
   list.push(message);
   saveRoomMessages(list);
-  io.to("talk-room:" + room.id).emit("roomMessage", message);
+  room.members.filter(member => !isBlockedBetween(member, message.username))
+    .forEach(member => io.to("user:" + member).emit("roomMessage", message));
   res.json(message);
 });
 
@@ -2314,6 +2450,8 @@ app.post("/api/rooms/:id/messages/:messageId/react", requireAuth, (req, res) => 
   const list = getRoomMessages();
   const message = list.find(m => m.id === req.params.messageId && m.roomId === room.id);
   if (!message) return res.status(404).json({error:"Mesaj tapılmadı."});
+  if (isBlockedBetween(currentUser(req), message.username))
+    return res.status(403).json({error:"Bloklanmış hesabın mesajına reaksiya vermək olmaz."});
   if (!message.reactions) message.reactions = {};
   if (!Array.isArray(message.reactions[emoji])) message.reactions[emoji] = [];
   const users = message.reactions[emoji];
@@ -2321,7 +2459,8 @@ app.post("/api/rooms/:id/messages/:messageId/react", requireAuth, (req, res) => 
   const i = users.indexOf(username);
   if (i >= 0) users.splice(i, 1); else users.push(username);
   saveRoomMessages(list);
-  io.to("talk-room:" + room.id).emit("roomReaction", message);
+  room.members.filter(member => !isBlockedBetween(member, username))
+    .forEach(member => io.to("user:" + member).emit("roomReaction", message));
   res.json(message);
 });
 
