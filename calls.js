@@ -18,7 +18,7 @@
   const STUN_ONLY = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }];
   const ICE = window.TC_ICE_SERVERS || STUN_ONLY;
   /* ICE_LOADER_START */
-  const iceState = { servers: null, expires: 0, pending: null, turn: false };
+  const iceState = { servers: null, expires: 0, pending: null, turn: false, error: "" };
   const hasTurn = (list) => Array.isArray(list) && list.some((s) => [].concat((s && s.urls) || []).some((u) => /^turns?:/i.test(String(u))));
   const getIceServers = () => {
     if (Array.isArray(window.TC_ICE_SERVERS) && window.TC_ICE_SERVERS.length) { iceState.turn = hasTurn(window.TC_ICE_SERVERS); return Promise.resolve(window.TC_ICE_SERVERS); }
@@ -32,10 +32,10 @@
         if (!d || !Array.isArray(d.iceServers) || !d.iceServers.length) throw new Error("ICE response invalid");
         const exp = d.expiresAt ? Date.parse(d.expiresAt) : NaN;
         const ttl = Number.isFinite(exp) ? Math.max(exp - Date.now() - 90000, 0) : 50 * 60 * 1000;
-        iceState.servers = d.iceServers; iceState.expires = Date.now() + ttl; iceState.turn = hasTurn(d.iceServers);
+        iceState.error = ""; iceState.servers = d.iceServers; iceState.expires = Date.now() + ttl; iceState.turn = hasTurn(d.iceServers);
         return d.iceServers;
       })
-      .catch((e) => { console.warn("TalkChat: TURN bilgisi alınamadı, yalnız STUN kullanılacak (" + (e && e.message) + ")"); iceState.turn = false; return ICE; })
+      .catch((e) => { iceState.error = (e && e.message) || "unknown"; console.error("TalkChat: /api/calls/ice alınamadı — TURN YOK, yalnız STUN ile denenecek (" + iceState.error + "). Farklı ağlardaki aramalar başarısız olabilir."); iceState.turn = false; return ICE; })
       .finally(() => { clearTimeout(timer); iceState.pending = null; });
     return iceState.pending;
   };
@@ -97,6 +97,7 @@
     noTurn:     { tr: "Bağlantı kurulamadı. Farklı ağlardaki cihazlar için TURN sunucusuna ulaşılamadı.",
                   az: "Bağlantı qurulmadı. Fərqli şəbəkələrdəki cihazlar üçün TURN serverinə çatmaq mümkün olmadı.",
                   en: "Could not connect. The TURN relay server was unavailable for devices on different networks.", ru: "Не удалось соединиться. Сервер TURN для устройств в разных сетях недоступен." },
+    turnDown:   { tr: "TURN sunucusu alınamadı: yalnız aynı ağdaki aramalar çalışabilir.", az: "TURN serveri alınmadı: yalnız eyni şəbəkədəki zənglər işləyə bilər.", en: "TURN server unavailable: only same-network calls may work.", ru: "TURN-сервер недоступен: могут работать только звонки в одной сети." },
     micDenied:  { tr: "Mikrofon izni verilmedi. Tarayıcı ayarlarından mikrofona izin ver.",
                   az: "Mikrofon icazəsi verilmədi. Brauzer ayarlarından mikrofona icazə ver.",
                   en: "Microphone permission was denied. Allow the microphone in your browser settings.", ru: "Нет доступа к микрофону. Разрешите его в настройках браузера." },
@@ -289,9 +290,37 @@
     return true;
   }
 
+  // Gerçekte hangi yolun seçildiğini (host/srflx/relay) kaydet. IP adresleri loglanmaz.
+  async function logPath(c, why) {
+    try {
+      if (!c.pc) return;
+      const stats = await c.pc.getStats(), byId = {}; let pair = null;
+      stats.forEach((r) => { byId[r.id] = r; });
+      stats.forEach((r) => { if (r.type === "transport" && r.selectedCandidatePairId && byId[r.selectedCandidatePairId]) pair = byId[r.selectedCandidatePairId]; });
+      if (!pair) stats.forEach((r) => { if (r.type === "candidate-pair" && r.nominated && r.state === "succeeded") pair = r; });
+      const l = pair && byId[pair.localCandidateId], rm = pair && byId[pair.remoteCandidateId];
+      c.pathType = l ? l.candidateType + "/" + (rm ? rm.candidateType : "?") : "none";
+      console.info("TalkChat yol (" + why + "):", c.pathType, "| protokol:", l && l.protocol, "| aday türleri:", JSON.stringify(c.candTypes), "| TURN listede:", c.turn, "| ICE hata:", iceState.error || "yok");
+    } catch (e) { console.warn("TalkChat getStats:", e && e.message); }
+  }
+  // Callee: teklifteki m-line'lara bağlanan transceiver'ları bul ve yerel parçaları onlara bağla.
+  async function attachCalleeMedia(c) {
+    const pc = c.pc; if (!pc || c.audioTrans) return;
+    const all = pc.getTransceivers();
+    const kindOf = (t) => (t.receiver && t.receiver.track && t.receiver.track.kind) || "";
+    const audio = all.find((t) => kindOf(t) === "audio"), videos = all.filter((t) => kindOf(t) === "video");
+    c.audioTrans = audio; c.cameraTrans = videos[0]; c.screenTrans = videos[1];
+    for (const t of [audio, videos[0], videos[1]]) if (t) { try { t.direction = "sendrecv"; } catch {} }
+    const audioTrack = c.local.getAudioTracks()[0], cameraTrack = c.local.getVideoTracks()[0];
+    if (audio && audioTrack) await audio.sender.replaceTrack(audioTrack);
+    if (videos[0] && cameraTrack) await videos[0].sender.replaceTrack(cameraTrack);
+    console.info("TalkChat: callee transceiver sayısı:", all.length, "(3 olmalı)");
+  }
+
   async function createPC(c) {
     const iceServers = await getIceServers();
-    c.turn = hasTurn(iceServers);
+    c.turn = hasTurn(iceServers); c.candTypes = { host: 0, srflx: 0, relay: 0 };
+    if (!c.turn) { console.error("TalkChat: bu arama TURN olmadan başlıyor."); c.warn = tx("turnDown"); }
     const pc = new RTCPeerConnection({ iceServers });
     c.pc = pc;
     // Olay işleyicileri HER ZAMAN await'lerden önce atanır: aksi halde negotiationneeded kaçabilir ve teklif hiç gönderilmez.
@@ -304,21 +333,27 @@
     pc.onnegotiationneeded = negotiate;
     pc.onicecandidate = (e) => {
       if (!e.candidate) return;
-      if (/ typ relay/.test(e.candidate.candidate || "")) c.relayCount++;
+      const m = / typ (host|srflx|prflx|relay)/.exec(e.candidate.candidate || "");
+      if (m && c.candTypes[m[1]] !== undefined) c.candTypes[m[1]]++;
+      if (m && m[1] === "relay") c.relayCount++;
       sig(c, { candidate: e.candidate });
     };
+    pc.onicecandidateerror = (e) => console.warn("TalkChat ICE aday hatası:", e.errorCode, e.errorText, e.url || "");
     pc.ontrack = (e) => {
       const stream = (e.streams && e.streams[0]) || new MediaStream([e.track]);
       if (e.track.kind === "audio") { el.audio.srcObject = stream; playMedia(el.audio); }
-      else if (e.transceiver === c.cameraTrans) { el.video.srcObject = stream; el.video.play().catch(() => {}); }
-      else if (e.transceiver === c.screenTrans) { el.screenVideo.srcObject = stream; el.screenVideo.play().catch(() => {}); }
+      else {
+        const vi = pc.getTransceivers().filter((t) => t.receiver && t.receiver.track && t.receiver.track.kind === "video").indexOf(e.transceiver);
+        if (vi === 0) { el.video.srcObject = stream; el.video.play().catch(() => {}); }
+        else if (vi === 1) { el.screenVideo.srcObject = stream; el.screenVideo.play().catch(() => {}); }
+      }
       paint();
     };
-    pc.oniceconnectionstatechange = () => console.info("TalkChat ICE:", pc.iceConnectionState, "| relay adayı:", c.relayCount, "| TURN:", c.turn);
+    pc.oniceconnectionstatechange = () => { console.info("TalkChat ICE:", pc.iceConnectionState, "| toplama:", pc.iceGatheringState, "| relay adayı:", c.relayCount, "| TURN:", c.turn); if (pc.iceConnectionState === "failed") logPath(c, "ice-failed"); }
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
       if (s === "connected") {
-        c.warn = ""; clearTimeout(c.connectTimer); clearTimeout(c.failTimer); clearTimeout(c.dropTimer);
+        c.warn = ""; logPath(c, "connected"); clearTimeout(c.connectTimer); clearTimeout(c.failTimer); clearTimeout(c.dropTimer);
         if (!c.connectedAt) { c.connectedAt = Date.now(); c.tick = setInterval(paint, 1000); takeWake(); }
       } else if (s === "disconnected") {
         c.warn = tx("weak");
@@ -333,19 +368,23 @@
       }
       paint();
     };
-    c.audioTrans = pc.addTransceiver("audio", { direction: "sendrecv" });
-    c.cameraTrans = pc.addTransceiver("video", { direction: "sendrecv" });
-    c.screenTrans = pc.addTransceiver("video", { direction: "sendrecv" });
+    // Yalnız arayan transceiver oluşturur. addTransceiver ile oluşturulanlar karşı tarafın teklifiyle eşleşmez (yalnız addTrack ile oluşturulanlar eşleşir),
+    // bu yüzden callee transceiver'ları teklif uygulandıktan sonra attachCalleeMedia() ile bağlar.
     const audioTrack = c.local.getAudioTracks()[0], cameraTrack = c.local.getVideoTracks()[0];
-    if (audioTrack) await c.audioTrans.sender.replaceTrack(audioTrack);
-    if (cameraTrack) await c.cameraTrans.sender.replaceTrack(cameraTrack);
+    if (c.role === "caller") {
+      c.audioTrans = pc.addTransceiver("audio", { direction: "sendrecv" });
+      c.cameraTrans = pc.addTransceiver("video", { direction: "sendrecv" });
+      c.screenTrans = pc.addTransceiver("video", { direction: "sendrecv" });
+      if (audioTrack) await c.audioTrans.sender.replaceTrack(audioTrack);
+      if (cameraTrack) await c.cameraTrans.sender.replaceTrack(cameraTrack);
+    }
     c.cameraOn = !!cameraTrack;
     if (cameraTrack) { el.localVideo.srcObject = new MediaStream([cameraTrack]); el.localVideo.play().catch(() => {}); }
     nativeCall("start", { title: "TalkChat", text: NATIVE_T[LANG()] || NATIVE_T.tr, camera: c.mediaType === "video" });
     // Güvence: negotiationneeded gelmediyse arayan taraf teklifi kendisi başlatır
     if (c.role === "caller") setTimeout(() => { if (!c.over && c.pc === pc && !c.making && !pc.localDescription && pc.signalingState === "stable") negotiate(); }, 400);
     // Bağlantı belirli sürede kurulmazsa sonsuza kadar "Bağlanıyor…" kalma
-    c.connectTimer = setTimeout(() => { if (cur === c && !c.over && !c.connectedAt) hangUp(failureText(c), 4500); }, CONNECT_MS);
+    c.connectTimer = setTimeout(() => { if (cur === c && !c.over && !c.connectedAt) { logPath(c, "timeout"); console.error("TalkChat: bağlantı zaman aşımı | ICE:", pc.iceConnectionState, "| conn:", pc.connectionState, "| sinyal:", pc.signalingState, "| aday:", JSON.stringify(c.candTypes)); hangUp(failureText(c), 4500); } }, CONNECT_MS);
     for (const s of c.pending.splice(0)) await handleSignal(c, s);
   }
 
@@ -361,6 +400,7 @@
         if (c.ignore) return;
         await pc.setRemoteDescription(s.description);
         c.remoteSet = true;
+        if (s.description.type === "offer" && c.role === "callee") await attachCalleeMedia(c);
         for (const k of c.cands.splice(0)) await pc.addIceCandidate(k).catch(() => {});
         if (s.description.type === "offer") {
           await pc.setLocalDescription();
@@ -536,6 +576,8 @@
     if (!c || c.over || c.role !== "caller" || !matchesCall(c, d)) return;
     c.callId = d.callId || c.callId;
     c.mediaType = d.mediaType === "video" ? "video" : c.mediaType;
+    if (c.pc || c.creating) return; // aynı çağrı için ikinci PeerConnection oluşturma
+    c.creating = true;
     c.accepted = true;
     clearTimeout(c.ringTimer);
     c.stage = "connecting";
