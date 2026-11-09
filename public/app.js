@@ -1652,7 +1652,7 @@ function igBubble(m, byId) {
       : shared.media?`<img src="${esc(shared.media)}" alt="" loading="lazy">`:"";
     body+=`<span class="ig-shared-post"><small>${shared.kind==="reel"?"▶ Reels göndərildi":"Post göndərildi"}</small><b>${esc(shared.authorName||shared.username||"TalkChat")}</b>${shared.text?`<span>${esc(shared.text)}</span>`:""}${sharedMedia?`<span class="ig-shared-media">${sharedMedia}</span>`:""}</span>`;
   }
-  if (m.text) body += `<span class="ig-t">${esc(m.text)}</span>`;
+  if (m.text) body += `<span class="ig-t">${esc(m.text)}</span>${m.editedAt ? `<small class="ig-edited">redaktə edildi</small>` : ""}`;
   const cls = m.attachment && isImg && !m.text ? " img" : "";
   return `<span class="ig-bub${cls}">${quote}${body}</span>`;
 }
@@ -1717,7 +1717,8 @@ function igOpenSheet(mid) {
   if (!m) return;
   const acts = [["reply", "Cavab ver"]];
   if (m.text) acts.push(["copy", "Mətni kopyala"]);
-  if (m.from === me) acts.push(["del", "Mesajı sil", "danger"]);
+      if (m.from === me && m.text && !m.deleted) acts.push(["edit", "Mesajı redaktə et"]);
+    if (m.from === me) acts.push(["del", "Mesajı sil", "danger"]);
   igEl("igSheetBody").innerHTML =
     acts.map(([a, t, k]) => `<button type="button" class="ig-sheet-btn${k ? " danger" : ""}" data-a="${a}" data-mid="${esc(m.id)}">${t}</button>`).join("") +
     '<button type="button" class="ig-sheet-btn cancel" data-a="close">Bağla</button>';
@@ -1763,6 +1764,23 @@ async function igStartWith(username) {
     if (a === "close") return;
     const m = IG.msgs.find(x => x.id === b.dataset.mid);
     if (!m) return;
+    if (a === "edit") {
+      if (m.from !== me || !m.text || m.deleted) return;
+      igEl("igSheetBody").innerHTML = `<div class="ig-edit-sheet"><label for="igEditText">Mesajı redaktə et</label><textarea id="igEditText" maxlength="2000">${esc(m.text)}</textarea><div class="ig-edit-actions"><button type="button" class="ig-sheet-btn cancel" data-a="close">Ləğv et</button><button type="button" class="ig-sheet-btn" data-a="save-edit" data-mid="${esc(m.id)}">Yadda saxla</button></div></div>`;
+      igEl("igSheet").hidden = false;
+      igEl("igEditText").focus();
+      return;
+    }
+    if (a === "save-edit") {
+      const text = igEl("igEditText")?.value || "";
+      if (!text.trim()) { alert("Mesaj boş ola bilməz."); return; }
+      try {
+        await api("/api/conversations/" + activeConversation + "/messages/" + m.id, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        await igLoadMessages(false);
+        loadConversations();
+      } catch (err) { alert(err.message); }
+      return;
+    }
     if (a === "reply") { IG.replyTo = m; igRenderReply(); igEl("dmText").focus(); }
     if (a === "copy") { try { await navigator.clipboard.writeText(m.text); } catch { alert(m.text); } }
     if (a === "del") {

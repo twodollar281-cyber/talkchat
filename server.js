@@ -1546,6 +1546,24 @@ app.post("/api/conversations/:id/read", requireAuth, (req, res) => {
 });
 
 // Öz mesajını sil (mətn və fayl təmizlənir, "Mesaj silindi" qalır)
+app.put("/api/conversations/:id/messages/:mid", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    const list = messages();
+    const m = list.find(x => x.id === req.params.mid && x.conversationId === convo.id);
+    if (!m || m.deleted) return res.status(404).json({ error: "Mesaj tapılmadı." });
+    if (m.from !== me) return res.status(403).json({ error: "Yalnız öz mesajını redaktə edə bilərsən." });
+    if (typeof m.text !== "string" || !m.text.trim()) return res.status(400).json({ error: "Yalnız mətn mesajlarını redaktə etmək olar." });
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    if (!text) return res.status(400).json({ error: "Mesaj boş ola bilməz." });
+    if (text.length > 2000) return res.status(400).json({ error: "Mesaj 2000 simvoldan çox ola bilməz." });
+    m.text = text;
+    m.editedAt = new Date().toISOString();
+    saveMessages(list);
+    convo.participants.forEach(to => io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
+    res.json(m);
+});
 app.delete("/api/conversations/:id/messages/:mid", requireAuth, async (req, res) => {
     const me = currentUser(req);
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));

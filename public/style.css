@@ -3399,3 +3399,10 @@ a { color: #c3a8ff; }
 
 /* TALKCHAT: backdrop-filter fixed menyunu səhifə ilə birlikdə sürüşdürürdü — ləğv edildi */
 .app-shell { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+
+/* Editable chat messages */
+.ig-edited { display: inline-block; margin-left: 6px; font-size: 10px; opacity: .72; white-space: nowrap; }
+.ig-edit-sheet { display: flex; flex-direction: column; gap: 12px; width: min(100%, 560px); }
+.ig-edit-sheet label { color: var(--ig-txt); font-weight: 700; }
+.ig-edit-sheet textarea { box-sizing: border-box; width: 100%; min-height: 120px; padding: 12px; border: 1px solid var(--ig-line); border-radius: 12px; background: var(--ig-gray); color: var(--ig-txt); font: inherit; resize: vertical; }
+.ig-edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
