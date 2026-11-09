@@ -4,9 +4,11 @@ window.addEventListener("error", e => {
 });
 const $ = id => document.getElementById(id);
 const socket = io();
+window.TalkChatSocket = socket;
 let me = "";
 let scope = "all";
 let activeConversation = null;
+Object.defineProperty(window, "TalkChatActiveConversationId", { get: () => activeConversation });
 let conversationsCache = [];
 
 function esc(value="") {
@@ -39,6 +41,9 @@ function showPage(name) {
   if (name === "reels") window.TalkChatSocial?.loadReels();
   if (name === "profile") loadMyPosts();
   if (name === "admin") window.TalkChatAdmin?.load();
+  if (name === "live") window.TalkChatLive?.load();
+  if (name === "ai") window.TalkChatAI?.load();
+  if (name === "profile") window.TalkChatCollections?.load();
 }
 document.querySelectorAll("[data-page]").forEach(b => b.addEventListener("click", () => showPage(b.dataset.page)));
 $("loginTab").onclick = () => setAuthMode("login");
@@ -82,6 +87,7 @@ function updateOwnerBootstrapField() {
 $("authUsername").addEventListener("input", updateOwnerBootstrapField);
 $("authUsername").addEventListener("change", updateOwnerBootstrapField);
 function enterApp() {
+  window.TalkChatCurrentUsername = me;
   $("authPage").hidden = true; $("app").hidden = false;
   socket.connect(); showPage("home");
   window.TalkChatSocial?.refreshMenuProfile?.();
@@ -185,7 +191,7 @@ function postHTML(p) {
     </div>
     ${isReel?`<span class="post-kind-badge">▶ REELS</span>`:""}
     ${p.text?`<div class="post-text">${esc(p.text)}</div>`:""}${media}
-    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button><button type="button" data-share-post="${esc(p.id)}">Göndər</button></div>
+    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button><button type="button" data-share-post="${esc(p.id)}">Göndər</button><button type="button" data-save-post="${esc(p.id)}">Yadda saxla</button></div>
     <div class="comment-list">${comments}</div>
     <form class="comment-form" data-comment="${esc(p.id)}"><input name="text" placeholder="Şərh yaz..." maxlength="500" required><button class="primary">Göndər</button></form>
   </article>`;
@@ -244,6 +250,12 @@ async function loadMyProfile(){
     $("profileColor").value=/^#[0-9a-fA-F]{6}$/.test(String(u.profileColor||""))?u.profileColor:"#8257ff";
     $("onlineVisibility").value=["everyone","friends","nobody"].includes(u.onlineVisibility)?u.onlineVisibility:"everyone";
     $("lastSeenVisibility").value=["everyone","friends","nobody"].includes(u.lastSeenVisibility)?u.lastSeenVisibility:"everyone";
+    const privacy=u.privacySettings||{};
+    $("privacyProfile").value=["everyone","followers","friends","nobody"].includes(privacy.profile)?privacy.profile:"everyone";
+    $("privacyPosts").value=["everyone","followers","friends","nobody"].includes(privacy.posts)?privacy.posts:"everyone";
+    $("privacyStories").value=["everyone","followers","friends","nobody"].includes(privacy.stories)?privacy.stories:"everyone";
+    $("privacyMessages").value=["everyone","followers","friends","nobody"].includes(privacy.messageRequests)?privacy.messageRequests:"everyone";
+    $("privacyFriends").value=["everyone","followers","friends","nobody"].includes(privacy.friendRequests)?privacy.friendRequests:"everyone";
     applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
     $("myDisplayName").value=u.displayName||"";
@@ -272,7 +284,7 @@ async function loadMyPosts(){
 }
 $("saveBio").onclick=async()=>{
   try{
-    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value,profileTheme:$("profileTheme").value,profileColor:$("profileColor").value,onlineVisibility:$("onlineVisibility").value,lastSeenVisibility:$("lastSeenVisibility").value})});
+    const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value,profileTheme:$("profileTheme").value,profileColor:$("profileColor").value,onlineVisibility:$("onlineVisibility").value,lastSeenVisibility:$("lastSeenVisibility").value,privacySettings:{profile:$("privacyProfile").value,posts:$("privacyPosts").value,stories:$("privacyStories").value,messageRequests:$("privacyMessages").value,friendRequests:$("privacyFriends").value}})});
     $("profileStatus").textContent="Profil yadda saxlanıldı!";
     applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
@@ -1790,6 +1802,7 @@ function igRenderMsgs() {
 
 async function openConversation(id) {
   activeConversation = id;
+  window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id } }));
   IG.replyTo = null;
   IG.pendingFile = null;
   igRenderReply();
@@ -2230,6 +2243,7 @@ async function igStartWith(username) {
   igEl("tcMobileBack").onclick = () => {
     igEl("messagesPage").classList.remove("tc-chat-open");
     activeConversation = null;
+    window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id: null } }));
     igRenderList();
   };
   igEl("igInfo").onclick = () => {
