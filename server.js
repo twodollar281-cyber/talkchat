@@ -22,6 +22,7 @@ const {
 } = require("./moderationPolicy");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const { ipKeyGenerator } = require("express-rate-limit");
 const multer = require("multer");
 const supa = require("./supabaseStorage");
 
@@ -737,7 +738,7 @@ function requireAuth(req, res, next) {
 
 function rateLimitKey(req) {
     const username = currentUser(req);
-    return username ? `user:${username.toLowerCase()}` : `ip:${req.ip || "unknown"}`;
+    return username || ipKeyGenerator(req.ip);
 }
 function userRateLimit(windowMs, limit, message) {
     return rateLimit({
@@ -1108,7 +1109,7 @@ function addNotification(to, from, type, extra = {}) {
     saveNotifications(list.slice(0, 1000));
 }
 
-require("./liveStreams").install({
+require("./liveStreams").installLiveStreams({
     app, io, users, readJSON, saveJSON, requireAuth, currentUser,
     canViewProfile, canViewContent, isBlockedBetween,
     roleOf, canModerateUser, appendAudit
