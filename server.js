@@ -1118,6 +1118,9 @@ require("./savedCollections").install({
 require("./chatThemes").install({
     app, readJSON, saveJSON, conversations, requireAuth, currentUser
 });
+require("./aiAssistant").install({
+    app, readJSON, saveJSON, requireAuth, currentUser, userRateLimit
+});
 
 const allowedMime = new Set([
     "image/jpeg", "image/png", "image/webp", "image/gif",

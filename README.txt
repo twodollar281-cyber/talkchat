@@ -74,3 +74,7 @@ GIF search uses the official GIPHY API through the TalkChat server. Set the serv
 LIVE STREAMING
 --------------
 Live streams use peer-to-peer WebRTC without a paid provider or API key. Browser HTTPS, a camera/microphone permission, and a compatible network are required. The current implementation supports up to 10 viewers; see docs/live-streaming.md for limitations and setup details.
+
+TALKCHAT AI ASSISTANT
+---------------------
+The AI assistant uses OpenAI's Responses API. Set OPENAI_API_KEY only in the Render service environment; the server reads it through process.env and never sends it to the browser. No key is needed in GitHub or Replit. The assistant limits each account to 6 requests per minute and 40 per UTC day, with a 2,000-character prompt and 600-token response cap. OpenAI API usage is billed separately; see docs/ai-assistant.md for privacy, setup, and pricing details.
