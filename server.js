@@ -1111,6 +1111,10 @@ require("./liveStreams").install({
     canViewProfile, canViewContent, isBlockedBetween,
     roleOf, canModerateUser, appendAudit
 });
+require("./savedCollections").install({
+    app, posts, readJSON, saveJSON, requireAuth, currentUser,
+    canViewContent, isBlockedBetween, publicPost
+});
 
 const allowedMime = new Set([
     "image/jpeg", "image/png", "image/webp", "image/gif",

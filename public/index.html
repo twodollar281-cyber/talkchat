@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="admin.css?v=1">
   <link rel="stylesheet" href="profile-customization.css?v=1">
   <link rel="stylesheet" href="live-streams.css?v=1">
+  <link rel="stylesheet" href="saved-collections.css?v=1">
 </head>
 <body>
   <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -440,6 +441,16 @@
           <h2>Paylaşımlarım</h2>
           <div id="myPosts" class="feed"></div>
         </section>
+        <section class="tc-collections-section" aria-labelledby="savedCollectionsTitle">
+          <div class="tc-collections-heading"><div><span class="eyebrow">ŞƏXSİ KİTABI</span><h2 id="savedCollectionsTitle">Yadda saxlanmış kolleksiyalar</h2></div></div>
+          <form id="savedCollectionCreateForm" class="tc-collection-create">
+            <label class="sr-only" for="savedCollectionName">Kolleksiya adı</label>
+            <input id="savedCollectionName" maxlength="60" placeholder="Məsələn, Sonra oxu" required>
+            <button class="primary" type="submit">Kolleksiya yarat</button>
+          </form>
+          <p id="savedCollectionsStatus" class="status" aria-live="polite"></p>
+          <div id="savedCollectionsList" class="tc-collections-list" aria-live="polite"></div>
+        </section>
       </section>
 
       <section id="publicProfilePage" class="page" hidden>
@@ -511,6 +522,18 @@
       </div>
     </div>
   </dialog>
+  <dialog id="savedCollectionPicker" class="tc-collection-picker" aria-labelledby="savedCollectionPickerTitle">
+    <section class="tc-collection-picker-panel">
+      <header><div><span class="eyebrow">ŞƏXSİ KİTABI</span><h2 id="savedCollectionPickerTitle">Kolleksiyaya yadda saxla</h2></div><button id="savedCollectionPickerClose" type="button" class="icon-button" aria-label="Bağla">×</button></header>
+      <div id="savedCollectionPickerOptions" class="tc-collection-picker-options"></div>
+      <form id="savedCollectionPickerCreateForm" class="tc-collection-create">
+        <label class="sr-only" for="savedCollectionPickerName">Yeni kolleksiya adı</label>
+        <input id="savedCollectionPickerName" maxlength="60" placeholder="Yeni kolleksiya adı" required>
+        <button class="secondary" type="submit">Yarat və yadda saxla</button>
+      </form>
+      <p id="savedCollectionPickerStatus" class="status" aria-live="polite"></p>
+    </section>
+  </dialog>
   <dialog id="shareDialog" class="tc-share-dialog">
     <div class="tc-share-panel">
       <header class="tc-share-header">
@@ -569,6 +592,7 @@
   <script src="talkchat-2027.js?v=1"></script>
   <script src="app.js?v=2027sticker1"></script>
   <script src="social.js?v=1"></script>
+  <script src="saved-collections.js?v=1"></script>
   <script src="admin.js?v=1"></script>
   <script src="tc-mobile-chat.js?v=1"></script>
   <script src="calls.js?v=5"></script>

@@ -41,6 +41,7 @@ function showPage(name) {
   if (name === "profile") loadMyPosts();
   if (name === "admin") window.TalkChatAdmin?.load();
   if (name === "live") window.TalkChatLive?.load();
+  if (name === "profile") window.TalkChatCollections?.load();
 }
 document.querySelectorAll("[data-page]").forEach(b => b.addEventListener("click", () => showPage(b.dataset.page)));
 $("loginTab").onclick = () => setAuthMode("login");
@@ -188,7 +189,7 @@ function postHTML(p) {
     </div>
     ${isReel?`<span class="post-kind-badge">▶ REELS</span>`:""}
     ${p.text?`<div class="post-text">${esc(p.text)}</div>`:""}${media}
-    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button><button type="button" data-share-post="${esc(p.id)}">Göndər</button></div>
+    <div class="post-actions"><button data-like="${esc(p.id)}">${liked?"♥":"♡"} ${p.likes?.length||0} bəyənmə</button><button data-focus-comment="${esc(p.id)}">Şərh (${p.comments?.length||0})</button><button type="button" data-share-post="${esc(p.id)}">Göndər</button><button type="button" data-save-post="${esc(p.id)}">Yadda saxla</button></div>
     <div class="comment-list">${comments}</div>
     <form class="comment-form" data-comment="${esc(p.id)}"><input name="text" placeholder="Şərh yaz..." maxlength="500" required><button class="primary">Göndər</button></form>
   </article>`;
