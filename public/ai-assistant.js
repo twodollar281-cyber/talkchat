@@ -31,7 +31,7 @@
     if (!messages.length) {
       const empty = document.createElement("div");
       empty.className = "tc-ai-empty";
-      empty.textContent = "Sualını göndər. Cavablar OpenAI-dan alınır; TalkChat sənin digər çatlarını AI ilə paylaşmır.";
+      empty.textContent = "Sualını göndər. Cavablar Cloudflare Workers AI-dan alınır; TalkChat sənin digər çatlarını AI ilə paylaşmır.";
       root.append(empty);
     } else {
       messages.forEach(message => root.append(appendMessage(message)));
