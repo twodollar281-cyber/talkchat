@@ -1118,7 +1118,7 @@ require("./savedCollections").install({
 require("./chatThemes").installChatThemes({
     app, readJSON, saveJSON, conversations, requireAuth, currentUser
 });
-require("./aiAssistant").install({
+require("./aiAssistant").installAIAssistant({
     app, readJSON, saveJSON, requireAuth, currentUser, userRateLimit
 });
 
