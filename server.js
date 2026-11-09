@@ -1500,7 +1500,41 @@ app.post("/api/conversations/group", requireAuth, (req, res) => {
 app.get("/api/conversations/:id/messages", requireAuth, (req, res) => {
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
-    res.json(messages().filter(m => m.conversationId === convo.id).slice(-200));
+    const list = messages().filter(m => m.conversationId === convo.id);
+    const aroundId = String(req.query.around || "");
+    const aroundIndex = aroundId ? list.findIndex(m => m.id === aroundId) : -1;
+    if (aroundIndex >= 0) {
+        const start = Math.max(0, aroundIndex - 100);
+        return res.json(list.slice(start, start + 200));
+    }
+    res.json(list.slice(-200));
+});
+
+app.get("/api/conversations/:id/messages/search", requireAuth, (req, res) => {
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));
+    if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    const query = typeof req.query.q === "string" ? req.query.q.trim().normalize("NFKC") : "";
+    if (query.length < 2 || query.length > 100) return res.status(400).json({ error: "Axtarış 2-100 simvol arasında olmalıdır." });
+    const cursor = String(req.query.before || "");
+    const split = cursor.indexOf("|");
+    if (cursor && split < 1) return res.status(400).json({ error: "Axtarış səhifəsi etibarsızdır." });
+    const beforeAt = split >= 0 ? cursor.slice(0, split) : "";
+    const beforeId = split >= 0 ? cursor.slice(split + 1) : "";
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 50)) : 20;
+    const terms = [...new Set([query.toLowerCase(), query.toLocaleLowerCase("az"), query.toLocaleLowerCase("tr")])];
+    const found = messages().filter(m => {
+        if (m.conversationId !== convo.id || m.deleted || typeof m.text !== "string") return false;
+        if (beforeAt && !(String(m.createdAt) < beforeAt || (String(m.createdAt) === beforeAt && String(m.id) < beforeId))) return false;
+        const text = m.text.normalize("NFKC");
+        const forms = [text.toLowerCase(), text.toLocaleLowerCase("az"), text.toLocaleLowerCase("tr")];
+        return forms.some(form => terms.some(term => form.includes(term)));
+    }).sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)) || String(right.id).localeCompare(String(left.id)));
+    const page = found.slice(0, limit + 1);
+    const hasMore = page.length > limit;
+    const results = page.slice(0, limit).map(m => ({ id: m.id, conversationId: m.conversationId, from: m.from, text: m.text, createdAt: m.createdAt, editedAt: m.editedAt || "" }));
+    const last = results[results.length - 1];
+    res.json({ results, hasMore, nextCursor: hasMore && last ? `${last.createdAt}|${last.id}` : "" });
 });
 app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), (req, res) => {
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(currentUser(req)));

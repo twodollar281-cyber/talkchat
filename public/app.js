@@ -1749,6 +1749,60 @@ async function igStartWith(username) {
     if (b) openConversation(b.dataset.convo);
   });
 
+  let msgSearchQuery = "", msgSearchCursor = "", msgSearchTimer = null, msgSearchSeq = 0;
+  async function loadMessageSearch(reset) {
+    const conversationId = activeConversation;
+    if (!conversationId || !msgSearchQuery || msgSearchQuery.length < 2) return;
+    if (reset) msgSearchCursor = "";
+    const cursor = reset ? "" : msgSearchCursor;
+    const sequence = ++msgSearchSeq;
+    const resultsBox = igEl("tcMessageSearchResults");
+    const moreButton = igEl("tcMessageSearchMore");
+    if (reset) resultsBox.textContent = "Axtarılır…";
+    moreButton.hidden = true;
+    const params = new URLSearchParams({ q: msgSearchQuery, limit: "20" });
+    if (cursor) params.set("before", cursor);
+    try {
+      const data = await api("/api/conversations/" + encodeURIComponent(conversationId) + "/messages/search?" + params.toString());
+      if (sequence !== msgSearchSeq || conversationId !== activeConversation) return;
+      const items = (data.results || []).map(m => `<button type="button" class="tc-msg-search-result" role="listitem" data-search-mid="${esc(m.id)}"><span class="tc-msg-search-meta"><b>${esc(m.from === me ? "Sən" : "@" + m.from)}</b><time>${esc(igTime(m.createdAt))}</time></span><span class="tc-msg-search-text">${esc(m.text)}</span></button>`).join("");
+      if (reset) resultsBox.innerHTML = "";
+      if (items) resultsBox.insertAdjacentHTML("beforeend", items);
+      if (reset && !items) resultsBox.textContent = "Nəticə tapılmadı.";
+      msgSearchCursor = data.nextCursor || "";
+      moreButton.hidden = !msgSearchCursor;
+    } catch (err) {
+      if (sequence !== msgSearchSeq) return;
+      if (reset) resultsBox.textContent = err.message;
+    }
+  }
+  igEl("tcMessageSearchToggle").addEventListener("click", () => {
+    const panel = igEl("tcMessageSearchPanel");
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) igEl("tcMessageSearchInput").focus();
+  });
+  igEl("tcMessageSearchClose").addEventListener("click", () => {
+    msgSearchSeq++; clearTimeout(msgSearchTimer); igEl("tcMessageSearchPanel").hidden = true;
+  });
+  igEl("tcMessageSearchInput").addEventListener("input", e => {
+    msgSearchQuery = e.target.value.trim(); msgSearchSeq++; clearTimeout(msgSearchTimer); msgSearchCursor = "";
+    const resultsBox = igEl("tcMessageSearchResults"); igEl("tcMessageSearchMore").hidden = true;
+    if (msgSearchQuery.length < 2) { resultsBox.textContent = "Axtarış üçün ən azı 2 simvol yaz."; return; }
+    resultsBox.textContent = "Axtarılır…";
+    msgSearchTimer = setTimeout(() => loadMessageSearch(true), 250);
+  });
+  igEl("tcMessageSearchMore").addEventListener("click", () => loadMessageSearch(false));
+  igEl("tcMessageSearchResults").addEventListener("click", async e => {
+    const item = e.target.closest("[data-search-mid]"); if (!item) return;
+    const conversationId = activeConversation, messageId = item.dataset.searchMid;
+    try {
+      const list = await api("/api/conversations/" + encodeURIComponent(conversationId) + "/messages?around=" + encodeURIComponent(messageId));
+      if (conversationId !== activeConversation) return;
+      IG.msgs = list; igRenderMsgs(); igEl("tcMessageSearchPanel").hidden = true;
+      const row = [...igEl("chatMessages").querySelectorAll("[data-mid]")].find(node => node.dataset.mid === messageId);
+      if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (err) { alert(err.message); }
+  });
   igEl("chatMessages").addEventListener("click", e => {
     if (e.target.closest("a")) return;
     const row = e.target.closest("[data-mid]");
