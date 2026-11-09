@@ -689,6 +689,50 @@ function requireAuth(req, res, next) {
     next();
 }
 
+function rateLimitKey(req) {
+    const username = currentUser(req);
+    return username ? `user:${username.toLowerCase()}` : `ip:${req.ip || "unknown"}`;
+}
+function userRateLimit(windowMs, limit, message) {
+    return rateLimit({
+        windowMs, limit, keyGenerator: rateLimitKey,
+        standardHeaders: "draft-7", legacyHeaders: false,
+        message: { error: message }
+    });
+}
+function duplicateText(items, { username, text, scope = "", senderField = "username", windowMs = 30000, minLength = 12 }) {
+    const normalized = String(text || "").trim().normalize("NFKC").replace(/\s+/g, " ").toLowerCase();
+    if (normalized.length < minLength) return false;
+    const now = Date.now();
+    return items.some(item => {
+        if (item[senderField] !== username || (scope && item.scope !== scope)) return false;
+        const createdAt = Date.parse(item.createdAt || "");
+        const previous = String(item.text || "").trim().normalize("NFKC").replace(/\s+/g, " ").toLowerCase();
+        return Number.isFinite(createdAt) && now - createdAt >= 0 && now - createdAt < windowMs && previous === normalized;
+    });
+}
+
+const postMutationLimiter = userRateLimit(15 * 60 * 1000, 60, "Çox tez-tez paylaşım əməliyyatı edirsən. Bir az sonra yenidən cəhd et.");
+const commentLimiter = userRateLimit(60 * 1000, 45, "Şərh limiti dolub. Bir az sonra yenidən cəhd et.");
+const followLimiter = userRateLimit(60 * 1000, 30, "İzləmə əməliyyatı limiti dolub. Bir az sonra yenidən cəhd et.");
+const messageLimiter = userRateLimit(60 * 1000, 120, "Mesaj limiti dolub. Bir az sonra yenidən cəhd et.");
+const reportLimiter = userRateLimit(10 * 60 * 1000, 8, "Şikayət limiti dolub. Bir az sonra yenidən cəhd et.");
+const messageRequestLimiter = userRateLimit(10 * 60 * 1000, 10, "Mesaj sorğusu limiti dolub. Bir az sonra yenidən cəhd et.");
+app.use("/api/posts", (req, res, next) =>
+    ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? postMutationLimiter(req, res, next) : next());
+app.use("/api/reels", (req, res, next) =>
+    ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? postMutationLimiter(req, res, next) : next());
+app.use("/api/follow", (req, res, next) =>
+    ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? followLimiter(req, res, next) : next());
+app.use("/api/conversations", (req, res, next) =>
+    ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? messageLimiter(req, res, next) : next());
+app.use("/api/rooms", (req, res, next) =>
+    ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) ? messageLimiter(req, res, next) : next());
+app.use("/api/reports", (req, res, next) =>
+    req.method === "POST" ? reportLimiter(req, res, next) : next());
+app.use("/api/message-requests", (req, res, next) =>
+    req.method === "POST" ? messageRequestLimiter(req, res, next) : next());
+
 app.get("/api/calls/ice", requireAuth, async (req, res) => {
     const token = process.env.TURNIX_API_TOKEN;
 
@@ -1101,7 +1145,8 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/login", async (req, res) => {
     try {
         const { username, password } = req.body || {};
-        if (typeof username !== "string" || typeof password !== "string")
+        if (typeof username !== "string" || username.trim().replace(/^@/, "").length > 20 ||
+            typeof password !== "string" || password.length > 72)
             return res.status(400).json({ error: "Məlumatlar düzgün deyil." });
         const user = users().find(u => u.username.toLowerCase() === username.trim().replace(/^@/, "").toLowerCase());
         if (!user || !(await bcrypt.compare(password, user.password)))
@@ -1347,6 +1392,7 @@ app.delete("/api/follow/:username", requireAuth, (req, res) => {
 const friendRequestLimiter = rateLimit({
     windowMs: 60 * 1000,
     limit: 10,
+    keyGenerator: rateLimitKey,
     standardHeaders: "draft-7",
     legacyHeaders: false,
     message: { error: "Çox sorğu göndərdin. Bir az gözlə." }
@@ -1498,7 +1544,12 @@ app.get("/api/users/:username/posts", requireAuth, (req, res) => {
         .slice(0, 100).map(p => publicPost(p, userList, me)));
 });
 app.post("/api/posts", requireAuth, socialUpload.single("media"), (req, res) => {
-    const text = String(req.body.text || "").trim().slice(0, 1000);
+    const rawText = typeof req.body?.text === "string" ? req.body.text : "";
+    if (rawText.length > 1000) {
+        if (req.file) removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(400).json({ error: "Paylaşım mətni 1000 simvoldan çox ola bilməz." });
+    }
+    const text = rawText.trim();
     if (!text && !req.file) return res.status(400).json({ error: "Mətn və ya media əlavə et." });
     let mediaType = "";
     if (req.file) {
@@ -1509,6 +1560,10 @@ app.post("/api/posts", requireAuth, socialUpload.single("media"), (req, res) => 
             removeLocalUpload(`/uploads/${req.file.filename}`);
             return res.status(400).json({ error: "Şəkil maksimum 12 MB ola bilər." });
         }
+    }
+    if (duplicateText(posts(), { username: currentUser(req), text, windowMs: 30000, minLength: 20 })) {
+        if (req.file) removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(429).json({ error: "Eyni paylaşımı qısa müddətdə təkrar göndərmək olmaz." });
     }
     const list = posts();
     const post = {
@@ -1521,11 +1576,20 @@ app.post("/api/posts", requireAuth, socialUpload.single("media"), (req, res) => 
     res.json(publicPost(post));
 });
 app.post("/api/reels", requireAuth, socialUpload.single("media"), (req, res) => {
-    const caption = String(req.body.text || "").trim().slice(0, 500);
+    const rawCaption = typeof req.body?.text === "string" ? req.body.text : "";
+    if (rawCaption.length > 500) {
+        if (req.file) removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(400).json({ error: "Reels açıqlaması 500 simvoldan çox ola bilməz." });
+    }
+    const caption = rawCaption.trim();
     if (!req.file) return res.status(400).json({ error: "Reels üçün video seç." });
     if (!["video/mp4", "video/webm"].includes(req.file.mimetype)) {
         removeLocalUpload(`/uploads/${req.file.filename}`);
         return res.status(400).json({ error: "Reels yalnız MP4 və ya WebM videoları qəbul edir." });
+    }
+    if (duplicateText(posts(), { username: currentUser(req), text: caption, windowMs: 30000, minLength: 20 })) {
+        removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(429).json({ error: "Eyni Reels açıqlamasını qısa müddətdə təkrar göndərmək olmaz." });
     }
     const reel = {
         id: crypto.randomUUID(), username: currentUser(req), text: caption,
@@ -1552,12 +1616,17 @@ app.post("/api/posts/:id/like", requireAuth, (req, res) => {
     savePosts(list);
     res.json({ liked: post.likes.includes(currentUser(req)), likes: post.likes.length });
 });
-app.post("/api/posts/:id/comments", requireAuth, (req, res) => {
-    const text = String((req.body || {}).text || "").trim().slice(0, 500);
+app.post("/api/posts/:id/comments", requireAuth, commentLimiter, (req, res) => {
+    const rawText = typeof req.body?.text === "string" ? req.body.text : "";
+    if (rawText.length > 500) return res.status(400).json({ error: "Şərh 500 simvoldan çox ola bilməz." });
+    const text = rawText.trim();
     if (!text) return res.status(400).json({ error: "Şərh boş ola bilməz." });
     const list = posts(), post = list.find(p => p.id === req.params.id);
     if (!post) return res.status(404).json({ error: "Paylaşım tapılmadı." });
     if (isBlockedBetween(currentUser(req), post.username)) return res.status(403).json({ error: "Bu hesabla əlaqə məhdudlaşdırılıb." });
+    if (duplicateText((post.comments || []).map(comment => ({ ...comment, scope: post.id })), {
+        username: currentUser(req), text, scope: post.id, windowMs: 30000, minLength: 12
+    })) return res.status(429).json({ error: "Eyni şərhi qısa müddətdə təkrar göndərmək olmaz." });
     post.comments ||= [];
     const comment = { id: crypto.randomUUID(), username: currentUser(req), text, createdAt: new Date().toISOString() };
     post.comments.push(comment); savePosts(list);
@@ -2198,7 +2267,12 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
         if (req.file) await removeLocalUpload(`/uploads/${req.file.filename}`);
         return res.status(403).json({ error: "Bu söhbətdə blok səbəbindən mesaj göndərmək olmur." });
     }
-    const text = String(req.body.text || "").trim().slice(0, 2000);
+    const rawText = typeof req.body?.text === "string" ? req.body.text : "";
+    if (rawText.length > 2000) {
+        if (req.file) await removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(400).json({ error: "Mesaj 2000 simvoldan çox ola bilməz." });
+    }
+    const text = rawText.trim();
     const gifInput = req.body && req.body.gif;
     const gif = gifInput ? normalizeGifPayload(gifInput) : null;
     if (gifInput && !gif) return res.status(400).json({ error: "GIF məlumatı düzgün deyil." });
@@ -2207,6 +2281,12 @@ app.post("/api/conversations/:id/messages", requireAuth, upload.single("file"), 
     if (stickerId && !sticker) return res.status(400).json({ error: "Sticker tapılmadı." });
     if ((gif && req.file) || (sticker && (req.file || gif))) return res.status(400).json({ error: "Eyni mesajda yalnız bir media göndərmək olar." });
     if (!text && !req.file && !gif && !sticker) return res.status(400).json({ error: "Mesaj boş ola bilməz." });
+    if (duplicateText(messages().filter(message => message.conversationId === convo.id), {
+        username: me, text, senderField: "from", windowMs: 15000, minLength: 12
+    })) {
+        if (req.file) await removeLocalUpload(`/uploads/${req.file.filename}`);
+        return res.status(429).json({ error: "Eyni mesajı qısa müddətdə təkrar göndərmək olmaz." });
+    }
     const replyId = String(req.body.replyTo || "");
     const replyTarget = replyId ? messages().find(m => m.id === replyId && m.conversationId === convo.id) : null;
     const recipients = convo.participants.filter(x => x !== currentUser(req));
