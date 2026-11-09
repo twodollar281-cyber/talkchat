@@ -143,7 +143,7 @@
   const busy = () => (cur && !cur.over) || !!inc;
   const newCall = (o) => ({ callId: null, mediaType: "audio", pc: null, vTrans: null, pending: [], cands: [], remoteSet: false, making: false, ignore: false,
     accepted: false, muted: false, sharing: false, remoteMuted: false, remoteSharing: false, over: false, connectedAt: 0,
-    tick: null, ringTimer: null, warn: "", endText: "", screenTrack: null, ...o });
+    tick: null, ringTimer: null, iceRestartTimer: null, iceRestarted: false, warn: "", endText: "", screenTrack: null, ...o });
   const emit = (ev, convo, extra) => {
     const active = cur && cur.convo === convo ? cur : inc && inc.convo === convo ? inc : null;
     socket.emit(ev, { conversationId: convo, ...(active && active.callId ? { callId: active.callId } : {}), ...(extra || {}) });
@@ -269,9 +269,16 @@
     };
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
-      if (s === "connected") { c.warn = ""; if (!c.connectedAt) { c.connectedAt = Date.now(); c.tick = setInterval(paint, 1000); takeWake(); } }
+      if (s === "connected") { clearTimeout(c.iceRestartTimer); c.iceRestarted = false; c.warn = ""; if (!c.connectedAt) { c.connectedAt = Date.now(); c.tick = setInterval(paint, 1000); takeWake(); } }
       else if (s === "disconnected") c.warn = tx("weak");
-      else if (s === "failed") { c.warn = tx("failed"); setTimeout(() => { if (cur === c && !c.over) hangUp(tx("failed")); }, 2500); }
+      else if (s === "failed") {
+        c.warn = tx("reconnecting"); paint();
+        if (!c.iceRestarted) {
+          c.iceRestarted = true;
+          try { if (pc.restartIce) pc.restartIce(); } catch {}
+          c.iceRestartTimer = setTimeout(() => { if (cur === c && !c.over && c.pc === pc && pc.connectionState !== "connected") hangUp(tx("failed")); }, 12000);
+        }
+      }
       paint();
     };
     for (const s of c.pending.splice(0)) await handleSignal(c, s);
@@ -354,14 +361,14 @@
     stopRing();
     const c = (cur = newCall({ callId: i.callId, mediaType: i.mediaType, convo: i.convo, peer: i.peer, role: "callee", local, stage: "connecting", accepted: true, cameraOn: i.mediaType === "video", remoteCameraOn: true, facing: "user" }));
     paint();
+    emit("call:accept", c.convo); // ICE qurulmasını gözləmədən qəbul et; gələn təklif createPC hazır olana qədər növbədə saxlanır
     try { await createPC(c); } catch (e) { emit("call:end", c.convo); endLocal(c, tx("failed")); return; }
     if (c.over) return;
-    emit("call:accept", c.convo); // hazır olduktan sonra kabul et ki arayanın teklifi kaçmasın
   }
 
   function endLocal(c, text) {
     if (c.over) return;
-    c.over = true; c.endText = text || ""; clearTimeout(c.ringTimer); clearInterval(c.tick); c.sharing = false;
+    c.over = true; c.endText = text || ""; clearTimeout(c.ringTimer); clearTimeout(c.iceRestartTimer); clearInterval(c.tick); c.sharing = false;
     try { if (c.nativeShare) c.nativeShare.stop().catch(() => {}); } catch {}
     try { if (c.screenTrack) c.screenTrack.stop(); } catch {}
     try { if (c.local) c.local.getTracks().forEach((t) => t.stop()); } catch {}
@@ -478,7 +485,10 @@
     if (!d) return;
     if (inc && matchesCall(inc, d)) dismissIncoming();
     const c = cur;
-    if (c && !c.over && matchesCall(c, d)) endLocal(c, d.reason === "disconnected" ? tx("dropped") : (c.connectedAt ? "" : tx("noAnswer")));
+    if (c && !c.over && matchesCall(c, d)) {
+      const message = d.reason === "no-answer" ? tx("noAnswer") : d.reason === "disconnected" ? tx("dropped") : d.reason === "rejected" ? tx("declined") : d.reason === "failed" ? tx("failed") : (c.connectedAt ? "" : tx("ended"));
+      endLocal(c, message);
+    }
   });
   socket.on("disconnect", () => {
     if (inc) dismissIncoming();
