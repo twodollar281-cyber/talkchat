@@ -2,6 +2,8 @@ package com.talkchat.app;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.net.Uri;
+import android.provider.Settings;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import androidx.core.content.ContextCompat;
@@ -16,6 +18,19 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "CallService")
 public class CallServicePlugin extends Plugin {
     private static volatile CallServicePlugin instance;
+    @PluginMethod
+public void checkOverlayPermission(PluginCall call) {
+    @PluginMethod
+public void requestOverlayPermission(PluginCall call) {
+    // 3-cü hissənin kodu
+        }
+    boolean granted = Build.VERSION.SDK_INT < 23
+        || Settings.canDrawOverlays(getContext());
+
+    JSObject result = new JSObject();
+    result.put("granted", granted);
+    call.resolve(result);
+}
     @Override public void load() { super.load(); instance = this; }
     @Override protected void handleOnDestroy() { if (instance == this) instance = null; super.handleOnDestroy(); }
 
