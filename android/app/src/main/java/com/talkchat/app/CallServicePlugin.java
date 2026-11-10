@@ -84,6 +84,44 @@ public void requestOverlayPermission(PluginCall call) {
         catch (Exception e) { call.reject("Could not stop screen capture", e); return; }
         call.resolve();
     }
+@PluginMethod
+public void showOverlay(PluginCall call) {
+    try {
+        if (Build.VERSION.SDK_INT >= 23
+                && !Settings.canDrawOverlays(getContext())) {
+            call.reject("Overlay permission not granted");
+            return;
+        }
+
+        Intent intent = new Intent(getContext(), CallService.class);
+        intent.setAction(CallService.ACTION_SHOW_OVERLAY);
+        intent.putExtra("overlayTitle",
+            call.getString("title", "TalkChat"));
+        intent.putExtra("overlayDuration",
+            call.getString("duration", "00:00"));
+        intent.putExtra("overlaySpeaker",
+            call.getString("speaker", "TalkChat"));
+        intent.putExtra("overlayParticipants",
+            call.getString("participants", "Zəng davam edir"));
+
+        getContext().startService(intent);
+        call.resolve();
+    } catch (Exception e) {
+        call.reject("Could not show call overlay", e);
+    }
+}
+
+@PluginMethod
+public void hideOverlay(PluginCall call) {
+    try {
+        Intent intent = new Intent(getContext(), CallService.class);
+        intent.setAction(CallService.ACTION_HIDE_OVERLAY);
+        getContext().startService(intent);
+        call.resolve();
+    } catch (Exception e) {
+        call.reject("Could not hide call overlay", e);
+    }
+}
     @PluginMethod public void stop(PluginCall call) {
         try { getContext().stopService(new Intent(getContext(), CallService.class)); }
         catch (Exception e) { call.reject("Could not stop call service", e); return; }
