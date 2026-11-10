@@ -368,7 +368,8 @@ function syncGroupNativeOverlay(show = false) {
       displayName:
         person?.displayName ||
         person?.name ||
-        username
+        username,
+      avatar: person?.avatar || ""
     };
   });
 
@@ -415,7 +416,7 @@ if (callNativePlugin?.addListener) {
         nativeCall("hideOverlay");
         break;
 
-      case "return":
+      case "returnToCall":
         nativeCall("hideOverlay");
 
         if (state) {
