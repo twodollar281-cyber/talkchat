@@ -416,7 +416,7 @@ if (callNativePlugin?.addListener) {
         nativeCall("hideOverlay");
         break;
 
-      case "returnToCall":
+      case "return":
         nativeCall("hideOverlay");
 
         if (state) {
