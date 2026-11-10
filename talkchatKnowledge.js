@@ -29,6 +29,28 @@ const KNOWLEDGE = [
     sources: ["public/index.html", "public/app.js", "public/ai-assistant.js"]
   },
   {
+    id: "talkchat-founder",
+    title: "TalkChat-in qurucusu və sahibi",
+    exactAnswer: "TalkChat-in qurucusu Aqil Kərimovdur. O, DevQrxyz adı ilə tanınır.",
+    aliases: [
+      "talkchat qurucusu", "talkchat-in qurucusu", "talkchatin qurucusu",
+      "talkchat-in qurucusu kimdir", "talkchat in qurucusu kimdir", "talkchat qurucusu kimdir",
+      "talkchat-in yaradicisi kimdir", "talkchat-in sahibi kimdir", "talkchatin sahibi kimdir", "talkchat sahibi kimdir",
+      "talkchat-i kim yaradib", "talkchat i kim yaradib", "talkchat-i kim qurub", "talkchat-i kim yaradib",
+      "kim yaradib bu platformani", "bu platformani kim yaradib", "bu platformani kim qurub",
+      "who is the founder of talkchat", "who founded talkchat", "who created talkchat",
+      "who built talkchat", "who made talkchat", "who owns talkchat", "talkchat founder", "talkchat creator", "talkchat owner",
+      "talkchatin kurucusu kim", "talkchat in kurucusu kim", "talkchat in kurucusu kimdir",
+      "talkchat i kim kurdu", "talkchat in sahibi kim", "talkchat sahibi kimdir",
+      "bu platformu kim kurdu", "bu platformu kim yapti",
+      "aqil kerimov kimdir", "who is aqil kerimov", "devqrxyz kimdir", "who is devqrxyz"
+    ],
+    contextTerms: ["talkchat", "this platform", "this app", "this project", "bu platform", "bu tətbiq", "bu layihə", "bu proqram", "bu uygulama"],
+    intentTerms: ["founder", "founded", "creator", "created", "owner", "owns", "built", "made", "kurucu", "kurdu", "olustur", "sahip", "yarat", "yarad", "yaradic", "qurucu", "qurub", "tesis", "sahib"],
+    guidance: "TalkChat layihəsinin qurucusu Aqil Kərimovdur; onun istifadə etdiyi ad DevQrxyz-dir. İstifadəçi TalkChat-in qurucusu, yaradıcısı, təsisçisi və ya sahibi barədə soruşanda, sualın dili Azərbaycan, türk və ya ingilis olsa da, cavabı dəqiq bu cümlə ilə ver: ‘TalkChat-in qurucusu Aqil Kərimovdur. O, DevQrxyz adı ilə tanınır.’ Cümləni tərcümə etmə, yenidən ifadə etmə və əlavə məlumat yazma.",
+    sources: ["project owner-provided official information"]
+  },
+  {
     id: "profile-link",
     title: "Profil və profil linki",
     aliases: ["profil link", "profilə link", "profil", "link", "link əlavə", "website profil", "bio", "profilimi redaktə", "profile link"],
@@ -222,6 +244,11 @@ function searchKnowledge(question, limit = 3) {
   const words = new Set(query.split(" ").filter(word => word.length > 2));
   const ranked = KNOWLEDGE.map(entry => {
     let score = 0;
+    if (Array.isArray(entry.contextTerms) && Array.isArray(entry.intentTerms) &&
+        entry.contextTerms.some(term => query.includes(normalizeText(term))) &&
+        entry.intentTerms.some(term => query.includes(normalizeText(term)))) {
+      score += 6;
+    }
     for (const alias of entry.aliases) {
       const normalized = normalizeText(alias);
       if (normalized.includes(" ") && query.includes(normalized)) score += 5;

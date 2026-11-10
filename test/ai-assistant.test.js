@@ -373,6 +373,51 @@ test("knowledge retrieval maps current feature questions to the right verified a
   assert.deepEqual(searchKnowledge("Can I delete my TalkChat account?"), []);
 });
 
+
+test("founder questions in Azerbaijani, Turkish, and English retrieve the exact answer automatically", async () => {
+  const exactAnswer = "TalkChat-in qurucusu Aqil Kərimovdur. O, DevQrxyz adı ilə tanınır.";
+  const variants = [
+    "TalkChat-in qurucusu kimdir?",
+    "TalkChat-i kim yaradıb?",
+    "TalkChat-in sahibi kimdir?",
+    "Kim yaradıb bu platformanı?",
+    "Bu platformanı kim qurub?",
+    "TalkChat'in kurucusu kim?",
+    "TalkChat'i kim kurdu?",
+    "Bu platformu kim kurdu?",
+    "Who is the founder of TalkChat?",
+    "Who created TalkChat?",
+    "Who built this platform?",
+    "DevQrxyz kimdir?",
+    "Who is DevQrxyz?"
+  ];
+  for (const question of variants) {
+    const match = searchKnowledge(question)[0];
+    assert.equal(match?.id, "talkchat-founder", question);
+    assert.equal(match.exactAnswer, exactAnswer, question);
+    assert.ok(match.guidance.includes(exactAnswer), question);
+  }
+
+  for (const [username, question] of [
+    ["az-user", "TalkChat-i kim yaradıb?"],
+    ["tr-user", "TalkChat'in kurucusu kim?"],
+    ["en-user", "Who is the founder of TalkChat?"]
+  ]) {
+    let systemPrompt = "";
+    const harness = makeHarness({ fetchImpl: async (_url, options) => {
+      systemPrompt = JSON.parse(options.body).messages[0].content;
+      return successResponse("A model paraphrase that should not be shown.");
+    } });
+    const result = await harness.request("POST", ROUTES.messages, {
+      session: { username }, body: { message: question }
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.message.content, exactAnswer);
+    assert.match(systemPrompt, /repeat it verbatim/);
+    assert.ok(systemPrompt.includes(exactAnswer));
+  }
+});
+
 test("Cloudflare quota, billing/auth, and unavailable-model errors are friendly and never retried", async () => {
   const cases = [
     { status: 429, body: { errors: [{ code: 3036, message: "private provider quota details" }] }, expected: 429, text: /kvota/i },
