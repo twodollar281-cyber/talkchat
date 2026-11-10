@@ -35,6 +35,7 @@ public class CallService extends Service {
     static final String EXTRA_PROJECTION_DATA = "projectionData";
     static volatile boolean active = false;
     private boolean cameraActive = false;
+    private CallOverlayManager overlayManager;
     private MediaProjection projection;
     private VirtualDisplay virtualDisplay;
     private ImageReader imageReader;
