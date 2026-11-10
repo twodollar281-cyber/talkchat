@@ -341,6 +341,112 @@
       if (P && P[m]) P[m](args || {}).catch(() => {});
     } catch {}
   };
+  // ---------- TALKCHAT GROUP CALL OVERLAY ----------
+const callNativePlugin =
+  window.Capacitor?.Plugins?.CallService;
+
+const appNativePlugin =
+  window.Capacitor?.Plugins?.App;
+
+function syncGroupNativeOverlay(show = false) {
+  if (!state) return;
+
+  const names = Array.from(new Set([
+    me,
+    ...(state.participants || [])
+      .map(person => person.username)
+      .filter(Boolean),
+    ...state.peers.keys()
+  ]));
+
+  const participants = names.map(username => {
+    const person = (state.participants || [])
+      .find(item => item.username === username);
+
+    return {
+      username,
+      displayName:
+        person?.displayName ||
+        person?.name ||
+        username
+    };
+  });
+
+  const seconds = state.startedAt
+    ? Math.floor((Date.now() - state.startedAt) / 1000)
+    : 0;
+
+  const data = {
+    title: state.name || tx("title"),
+    duration: fmt(seconds),
+    speaker: "",
+    participants: JSON.stringify(participants),
+    mediaType: state.mediaType || "audio",
+    micMuted: !!state.muted,
+    cameraOn: !!state.cameraOn,
+    isGroup: true
+  };
+
+  nativeCall(
+    show ? "showOverlay" : "updateOverlay",
+    data
+  );
+}
+
+// Overlay düymələrinin idarəsi
+if (callNativePlugin?.addListener) {
+  callNativePlugin.addListener("overlayAction", ({ action } = {}) => {
+    if (!action) return;
+
+    switch (action) {
+      case "mic":
+        if (state) muteBtn.click();
+        break;
+
+      case "camera":
+        if (state) toggleCamera();
+        break;
+
+      case "end":
+        if (state) leave();
+        break;
+
+      case "hide":
+        nativeCall("hideOverlay");
+        break;
+
+      case "return":
+        nativeCall("hideOverlay");
+
+        if (state) {
+          state.minimized = false;
+
+          if (typeof showPage === "function") {
+            showPage("messages");
+          }
+
+          paint();
+        }
+        break;
+    }
+  }).catch(console.error);
+}
+
+// Tətbiq arxa plana keçəndə overlay göstər
+if (appNativePlugin?.addListener) {
+  appNativePlugin.addListener(
+    "appStateChange",
+    ({ isActive }) => {
+      if (!state) return;
+
+      if (isActive) {
+        nativeCall("hideOverlay");
+      } else {
+        syncGroupNativeOverlay(true);
+      }
+    }
+  ).catch(console.error);
+}
 
   /* ---------- çəkmə ---------- */
   function mkTile(name) {
