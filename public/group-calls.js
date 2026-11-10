@@ -740,5 +740,5 @@
   leave,
   toggleMute: () => muteBtn.click(),
   toggleCamera
- };
-});
+};
+})();
