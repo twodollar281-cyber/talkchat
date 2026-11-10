@@ -71,6 +71,58 @@ public class CallService extends Service {
 } else {
     updateForeground(false);
         }
+    private void showCallOverlay(Intent intent) {
+    if (overlayManager == null) {
+        overlayManager = new CallOverlayManager(
+            this,
+            new CallOverlayManager.Listener() {
+                @Override
+                public void onMicClick() {
+                    CallServicePlugin.emitOverlayAction("mic");
+                }
+
+                @Override
+                public void onCameraClick() {
+                    CallServicePlugin.emitOverlayAction("camera");
+                }
+
+                @Override
+                public void onReturnClick() {
+                    CallServicePlugin.emitOverlayAction("return");
+                }
+
+                @Override
+                public void onEndClick() {
+                    CallServicePlugin.emitOverlayAction("end");
+                }
+            }
+        );
+    }
+
+    overlayManager.show(
+        intent.getStringExtra("overlayTitle"),
+        intent.getStringExtra("overlayDuration"),
+        intent.getStringExtra("overlaySpeaker"),
+        intent.getStringExtra("overlayParticipants")
+    );
+}
+
+private void updateCallOverlay(Intent intent) {
+    if (overlayManager == null) return;
+
+    overlayManager.update(
+        intent.getStringExtra("overlayTitle"),
+        intent.getStringExtra("overlayDuration"),
+        intent.getStringExtra("overlaySpeaker"),
+        intent.getStringExtra("overlayParticipants")
+    );
+}
+
+private void hideCallOverlay() {
+    if (overlayManager != null) {
+        overlayManager.hide();
+    }
+}
     private Intent getProjectionData(Intent intent) {
         if (Build.VERSION.SDK_INT >= 33) return intent.getParcelableExtra(EXTRA_PROJECTION_DATA, Intent.class);
         //noinspection deprecation
