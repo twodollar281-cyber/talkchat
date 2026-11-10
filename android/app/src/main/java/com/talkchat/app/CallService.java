@@ -209,6 +209,14 @@ private void hideCallOverlay() {
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Davam edən zəng", NotificationManager.IMPORTANCE_LOW));
     }
-    @Override public void onDestroy() { active = false; stopProjection(true, false); super.onDestroy(); }
+    @Override
+public void onDestroy() {
+    active = false;
+
+    hideCallOverlay();
+    stopProjection(true, false);
+
+    super.onDestroy();
+}
     @Override public IBinder onBind(Intent intent) { return null; }
 }
