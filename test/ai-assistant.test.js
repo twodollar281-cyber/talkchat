@@ -3,9 +3,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { installAIAssistant } = require("../aiAssistant");
+const { searchKnowledge } = require("../talkchatKnowledge");
 
 const ROUTES = {
   history: "/api/ai-assistant/history",
+  conversations: "/api/ai-assistant/conversations",
+  selectConversation: "/api/ai-assistant/conversations/:id/select",
   messages: "/api/ai-assistant/messages"
 };
 const ACCOUNT_ID = "a".repeat(32);
@@ -65,6 +68,7 @@ function makeHarness({ env = TEST_ENV, fetchImpl = async () => successResponse()
       session: options.session,
       body: options.body || {},
       query: options.query || {},
+      params: options.params || {},
       ip: "127.0.0.1"
     };
     const res = {
@@ -96,12 +100,18 @@ function makeHarness({ env = TEST_ENV, fetchImpl = async () => successResponse()
 test("all AI endpoints require authentication before running handlers", async () => {
   const harness = makeHarness();
   for (const [method, path] of [
+    ["GET", ROUTES.conversations],
+    ["POST", ROUTES.conversations],
+    ["POST", ROUTES.selectConversation],
     ["GET", ROUTES.history],
     ["DELETE", ROUTES.history],
     ["POST", ROUTES.messages]
   ]) {
     assert.equal(harness.routes.get(method + " " + path)[0].name, "requireAuth");
-    const result = await harness.request(method, path, { body: { username: "other-user", message: "hello" } });
+    const result = await harness.request(method, path, {
+      body: { username: "other-user", message: "hello" },
+      params: { id: "other-users-thread" }
+    });
     assert.equal(result.status, 401);
   }
   assert.equal(harness.fetchCount(), 0);
@@ -124,14 +134,49 @@ test("history reads, writes, and deletion are scoped to the authenticated userna
   });
   assert.equal(posted.status, 200);
   assert.equal(harness.store["aiAssistant.json"].bob[0].content, "Bob history");
-  assert.equal(harness.store["aiAssistant.json"].alice.at(-2).content, "Alice's new question");
+  assert.equal(harness.store["aiAssistant.json"].alice.conversations[0].messages.at(-2).content, "Alice's new question");
 
   await harness.request("DELETE", ROUTES.history, {
     session: { username: "alice" }, body: { username: "bob" }
   });
   const bobHistory = await harness.request("GET", ROUTES.history, { session: { username: "bob" } });
-  assert.deepEqual(harness.store["aiAssistant.json"].alice, []);
+  assert.deepEqual(harness.store["aiAssistant.json"].alice.conversations, []);
   assert.deepEqual(bobHistory.body.map(item => item.content), ["Bob history"]);
+});
+
+test("conversation lists and selections stay scoped to the authenticated account", async () => {
+  const harness = makeHarness();
+  const aliceCreated = await harness.request("POST", ROUTES.conversations, { session: { username: "alice" } });
+  const bobCreated = await harness.request("POST", ROUTES.conversations, { session: { username: "bob" } });
+  assert.equal(aliceCreated.status, 201);
+  assert.equal(bobCreated.status, 201);
+  assert.notEqual(aliceCreated.body.currentConversationId, bobCreated.body.currentConversationId);
+
+  const alicePost = await harness.request("POST", ROUTES.messages, {
+    session: { username: "alice" },
+    body: { conversationId: aliceCreated.body.currentConversationId, message: "Alice private AI question" }
+  });
+  const bobPost = await harness.request("POST", ROUTES.messages, {
+    session: { username: "bob" },
+    body: { conversationId: bobCreated.body.currentConversationId, message: "Bob private AI question" }
+  });
+  assert.equal(alicePost.status, 200);
+  assert.equal(bobPost.status, 200);
+
+  const aliceList = await harness.request("GET", ROUTES.conversations, { session: { username: "alice" } });
+  assert.equal(aliceList.body.conversations.length, 1);
+  assert.equal(aliceList.body.currentConversationId, aliceCreated.body.currentConversationId);
+  const bobThreadAsAlice = await harness.request("POST", ROUTES.selectConversation, {
+    session: { username: "alice" },
+    params: { id: bobCreated.body.currentConversationId }
+  });
+  assert.equal(bobThreadAsAlice.status, 404);
+  const aliceHistory = await harness.request("GET", ROUTES.history, {
+    session: { username: "alice" },
+    query: { conversationId: aliceCreated.body.currentConversationId }
+  });
+  assert.equal(aliceHistory.body[0].content, "Alice private AI question");
+  assert.equal(aliceHistory.body.some(item => item.content.includes("Bob private")), false);
 });
 
 test("default billing gate keeps the provider disabled until both flags are enabled", async () => {
@@ -196,6 +241,57 @@ test("prompt length is rejected before sending a provider request", async () => 
   assert.equal(harness.fetchCount(), 0);
 });
 
+test("TalkChat questions receive only matching verified help notes and a safe in-app action", async () => {
+  let requestPayload;
+  const harness = makeHarness({
+    fetchImpl: async (_url, options) => {
+      requestPayload = JSON.parse(options.body);
+      return successResponse("Profil bölməsindən link əlavə edə bilərsən.");
+    }
+  });
+  const result = await harness.request("POST", ROUTES.messages, {
+    session: { username: "alice" },
+    body: { message: "Profilimə linki necə əlavə edim?" }
+  });
+  assert.equal(result.status, 200);
+  assert.match(requestPayload.messages[0].content, /Link əlavə et/);
+  assert.doesNotMatch(requestPayload.messages[0].content, /Admin Paneli/);
+  assert.deepEqual(result.body.message.navigation, {
+    type: "page", page: "profile", label: "Profili aç"
+  });
+});
+
+test("general questions do not receive unrelated TalkChat help notes", async () => {
+  let requestPayload;
+  const harness = makeHarness({
+    fetchImpl: async (_url, options) => {
+      requestPayload = JSON.parse(options.body);
+      return successResponse("4");
+    }
+  });
+  const result = await harness.request("POST", ROUTES.messages, {
+    session: { username: "alice" }, body: { message: "What is 2 plus 2?" }
+  });
+  assert.equal(result.status, 200);
+  assert.doesNotMatch(requestPayload.messages[0].content, /Verified TalkChat feature notes/);
+  assert.equal(result.body.message.navigation, undefined);
+});
+
+test("knowledge retrieval maps current feature questions to the right verified area", () => {
+  const cases = [
+    ["Reels necə paylaşım?", "share-reel"],
+    ["Story-yə necə baxım?", "stories-and-requests"],
+    ["Mesajı necə redaktə edim?", "message-edit"],
+    ["Video zəng necə edim?", "calls"],
+    ["Bildirişlər haradadır?", "notifications"],
+    ["Qrup zəngi necə açılır?", "group-calls"]
+  ];
+  for (const [question, expectedId] of cases) {
+    assert.equal(searchKnowledge(question)[0]?.id, expectedId, question);
+  }
+  assert.deepEqual(searchKnowledge("Can I delete my TalkChat account?"), []);
+});
+
 test("Cloudflare quota, billing/auth, and unavailable-model errors are friendly and never retried", async () => {
   const cases = [
     { status: 429, body: { errors: [{ code: 3036, message: "private provider quota details" }] }, expected: 429, text: /kvota/i },
@@ -250,5 +346,5 @@ test("successful requests use the requested model, bounded context, and store fa
   const context = payload.messages.slice(1, -1);
   assert.ok(context.length <= 12);
   assert.ok(context.reduce((total, item) => total + item.content.length, 0) <= 8000);
-  assert.equal(harness.store["aiAssistant.json"].alice.at(-2).content, "current question");
+  assert.equal(harness.store["aiAssistant.json"].alice.conversations[0].messages.at(-2).content, "current question");
 });
