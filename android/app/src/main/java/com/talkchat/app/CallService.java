@@ -71,6 +71,8 @@ public class CallService extends Service {
 } else {
     updateForeground(false);
         }
+              return START_STICKY;
+    }
     private void showCallOverlay(Intent intent) {
     if (overlayManager == null) {
         overlayManager = new CallOverlayManager(
