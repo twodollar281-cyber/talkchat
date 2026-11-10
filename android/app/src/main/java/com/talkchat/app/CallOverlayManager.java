@@ -161,33 +161,6 @@ public class CallOverlayManager {
             }
         });
 
-        card.setOnTouchListener(new View.OnTouchListener() {
-            private int startX, startY;
-            private float touchX, touchY;
-
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                if (params == null) return false;
-                switch (event.getAction()) {
-                    case MotionEvent.ACTION_DOWN:
-                        startX = params.x;
-                        startY = params.y;
-                        touchX = event.getRawX();
-                        touchY = event.getRawY();
-                        return true;
-                    case MotionEvent.ACTION_MOVE:
-                        params.x = startX + (int)(touchX - event.getRawX());
-                        params.y = startY + (int)(event.getRawY() - touchY);
-                        try {
-                            windowManager.updateViewLayout(overlay, params);
-                        } catch (Exception ignored) {}
-                        return true;
-                    default:
-                        return false;
-                }
-            }
-        });
-
         overlay = card;
         int type = Build.VERSION.SDK_INT >= 26
             ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -204,6 +177,34 @@ public class CallOverlayManager {
         params.gravity = Gravity.TOP | Gravity.END;
         params.x = dp(12);
         params.y = dp(90);
+        header.setOnTouchListener(new View.OnTouchListener() {
+    private int startX, startY;
+    private float touchX, touchY;
+
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        if (params == null || overlay == null) return false;
+
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                startX = params.x;
+                startY = params.y;
+                touchX = event.getRawX();
+                touchY = event.getRawY();
+                return true;
+
+            case MotionEvent.ACTION_MOVE:
+                params.x = startX + (int)(touchX - event.getRawX());
+                params.y = startY + (int)(event.getRawY() - touchY);
+                try {
+                    windowManager.updateViewLayout(overlay, params);
+                } catch (Exception ignored) {}
+                return true;
+        }
+        return true;
+    }
+});
+        
 
         try {
             windowManager.addView(overlay, params);
