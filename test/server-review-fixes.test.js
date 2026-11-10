@@ -11,6 +11,7 @@ const {
 } = require("../review-fixes");
 
 const serverSource = fs.readFileSync(path.join(__dirname, "../server.js"), "utf8");
+const appSource = fs.readFileSync(path.join(__dirname, "../public/app.js"), "utf8");
 
 test("moderated deletion redacts every linked reply preview", () => {
   const deleted = { id: "message-1", from: "sender", text: "" };
@@ -124,4 +125,76 @@ test("message forwarding keeps source, target, block, and shared-post access che
   assert.match(route, /target = conversations\(\)\.find\(c => c\.id === targetId && c\.id !== sourceConvo\.id && c\.participants\.includes\(me\)\)/);
   assert.match(route, /isBlockedBetween\(me, user\)/);
   assert.match(route, /canViewContent\(user, source\.sharedPost\.username, "posts"\)/);
+});
+
+test("direct messages use stable server order for identical timestamps", () => {
+  const routeStart = serverSource.indexOf('app.get("/api/conversations/:id/messages"');
+  const routeEnd = serverSource.indexOf('app.get("/api/conversations/:id/files"', routeStart);
+  const route = serverSource.slice(routeStart, routeEnd);
+  assert.ok(routeStart >= 0 && routeEnd > routeStart);
+  assert.match(route, /messages\(\)\s*\.map\(\(message, serverOrder\) => \(\{ message, serverOrder \}\)\)/);
+  assert.match(route, /left\.serverOrder - right\.serverOrder/);
+  assert.match(route, /serverOrder \}\)/);
+  const comparatorBody = route.match(/\.sort\(\(left, right\) => \{\s*([\s\S]*?)\n\s*\}\);/)?.[1];
+  assert.ok(comparatorBody);
+  const compareServerMessages = new Function("left", "right", comparatorBody);
+  const equalTime = "2026-11-10T10:00:00.000Z";
+  assert.ok(compareServerMessages(
+    { message: { createdAt: equalTime }, serverOrder: 4 },
+    { message: { createdAt: equalTime }, serverOrder: 5 }
+  ) < 0);
+  assert.ok(compareServerMessages(
+    { message: { createdAt: "2026-11-10T10:00:01.000Z" }, serverOrder: 2 },
+    { message: { createdAt: equalTime }, serverOrder: 99 }
+  ) > 0);
+
+  const sortStart = appSource.indexOf("function igSortMessages(messages) {");
+  const sortEnd = appSource.indexOf("\n\n/* ----------", sortStart);
+  assert.ok(sortStart >= 0 && sortEnd > sortStart);
+  const sortMessages = new Function(`${appSource.slice(sortStart, sortEnd)}; return igSortMessages;`)();
+  const timestamp = equalTime;
+  const ordered = sortMessages([
+    { id: "later-in-storage", createdAt: timestamp, serverOrder: 11 },
+    { id: "earlier-in-storage", createdAt: timestamp, serverOrder: 10 },
+    { id: "newer", createdAt: "2026-11-10T10:00:01.000Z", serverOrder: 12 }
+  ]);
+  assert.deepEqual(ordered.map(message => message.id), ["earlier-in-storage", "later-in-storage", "newer"]);
+});
+
+test("direct-message reaction route validates participants, blocks, emoji, and persists toggles", () => {
+  const start = serverSource.indexOf('app.post("/api/conversations/:id/messages/:mid/react"');
+  const end = serverSource.indexOf('app.delete("/api/conversations/:id/messages/:mid"', start);
+  const route = serverSource.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(route, /requireAuth/);
+  assert.match(route, /participants\.includes\(me\)/);
+  assert.match(route, /&& !item\.deleted/);
+  assert.match(route, /isBlockedBetween\(me, message\.from\)/);
+  assert.match(route, /directMessageReactions\.includes\(emoji\)/);
+  assert.match(route, /users\.indexOf\(me\)/);
+  assert.match(route, /saveMessages\(list\)/);
+  assert.match(route, /emit\("messagesChanged"/);
+});
+
+test("private-message edit and delete stay restricted to the sender", () => {
+  const editStart = serverSource.indexOf('app.put("/api/conversations/:id/messages/:mid"');
+  const reactionStart = serverSource.indexOf('app.post("/api/conversations/:id/messages/:mid/react"', editStart);
+  const deleteStart = serverSource.indexOf('app.delete("/api/conversations/:id/messages/:mid"', reactionStart);
+  const pushStart = serverSource.indexOf("\n// Push bildiriş", deleteStart);
+  const editRoute = serverSource.slice(editStart, reactionStart);
+  const deleteRoute = serverSource.slice(deleteStart, pushStart);
+  assert.match(editRoute, /m\.from !== me/);
+  assert.match(deleteRoute, /m\.from !== me/);
+  assert.match(appSource, /message\.from === me && message\.text && !message\.deleted/);
+  assert.match(appSource, /message\.from === me && !message\.deleted/);
+});
+
+test("message refreshes preserve position and action menu supports press and context menu", () => {
+  assert.match(appSource, /if \(d\.conversationId === activeConversation\) igLoadMessages\(true\);/);
+  assert.doesNotMatch(appSource, /if \(d\.conversationId === activeConversation\) igLoadMessages\(true, \{ forceBottom: true \}\);/);
+  assert.match(appSource, /addEventListener\("pointerdown"/);
+  assert.match(appSource, /addEventListener\("contextmenu"/);
+  assert.match(appSource, /addEventListener\("keydown"/);
+  assert.match(appSource, /igOpenMessageInfo\(m\)/);
+  assert.match(appSource, /data-message-react/);
 });

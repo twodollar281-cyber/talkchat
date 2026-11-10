@@ -25,6 +25,7 @@
   <link rel="stylesheet" href="saved-collections.css?v=1">
   <link rel="stylesheet" href="chat-themes.css?v=1">
   <link rel="stylesheet" href="ai-assistant.css?v=1">
+  <link rel="stylesheet" href="talkchat-messaging.css?v=1">
 </head>
 <body>
   <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -293,23 +294,44 @@
               <p id="igBlockNotice" class="ig-block-notice" role="status" hidden>Bu söhbətdə blok səbəbindən mesaj göndərmək olmur.</p>
 
               <form id="dmForm" class="ig-compose">
-                <label class="ig-ibtn" aria-label="Kamera">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h3.5L8.5 4h7l2 3H21v13H3z"/><circle cx="12" cy="13" r="4"/></svg>
-                  <input id="dmCamera" type="file" accept="image/*" capture="environment" hidden>
-                </label>
-                <label class="ig-ibtn" aria-label="Şəkil göndər">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5.5-5.5L7 19"/></svg>
-                  <input id="dmImage" type="file" accept="image/*" hidden>
-                </label>
-                <label class="ig-ibtn" aria-label="Fayl göndər">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1L13.9 4.4a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L16 8.2"/></svg>
-                  <input id="dmFile" type="file" hidden>
-                </label>
-                <button type="button" id="tcVoiceRecord" class="ig-ibtn tc-voice-record" aria-label="Səsli mesaj yaz" title="Səsli mesaj yaz" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"></path></svg></button>
-                <button type="button" id="igGifButton" class="ig-gif-open" aria-label="GIF seç">GIF</button>
-                <button type="button" id="igStickerButton" class="tc-sticker-open" aria-label="Sticker seç">✦</button>
+                <div class="ig-compose-tools" role="group" aria-label="Media və emoji əlavə et">
+                  <label class="ig-ibtn" aria-label="Kamera">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h3.5L8.5 4h7l2 3H21v13H3z"/><circle cx="12" cy="13" r="4"/></svg>
+                    <input id="dmCamera" type="file" accept="image/*" capture="environment" hidden>
+                  </label>
+                  <label class="ig-ibtn" aria-label="Şəkil göndər">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5.5-5.5L7 19"/></svg>
+                    <input id="dmImage" type="file" accept="image/*" hidden>
+                  </label>
+                  <label class="ig-ibtn" aria-label="Fayl göndər">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1L13.9 4.4a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L16 8.2"/></svg>
+                    <input id="dmFile" type="file" hidden>
+                  </label>
+                  <button type="button" id="tcVoiceRecord" class="ig-ibtn tc-voice-record" aria-label="Səsli mesaj yaz" title="Səsli mesaj yaz" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8"></path></svg></button>
+                  <button type="button" id="igEmojiButton" class="ig-ibtn ig-emoji-open" aria-label="Emoji seç" title="Emoji seç" aria-haspopup="true" aria-expanded="false">☺</button>
+                  <button type="button" id="igGifButton" class="ig-gif-open" aria-label="GIF seç">GIF</button>
+                  <button type="button" id="igStickerButton" class="tc-sticker-open" aria-label="Sticker seç">✦</button>
+                </div>
                 <input id="dmText" placeholder="Mesaj yaz..." maxlength="2000" autocomplete="off">
                 <button type="submit" id="dmSend">Göndər</button>
+                <div id="igEmojiPicker" class="ig-emoji-picker" role="group" aria-label="Emoji seçimi" hidden>
+                  <button type="button" data-emoji="😀" aria-label="Gülümsəmə">😀</button>
+                  <button type="button" data-emoji="😂" aria-label="Gülüş">😂</button>
+                  <button type="button" data-emoji="😍" aria-label="Ürək gözlər">😍</button>
+                  <button type="button" data-emoji="🥰" aria-label="Sevgi">🥰</button>
+                  <button type="button" data-emoji="😎" aria-label="Eynəkli üz">😎</button>
+                  <button type="button" data-emoji="🤔" aria-label="Düşüncə">🤔</button>
+                  <button type="button" data-emoji="😢" aria-label="Kədər">😢</button>
+                  <button type="button" data-emoji="😮" aria-label="Təəccüb">😮</button>
+                  <button type="button" data-emoji="👍" aria-label="Bəyən">👍</button>
+                  <button type="button" data-emoji="👎" aria-label="Bəyənmə">👎</button>
+                  <button type="button" data-emoji="❤️" aria-label="Ürək">❤️</button>
+                  <button type="button" data-emoji="🔥" aria-label="Alov">🔥</button>
+                  <button type="button" data-emoji="🎉" aria-label="Təbrik">🎉</button>
+                  <button type="button" data-emoji="🙏" aria-label="Təşəkkür">🙏</button>
+                  <button type="button" data-emoji="✅" aria-label="Hazırdır">✅</button>
+                  <button type="button" data-emoji="🙌" aria-label="Alqış">🙌</button>
+                </div>
               </form>
               <dialog id="igGifDialog" class="ig-gif-dialog" aria-labelledby="igGifTitle">
                 <section class="ig-gif-panel">
@@ -348,7 +370,7 @@
           </main>
         </div>
 
-        <div id="igSheet" class="ig-sheet" hidden>
+        <div id="igSheet" class="ig-sheet" role="dialog" aria-modal="true" aria-label="Mesaj əməliyyatları" hidden>
           <div class="ig-sheet-box" id="igSheetBody"></div>
         </div>
       </section>

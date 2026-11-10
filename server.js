@@ -2248,18 +2248,28 @@ app.get("/api/conversations/:id/messages", requireAuth, (req, res) => {
     const me = currentUser(req);
     const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
     if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
-    const list = messages().filter(m => m.conversationId === convo.id && !isBlockedBetween(me, m.from));
+    const list = messages()
+        .map((message, serverOrder) => ({ message, serverOrder }))
+        .filter(({ message }) => message.conversationId === convo.id && !isBlockedBetween(me, message.from))
+        .sort((left, right) => {
+            const leftTime = Date.parse(left.message.createdAt || "");
+            const rightTime = Date.parse(right.message.createdAt || "");
+            const a = Number.isFinite(leftTime) ? leftTime : 0;
+            const b = Number.isFinite(rightTime) ? rightTime : 0;
+            return a - b || left.serverOrder - right.serverOrder;
+        });
     const safeMessage = message => {
         if (!message.sharedPost || canViewContent(me, message.sharedPost.username, "posts")) return message;
         return { ...message, sharedPost: null, sharedPostId: "", text: "Bu paylaşım artıq görünmür." };
     };
     const aroundId = String(req.query.around || "");
-    const aroundIndex = aroundId ? list.findIndex(m => m.id === aroundId) : -1;
+    const aroundIndex = aroundId ? list.findIndex(item => item.message.id === aroundId) : -1;
+    const serialize = ({ message, serverOrder }) => ({ ...safeMessage(message), serverOrder });
     if (aroundIndex >= 0) {
         const start = Math.max(0, aroundIndex - 100);
-        return res.json(list.slice(start, start + 200).map(safeMessage));
+        return res.json(list.slice(start, start + 200).map(serialize));
     }
-    res.json(list.slice(-200).map(safeMessage));
+    res.json(list.slice(-200).map(serialize));
 });
 
 app.get("/api/conversations/:id/files", requireAuth, (req, res) => {
@@ -2519,6 +2529,31 @@ app.put("/api/conversations/:id/messages/:mid", requireAuth, (req, res) => {
     saveMessages(list);
     convo.participants.forEach(to => io.to(`user:${to}`).emit("messagesChanged", { conversationId: convo.id }));
     res.json(m);
+});
+const directMessageReactions = ["❤️", "😂", "👍", "🔥", "😮", "😢"];
+app.post("/api/conversations/:id/messages/:mid/react", requireAuth, (req, res) => {
+    const me = currentUser(req);
+    const convo = conversations().find(c => c.id === req.params.id && c.participants.includes(me));
+    if (!convo) return res.status(404).json({ error: "Söhbət tapılmadı." });
+    const list = messages();
+    const message = list.find(item => item.id === req.params.mid && item.conversationId === convo.id && !item.deleted);
+    if (!message) return res.status(404).json({ error: "Mesaj tapılmadı." });
+    if (isBlockedBetween(me, message.from))
+        return res.status(403).json({ error: "Bloklanmış hesabın mesajına reaksiya vermək olmaz." });
+    const emoji = typeof req.body?.emoji === "string" ? req.body.emoji : "";
+    if (!directMessageReactions.includes(emoji)) return res.status(400).json({ error: "Reaksiya icazəli deyil." });
+    if (!message.reactions || typeof message.reactions !== "object" || Array.isArray(message.reactions))
+        message.reactions = {};
+    const users = Array.isArray(message.reactions[emoji]) ? [...new Set(message.reactions[emoji].filter(user => typeof user === "string"))] : [];
+    const index = users.indexOf(me);
+    if (index >= 0) users.splice(index, 1);
+    else users.push(me);
+    if (users.length) message.reactions[emoji] = users;
+    else delete message.reactions[emoji];
+    saveMessages(list);
+    convo.participants.filter(user => !isBlockedBetween(user, me))
+        .forEach(user => io.to(`user:${user}`).emit("messagesChanged", { conversationId: convo.id }));
+    res.json(message);
 });
 app.delete("/api/conversations/:id/messages/:mid", requireAuth, async (req, res) => {
     const me = currentUser(req);

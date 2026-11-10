@@ -1598,7 +1598,7 @@ socket.on("blocksChanged", () => {
    yazır göstəricisi, şəkil/kamera/fayl göndərmə.
    Socket və səsli zəng (calls.js) ilə uyğun işləyir.
    ===================================================================== */
-const IG = { profiles: new Map(), online: new Set(), lastSeen: {}, msgs: [], replyTo: null, pendingFile: null, typers: {}, lastTyping: 0 };
+const IG = { profiles: new Map(), online: new Set(), lastSeen: {}, msgs: [], replyTo: null, pendingFile: null, typers: {}, lastTyping: 0, hasOlder: false, loadingOlder: false, messageLoadVersion: 0 };
 const igEl = id => document.getElementById(id);
 const igSvg = d => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const IGI = {
@@ -1645,12 +1645,39 @@ function igShort(m) {
 }
 function igDayLabel(ts) {
   const d = new Date(ts), now = new Date(), y = new Date(now);
+  if (!Number.isFinite(d.getTime())) return "Tarix məlum deyil";
   y.setDate(now.getDate() - 1);
   if (d.toDateString() === now.toDateString()) return "Bu gün";
   if (d.toDateString() === y.toDateString()) return "Dünən";
   return d.toLocaleDateString("az-AZ", { day: "numeric", month: "long", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
 }
-const igTime = ts => new Date(ts).toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" });
+const igTime = ts => {
+  const date = new Date(ts);
+  return Number.isFinite(date.getTime()) ? date.toLocaleTimeString("az-AZ", { hour: "2-digit", minute: "2-digit" }) : "—";
+};
+const igDateTime = ts => {
+  const date = new Date(ts);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString("az-AZ", { dateStyle: "medium", timeStyle: "short" }) : "Tarix məlum deyil";
+};
+
+function igSortMessages(messages) {
+  return (Array.isArray(messages) ? messages : [])
+    .map((message, index) => ({
+      message,
+      index,
+      time: Date.parse(message?.createdAt || ""),
+      serverOrder: Number.isFinite(Number(message?.serverOrder)) ? Number(message.serverOrder) : NaN
+    }))
+    .sort((a, b) => {
+      const at = Number.isFinite(a.time) ? a.time : 0;
+      const bt = Number.isFinite(b.time) ? b.time : 0;
+      return at - bt ||
+        (Number.isFinite(a.serverOrder) && Number.isFinite(b.serverOrder) && a.serverOrder !== b.serverOrder
+          ? a.serverOrder - b.serverOrder
+          : a.index - b.index);
+    })
+    .map(item => item.message);
+}
 
 /* ---------- söhbət siyahısı ---------- */
 async function loadConversations() {
@@ -1706,14 +1733,20 @@ function igRenderHead() {
 }
 
 /* ---------- mesajlar ---------- */
-async function igLoadMessages(markRead) {
+async function igLoadMessages(markRead, options = {}) {
   const id = activeConversation;
   if (!id) return;
+  const requestVersion = ++IG.messageLoadVersion;
   try {
     const list = await api("/api/conversations/" + id + "/messages");
-    if (id !== activeConversation) return;
-    IG.msgs = list;
-    igRenderMsgs();
+    if (id !== activeConversation || requestVersion !== IG.messageLoadVersion) return;
+    const hadMessages = IG.msgs.length > 0;
+    const byId = new Map(IG.msgs.map(message => [message.id, message]));
+    igSortMessages(list).forEach(message => byId.set(message.id, message));
+    IG.msgs = igSortMessages([...byId.values()]);
+    if (list.length >= 200) IG.hasOlder = true;
+    else if (!hadMessages) IG.hasOlder = false;
+    igRenderMsgs(options);
     if (markRead) {
       await api("/api/conversations/" + id + "/read", { method: "POST" }).catch(() => {});
       loadConversations();
@@ -1723,14 +1756,68 @@ async function igLoadMessages(markRead) {
   }
 }
 
+async function igLoadOlder() {
+  const box = igEl("chatMessages");
+  const conversationId = activeConversation;
+  const oldest = IG.msgs[0];
+  if (!conversationId || !oldest?.id || !IG.hasOlder || IG.loadingOlder || box.scrollTop > 64) return;
+
+  IG.loadingOlder = true;
+  box.dataset.loadingOlder = "true";
+  const previousHeight = box.scrollHeight;
+  const previousTop = box.scrollTop;
+  try {
+    const page = await api("/api/conversations/" + encodeURIComponent(conversationId) + "/messages?around=" + encodeURIComponent(oldest.id));
+    if (conversationId !== activeConversation) return;
+    const orderedPage = igSortMessages(page);
+    const oldestIndex = orderedPage.findIndex(message => message.id === oldest.id);
+    if (oldestIndex < 0) {
+      IG.hasOlder = false;
+      return;
+    }
+    const known = new Set(IG.msgs.map(message => message.id));
+    const older = orderedPage.slice(0, oldestIndex).filter(message => !known.has(message.id));
+    if (!older.length) {
+      IG.hasOlder = false;
+      return;
+    }
+    const byId = new Map(IG.msgs.map(message => [message.id, message]));
+    older.forEach(message => byId.set(message.id, message));
+    IG.msgs = igSortMessages([...byId.values()]);
+    IG.hasOlder = orderedPage.length >= 200;
+    igRenderMsgs({ preserveScroll: true });
+    box.scrollTop = previousTop + Math.max(0, box.scrollHeight - previousHeight);
+  } catch (error) {
+    console.warn("TalkChat: older messages could not be loaded.", error);
+  } finally {
+    if (conversationId === activeConversation) {
+      IG.loadingOlder = false;
+      delete box.dataset.loadingOlder;
+    }
+  }
+}
+
 function igReceipt(m, c) {
   const seenAt = c.reads && c.reads[c.name];
   if (seenAt && new Date(seenAt) >= new Date(m.createdAt)) return "Göründü";
   return m.deliveredAt ? "Çatdırıldı" : "Göndərildi";
 }
 
+const igReactionChoices = ["❤️", "😂", "👍", "🔥", "😮", "😢"];
+function igReactionMarkup(message) {
+  const reactions = message.reactions && typeof message.reactions === "object" ? message.reactions : {};
+  const groups = Object.entries(reactions).filter(([emoji, users]) =>
+    igReactionChoices.includes(emoji) && Array.isArray(users) && users.length
+  );
+  if (!groups.length) return "";
+  return `<span class="ig-reactions" aria-label="Mesaj reaksiyaları">${groups.map(([emoji, users]) =>
+    `<button type="button" class="ig-reaction${users.includes(me) ? " mine" : ""}" data-message-react="${esc(emoji)}" data-mid="${esc(message.id)}" aria-label="${esc(emoji)} reaksiyası, ${users.length} nəfər">${esc(emoji)}<small>${users.length}</small></button>`
+  ).join("")}</span>`;
+}
+
 function igBubble(m, byId) {
-  if (m.deleted) return '<span class="ig-bub del"><i class="ig-del">Mesaj silindi</i></span>';
+  const time = `<time class="ig-message-time"${m.createdAt ? ` datetime="${esc(m.createdAt)}"` : ""}>${esc(igTime(m.createdAt))}</time>`;
+  if (m.deleted) return `<span class="ig-bub del"><i class="ig-del">Mesaj silindi</i>${time}</span>`;
   let quote = "";
   if (m.replyTo) {
     const r = byId.get(m.replyTo);
@@ -1741,17 +1828,20 @@ function igBubble(m, byId) {
   }
   const isImg = (m.attachmentType || "").startsWith("image/");
   const isAudio = (m.attachmentType || "").startsWith("audio/");
+  const isVideo = (m.attachmentType || "").startsWith("video/");
   let body = "";
   if (m.sticker) body += '<span class="tc-sticker-message" role="img" aria-label="' + esc(m.sticker.label || "Sticker") + '"><span class="tc-sticker-art" data-sticker-category="' + esc(m.sticker.category || "") + '">' + esc(m.sticker.emoji || "✨") + '</span><small>' + esc(m.sticker.label || "Sticker") + '</small></span>';
   if (m.attachment) {
     if (m.gif) {
-      const previewUrl = m.gif.previewUrl || m.attachment;
-      body += '<a class="ig-gif-message" href="' + esc(m.attachment) + '" target="_blank" rel="noopener"><img src="' + esc(previewUrl) + '" alt="' + esc(m.gif.title || "GIF") + '" loading="lazy"></a><span class="ig-gif-tag">GIF</span>';
+      const animatedUrl = m.gif.url || m.attachment;
+      body += '<a class="ig-gif-message" href="' + esc(animatedUrl) + '" target="_blank" rel="noopener"><img src="' + esc(animatedUrl) + '" alt="' + esc(m.gif.title || "GIF") + '" loading="lazy" decoding="async"></a><span class="ig-gif-tag">GIF</span>';
     } else {
       body += isImg
-        ? '<a href="' + esc(m.attachment) + '" target="_blank" rel="noopener"><img src="' + esc(m.attachment) + '" alt="Şəkil" loading="lazy"></a>'
+        ? '<a class="ig-image-message" href="' + esc(m.attachment) + '" target="_blank" rel="noopener"><img src="' + esc(m.attachment) + '" alt="Şəkil" loading="lazy" decoding="async"></a>'
         : isAudio
           ? '<audio class="ig-audio" controls preload="metadata" src="' + esc(m.attachment) + '" aria-label="Səsli mesaj"></audio>'
+          : isVideo
+            ? '<video class="ig-video-message" controls playsinline preload="metadata" src="' + esc(m.attachment) + '" aria-label="Video mesajı"></video>'
           : '<a class="ig-file" href="' + esc(m.attachment) + '" target="_blank" rel="noopener">📎 ' + esc(m.attachmentName || "Fayl") + '</a>';
     }
   }
@@ -1768,14 +1858,16 @@ function igBubble(m, byId) {
   const reportButton = m.from !== me
     ? `<button type="button" class="ig-report-message" data-report-message="${esc(m.id)}">Şikayət et</button>`
     : "";
-  return `<span class="ig-bub${cls}">${quote}${body}${reportButton}</span>`;
+  return `<span class="ig-bub${cls}">${quote}${body}${time}${igReactionMarkup(m)}${reportButton}</span>`;
 }
 
-function igRenderMsgs() {
+function igRenderMsgs(options = {}) {
   const box = igEl("chatMessages");
   const c = igConv();
   if (!c) { box.innerHTML = ""; return; }
-  const list = IG.msgs;
+  const wasNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight <= 96;
+  const list = IG.msgs = igSortMessages(IG.msgs);
+  const stickToBottom = options.forceBottom === true || (!options.preserveScroll && wasNearBottom);
   const byId = new Map(list.map(m => [m.id, m]));
   const mineList = list.filter(m => m.from === me);
   const lastMine = mineList[mineList.length - 1];
@@ -1791,17 +1883,23 @@ function igRenderMsgs() {
     }
     const mineMsg = m.from === me;
     const cont = prev && prev.from === m.from && new Date(m.createdAt) - new Date(prev.createdAt) < 300000;
-    html += `<div class="ig-row${mineMsg ? " me" : ""}${cont ? " cont" : ""}" data-mid="${esc(m.id)}">${igBubble(m, byId)}</div>`;
+    const messageLabel = `${mineMsg ? "Sən" : "@" + m.from}: ${igShort(m)} · ${igTime(m.createdAt)}`;
+    html += `<div class="ig-row${mineMsg ? " me" : ""}${cont ? " cont" : ""}" data-mid="${esc(m.id)}" tabindex="0" role="group" aria-label="${esc(messageLabel)}" aria-haspopup="dialog">${igBubble(m, byId)}</div>`;
     if (mineMsg && lastMine && m.id === lastMine.id && c.type !== "group") html += `<div class="ig-rcpt">${igReceipt(m, c)}</div>`;
     prev = m;
   }
   box.innerHTML = html || '<p class="ig-none">Hələ mesaj yoxdur. İlk mesajı sən yaz!</p>';
-  box.scrollTop = box.scrollHeight;
-  box.querySelectorAll("img").forEach(img => img.addEventListener("load", () => (box.scrollTop = box.scrollHeight), { once: true }));
+  if (stickToBottom) box.scrollTop = box.scrollHeight;
+  box.querySelectorAll("img").forEach(img => img.addEventListener("load", () => {
+    if (box.scrollHeight - box.scrollTop - box.clientHeight <= 96) box.scrollTop = box.scrollHeight;
+  }, { once: true }));
 }
 
 async function openConversation(id) {
   activeConversation = id;
+  IG.msgs = [];
+  IG.hasOlder = false;
+  IG.loadingOlder = false;
   window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id } }));
   IG.replyTo = null;
   IG.pendingFile = null;
@@ -1811,7 +1909,7 @@ async function openConversation(id) {
   igRenderHead();
   igRenderList();
   igEl("chatMessages").innerHTML = '<p class="ig-none">Yüklənir…</p>';
-  await igLoadMessages(true);
+  await igLoadMessages(true, { forceBottom: true });
   igRenderList();
 }
 
@@ -1826,19 +1924,67 @@ function igRenderPending() {
   if (f) igEl("igPending").innerHTML = `<span>📎 ${esc(f.name)}</span><button type="button" id="igPendingX" class="ig-hbtn" aria-label="Sil">${IGI.x}</button>`;
 }
 
-/* ---------- mesaj menyusu (bubble-a toxunduqda) ---------- */
-function igOpenSheet(mid) {
-  const m = IG.msgs.find(x => x.id === mid);
-  if (!m) return;
-  const acts = [["reply", "Cavab ver"]];
-  if (m.text) acts.push(["copy", "Mətni kopyala"]);
-      if (m.from === me && m.text && !m.deleted) acts.push(["edit", "Mesajı redaktə et"]);
-    if (!m.deleted) acts.push(["forward", "Mesajı ötür"]);
-    if (m.from === me) acts.push(["del", "Mesajı sil", "danger"]);
-  igEl("igSheetBody").innerHTML =
-    acts.map(([a, t, k]) => `<button type="button" class="ig-sheet-btn${k ? " danger" : ""}" data-a="${a}" data-mid="${esc(m.id)}">${t}</button>`).join("") +
-    '<button type="button" class="ig-sheet-btn cancel" data-a="close">Bağla</button>';
+/* ---------- mesaj menyusu (toxunma, long-press və context menu) ---------- */
+function igClearMessageSelection() {
+  igEl("chatMessages").querySelectorAll(".ig-selected").forEach(row => row.classList.remove("ig-selected"));
+}
+
+function igCloseMessageSheet(restoreFocus = false) {
+  const sheet = igEl("igSheet");
+  const mid = sheet.dataset.mid;
+  sheet.hidden = true;
+  igClearMessageSelection();
+  if (restoreFocus && mid) {
+    const row = [...igEl("chatMessages").querySelectorAll("[data-mid]")].find(item => item.dataset.mid === mid);
+    row?.focus({ preventScroll: true });
+  }
+}
+
+function igOpenMessageInfo(message) {
+  const conversation = igConv();
+  const readAt = message.from === me && conversation?.type === "direct"
+    ? conversation.reads?.[conversation.name]
+    : "";
+  const seen = !!(readAt && new Date(readAt) >= new Date(message.createdAt));
+  const delivery = message.deliveredAt
+    ? `Çatdırıldı · ${igDateTime(message.deliveredAt)}`
+    : seen ? "Çatdırıldı" : "Çatdırılma təsdiqlənməyib";
+  igEl("igSheetBody").innerHTML = `<section class="ig-message-info">
+    <header><strong>Mesaj məlumatı</strong><span>${esc(message.from === me ? "Sənin mesajın" : "@" + message.from)}</span></header>
+    <dl><dt>Göndərilmə vaxtı</dt><dd>${esc(igDateTime(message.createdAt))}</dd>
+    ${message.from === me && conversation?.type === "direct" ? `<dt>Çatdırılma</dt><dd>${esc(delivery)}</dd><dt>Oxunma</dt><dd>${seen ? `Oxundu · ${esc(igDateTime(readAt))}` : "Hələ oxunmayıb"}</dd>` : ""}
+    ${message.editedAt ? `<dt>Redaktə edildi</dt><dd>${esc(igDateTime(message.editedAt))}</dd>` : ""}</dl>
+    <button type="button" class="ig-sheet-btn cancel" data-a="close">Bağla</button>
+  </section>`;
   igEl("igSheet").hidden = false;
+  igEl("igSheetBody").querySelector("button")?.focus({ preventScroll: true });
+}
+
+function igOpenSheet(mid) {
+  const message = IG.msgs.find(item => item.id === mid);
+  if (!message) return;
+  igClearMessageSelection();
+  const row = [...igEl("chatMessages").querySelectorAll("[data-mid]")].find(item => item.dataset.mid === mid);
+  if (row) row.classList.add("ig-selected");
+  if (document.activeElement === igEl("dmText")) igEl("dmText").blur();
+  igEl("igSheet").dataset.mid = mid;
+  const actions = [];
+  if (!message.deleted) actions.push(["reply", "Cavablandır", "↩"]);
+  if (!message.deleted) actions.push(["react", "Reaksiya", "☺"]);
+  if (message.text && !message.deleted) actions.push(["copy", "Mətni kopyala", "▣"]);
+  if (message.from === me && message.text && !message.deleted) actions.push(["edit", "Redaktə et", "✎"]);
+  if (!message.deleted) actions.push(["forward", "Yönləndir", "➦"]);
+  actions.push(["info", "Məlumat", "ⓘ"]);
+  if (message.from === me && !message.deleted) actions.push(["del", "Sil", "⌫", "danger"]);
+  const title = message.from === me ? "Sənin mesajın" : "@" + message.from;
+  igEl("igSheetBody").innerHTML = `<section class="ig-message-action-sheet">
+    <header><div><strong>${esc(title)}</strong><span>${esc(igShort(message))}</span></div><button type="button" class="ig-sheet-close" data-a="close" aria-label="Bağla">×</button></header>
+    <div class="ig-message-action-grid">${actions.map(([action, label, icon, kind]) =>
+      `<button type="button" class="ig-message-action${kind ? " " + kind : ""}" data-a="${action}" data-mid="${esc(message.id)}"><span aria-hidden="true">${icon}</span>${label}</button>`
+    ).join("")}</div>
+  </section>`;
+  igEl("igSheet").hidden = false;
+  igEl("igSheetBody").querySelector("button")?.focus({ preventScroll: true });
 }
 
 /* ---------- göndərmə ---------- */
@@ -1917,7 +2063,7 @@ async function igGifSend(gif) {
     IG.replyTo = null;
     igRenderReply();
     igEl("igGifDialog").close();
-    await Promise.all([igLoadMessages(false), loadConversations(), igGifLoadPreferences()]);
+    await Promise.all([igLoadMessages(false, { forceBottom: true }), loadConversations(), igGifLoadPreferences()]);
   } catch (error) {
     alert(error.message || "GIF göndərilmədi.");
   }
@@ -2006,7 +2152,7 @@ async function igStickerSend(stickerId) {
     IG.replyTo = null;
     igRenderReply();
     igEl("igStickerDialog").close();
-    await Promise.all([igLoadMessages(false), loadConversations(), igStickerLoadPreferences()]);
+    await Promise.all([igLoadMessages(false, { forceBottom: true }), loadConversations(), igStickerLoadPreferences()]);
   } catch (error) { alert(error.message || "Sticker göndərilmədi."); }
 }
 async function igStickerToggleFavorite(stickerId) {
@@ -2119,6 +2265,9 @@ async function igStartWith(username) {
     const b = e.target.closest("[data-convo]");
     if (b) openConversation(b.dataset.convo);
   });
+  igEl("chatMessages").addEventListener("scroll", () => {
+    if (igEl("chatMessages").scrollTop <= 56) igLoadOlder();
+  }, { passive: true });
 
   let msgSearchQuery = "", msgSearchCursor = "", msgSearchTimer = null, msgSearchSeq = 0;
   async function loadMessageSearch(reset) {
@@ -2169,26 +2318,106 @@ async function igStartWith(username) {
     try {
       const list = await api("/api/conversations/" + encodeURIComponent(conversationId) + "/messages?around=" + encodeURIComponent(messageId));
       if (conversationId !== activeConversation) return;
-      IG.msgs = list; igRenderMsgs(); igEl("tcMessageSearchPanel").hidden = true;
+      IG.msgs = igSortMessages(list); IG.hasOlder = list.length >= 200; igRenderMsgs({ preserveScroll: true }); igEl("tcMessageSearchPanel").hidden = true;
       const row = [...igEl("chatMessages").querySelectorAll("[data-mid]")].find(node => node.dataset.mid === messageId);
       if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
     } catch (err) { alert(err.message); }
   });
-  igEl("chatMessages").addEventListener("click", e => {
-    if (e.target.closest("a")) return;
+  const messageBox = igEl("chatMessages");
+  let longPressTimer = 0, longPressMid = "", longPressX = 0, longPressY = 0, suppressedClickMid = "";
+  const cancelMessageLongPress = () => {
+    if (longPressTimer) window.clearTimeout(longPressTimer);
+    longPressTimer = 0;
+    longPressMid = "";
+  };
+  messageBox.addEventListener("pointerdown", event => {
+    if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0) ||
+        event.target.closest("a, audio, video, button, input, textarea")) return;
+    const row = event.target.closest("[data-mid]");
+    if (!row) return;
+    cancelMessageLongPress();
+    longPressMid = row.dataset.mid;
+    longPressX = event.clientX;
+    longPressY = event.clientY;
+    longPressTimer = window.setTimeout(() => {
+      const mid = longPressMid;
+      longPressTimer = 0;
+      longPressMid = "";
+      suppressedClickMid = mid;
+      window.setTimeout(() => { if (suppressedClickMid === mid) suppressedClickMid = ""; }, 900);
+      igOpenSheet(mid);
+    }, 480);
+  });
+  messageBox.addEventListener("pointermove", event => {
+    if (!longPressTimer) return;
+    if (Math.abs(event.clientX - longPressX) > 12 || Math.abs(event.clientY - longPressY) > 12) cancelMessageLongPress();
+  });
+  document.addEventListener("pointerup", cancelMessageLongPress);
+  document.addEventListener("pointercancel", cancelMessageLongPress);
+  messageBox.addEventListener("contextmenu", event => {
+    if (event.target.closest("a, audio, video, button, input, textarea")) return;
+    const row = event.target.closest("[data-mid]");
+    if (!row) return;
+    event.preventDefault();
+    cancelMessageLongPress();
+    igOpenSheet(row.dataset.mid);
+  });
+  messageBox.addEventListener("keydown", event => {
+    if (!(event.key === "Enter" || event.key === " " || event.key === "ContextMenu" ||
+        (event.shiftKey && event.key === "F10"))) return;
+    if (event.target.closest("a, audio, video, button, input, textarea")) return;
+    const row = event.target.closest("[data-mid]");
+    if (!row) return;
+    event.preventDefault();
+    igOpenSheet(row.dataset.mid);
+  });
+  messageBox.addEventListener("click", async e => {
+    const reactionButton = e.target.closest("[data-message-react]");
+    if (reactionButton) {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const updated = await api(`/api/conversations/${encodeURIComponent(activeConversation)}/messages/${encodeURIComponent(reactionButton.dataset.mid)}/react`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emoji: reactionButton.dataset.messageReact })
+        });
+        const message = IG.msgs.find(item => item.id === reactionButton.dataset.mid);
+        if (message) message.reactions = updated.reactions || {};
+        igRenderMsgs({ preserveScroll: true });
+      } catch (error) { alert(error.message || "Reaksiya əlavə edilmədi."); }
+      return;
+    }
+    if (e.target.closest("a, audio, video, button")) return;
     const row = e.target.closest("[data-mid]");
-    if (row) igOpenSheet(row.dataset.mid);
+    if (!row) return;
+    if (suppressedClickMid === row.dataset.mid) { suppressedClickMid = ""; return; }
+    igOpenSheet(row.dataset.mid);
   });
 
   igEl("igSheet").addEventListener("click", async e => {
-    if (e.target.id === "igSheet") { igEl("igSheet").hidden = true; return; }
+    if (e.target.id === "igSheet") { igCloseMessageSheet(); return; }
     const b = e.target.closest("[data-a]");
     if (!b) return;
-    igEl("igSheet").hidden = true;
     const a = b.dataset.a;
-    if (a === "close") return;
+    if (a === "close") { igCloseMessageSheet(true); return; }
     const m = IG.msgs.find(x => x.id === b.dataset.mid);
     if (!m) return;
+    if (a === "react") {
+      igEl("igSheetBody").innerHTML = `<section class="ig-message-reaction-sheet"><header><strong>Reaksiya seç</strong><button type="button" class="ig-sheet-close" data-a="close" aria-label="Bağla">×</button></header><div>${igReactionChoices.map(emoji => `<button type="button" class="ig-reaction-choice" data-a="send-reaction" data-mid="${esc(m.id)}" data-emoji="${esc(emoji)}" aria-label="${esc(emoji)}">${esc(emoji)}</button>`).join("")}</div></section>`;
+      igEl("igSheetBody").querySelector(".ig-reaction-choice")?.focus({ preventScroll: true });
+      return;
+    }
+    if (a === "info") { igOpenMessageInfo(m); return; }
+    igCloseMessageSheet();
+    if (a === "send-reaction") {
+      try {
+        const updated = await api(`/api/conversations/${encodeURIComponent(activeConversation)}/messages/${encodeURIComponent(m.id)}/react`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emoji: b.dataset.emoji })
+        });
+        m.reactions = updated.reactions || {};
+        igRenderMsgs({ preserveScroll: true });
+      } catch (err) { alert(err.message || "Reaksiya əlavə edilmədi."); }
+      return;
+    }
     if (a === "edit") {
       if (m.from !== me || !m.text || m.deleted) return;
       igEl("igSheetBody").innerHTML = `<div class="ig-edit-sheet"><label for="igEditText">Mesajı redaktə et</label><textarea id="igEditText" maxlength="2000">${esc(m.text)}</textarea><div class="ig-edit-actions"><button type="button" class="ig-sheet-btn cancel" data-a="close">Ləğv et</button><button type="button" class="ig-sheet-btn" data-a="save-edit" data-mid="${esc(m.id)}">Yadda saxla</button></div></div>`;
@@ -2243,6 +2472,7 @@ async function igStartWith(username) {
   igEl("tcMobileBack").onclick = () => {
     igEl("messagesPage").classList.remove("tc-chat-open");
     activeConversation = null;
+    IG.messageLoadVersion++;
     window.dispatchEvent(new CustomEvent("talkchat:active-conversation", { detail: { id: null } }));
     igRenderList();
   };
@@ -2360,7 +2590,7 @@ async function igStartWith(username) {
       IG.pendingFile = null;
       igRenderReply();
       igRenderPending();
-      await igLoadMessages(false);
+      await igLoadMessages(false, { forceBottom: true });
       loadConversations();
     } catch (err) {
       alert(err.message || "Mesaj göndərilmədi.");
@@ -2373,6 +2603,44 @@ async function igStartWith(username) {
     if (!activeConversation || Date.now() - IG.lastTyping < 2000) return;
     IG.lastTyping = Date.now();
     socket.emit("typing", { conversationId: activeConversation });
+  });
+
+  const emojiPicker = igEl("igEmojiPicker");
+  const emojiButton = igEl("igEmojiButton");
+  emojiButton.addEventListener("click", () => {
+    emojiPicker.hidden = !emojiPicker.hidden;
+    emojiButton.setAttribute("aria-expanded", String(!emojiPicker.hidden));
+  });
+  emojiPicker.addEventListener("click", event => {
+    const button = event.target.closest("[data-emoji]");
+    if (!button) return;
+    const input = igEl("dmText");
+    const emoji = button.dataset.emoji || button.textContent;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? start;
+    input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+    input.focus();
+    input.setSelectionRange(start + emoji.length, start + emoji.length);
+    emojiPicker.hidden = true;
+    emojiButton.setAttribute("aria-expanded", "false");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  document.addEventListener("click", event => {
+    if (!emojiPicker.hidden && !emojiPicker.contains(event.target) && !emojiButton.contains(event.target)) {
+      emojiPicker.hidden = true;
+      emojiButton.setAttribute("aria-expanded", "false");
+    }
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !igEl("igSheet").hidden) {
+      igCloseMessageSheet(true);
+      return;
+    }
+    if (event.key === "Escape" && !emojiPicker.hidden) {
+      emojiPicker.hidden = true;
+      emojiButton.setAttribute("aria-expanded", "false");
+      emojiButton.focus();
+    }
   });
 
   ["dmCamera", "dmImage", "dmFile"].forEach(id => igEl(id).addEventListener("change", e => {
