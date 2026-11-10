@@ -465,6 +465,7 @@ if (appNativePlugin?.addListener) {
   function paint() {
     const visible = !!(state || inc); panel.hidden = !visible || !!(state && state.minimized); panel.classList.toggle("is-incoming", !state && !!inc);
     if (!visible) return;
+    if (state) syncGroupNativeOverlay(false);
     backBtn.hidden = !state;
     moreBtn.hidden = !state;
     moreBtn.setAttribute("aria-expanded", String(!menu.hidden));
@@ -622,7 +623,11 @@ if (appNativePlugin?.addListener) {
     old.local.getTracks().forEach(t => t.stop()); if (old.cameraTrack && !old.local.getTracks().includes(old.cameraTrack)) old.cameraTrack.stop();
     queued.clear(); earlyMuted.clear();
     for (const el of tiles.values()) { el.querySelector(".tcg-camera").srcObject = null; el.querySelector(".tcg-screen").srcObject = null; el.remove(); }
-    tiles.clear(); dropWake(); nativeCall("stop"); paint();
+    tiles.clear();
+    dropWake();
+    nativeCall("hideOverlay");
+    nativeCall("stop");
+    paint();
   }
 
   async function startCall(conversationId, mediaType = "audio") {
