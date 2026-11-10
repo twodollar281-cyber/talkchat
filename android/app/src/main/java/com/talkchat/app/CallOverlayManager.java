@@ -234,6 +234,7 @@ public class CallOverlayManager {
             duration = null;
             speaker = null;
             status = null;
+            heading = null;
         }
     }
 
