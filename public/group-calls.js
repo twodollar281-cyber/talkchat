@@ -734,5 +734,11 @@
     socket.emit("group-call:join", { conversationId: state.convo });
   });
 
-  window.TalkChatGroupCalls = { startCall, joinCall, leave };
-})();
+  window.TalkChatGroupCalls = {
+  startCall,
+  joinCall,
+  leave,
+  toggleMute: () => muteBtn.click(),
+  toggleCamera
+ };
+});
