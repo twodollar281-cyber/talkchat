@@ -29,6 +29,7 @@ public class CallOverlayManager {
     private TextView status;
     private TextView duration;
     private TextView speaker;
+    private TextView heading;
     private WindowManager.LayoutParams params;
     private boolean compact = false;
 
