@@ -36,7 +36,14 @@ function createCallRegistry(options = {}) {
   const calls = new Map();
   const byUser = new Map();
 
-  function snapshot(call) { return call ? { ...call } : null; }
+  function snapshot(call) {
+    return call ? {
+      ...call,
+      participantStates: Object.fromEntries(
+        Object.entries(call.participantStates || {}).map(([username, state]) => [username, { ...state }])
+      )
+    } : null;
+  }
   function find(input = {}) {
     const actor = input.actor;
     if (!validText(actor)) return null;
@@ -47,7 +54,14 @@ function createCallRegistry(options = {}) {
     return call;
   }
   function remove(call, actor, reason) {
-    const ended = { ...call, status: "ended", endedAt: now(), endReason: reason || "ended" };
+    const endedAt = now();
+    const ended = {
+      ...call,
+      status: "ended",
+      endedAt,
+      durationSeconds: call.acceptedAt ? Math.max(0, Math.floor((endedAt - call.acceptedAt) / 1000)) : 0,
+      endReason: reason || "ended"
+    };
     calls.delete(call.id);
     if (byUser.get(call.caller) === call.id) byUser.delete(call.caller);
     if (byUser.get(call.callee) === call.id) byUser.delete(call.callee);
@@ -61,7 +75,14 @@ function createCallRegistry(options = {}) {
       if (byUser.has(caller) || byUser.has(callee)) return { ok: false, code: "busy" };
       const id = idFactory();
       if (!validText(id) || calls.has(id)) return { ok: false, code: "id-unavailable" };
-      const call = { id, conversationId, caller, callee, mediaType, status: "ringing", createdAt: now(), acceptedAt: null };
+      const call = {
+        id, conversationId, caller, callee, mediaType, status: "ringing",
+        createdAt: now(), acceptedAt: null, endedAt: null, durationSeconds: null,
+        participantStates: {
+          [caller]: { username: caller, muted: false, moderatorMuted: false },
+          [callee]: { username: callee, muted: false, moderatorMuted: false }
+        }
+      };
       calls.set(id, call);
       byUser.set(caller, id);
       byUser.set(callee, id);
@@ -88,7 +109,25 @@ function createCallRegistry(options = {}) {
       if (!call) return { ok: false, code: "not-found" };
       if (call.status !== "active") return { ok: false, code: "invalid-state" };
       if (!validateSignal(input.signal)) return { ok: false, code: "invalid-signal" };
+      if (typeof input.signal.muted === "boolean") {
+        const state = call.participantStates[input.actor];
+        if (state.moderatorMuted && !input.signal.muted)
+          return { ok: false, code: "moderator-muted" };
+        state.muted = input.signal.muted;
+      }
       return { ok: true, call: snapshot(call), peer: input.actor === call.caller ? call.callee : call.caller };
+    },
+    setModeratorMuted({ callId, conversationId, actor, target, muted, authorized = false } = {}) {
+      const call = find({ callId, conversationId, actor });
+      if (!call || call.status !== "active") return { ok: false, code: "not-found" };
+      if (target !== call.caller && target !== call.callee) return { ok: false, code: "not-participant" };
+      if (actor === target) return { ok: false, code: "cannot-mute-self" };
+      if (authorized !== true) return { ok: false, code: "not-authorized" };
+      if (typeof muted !== "boolean") return { ok: false, code: "invalid-muted-state" };
+      const state = call.participantStates[target];
+      state.moderatorMuted = muted;
+      if (muted) state.muted = true;
+      return { ok: true, call: snapshot(call) };
     },
     end(input = {}) {
       const call = find(input);

@@ -16,6 +16,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { redactReplyPreviews, removeBlockedFollower, prepareForwardMedia } = require("./review-fixes");
 const { createCallRegistry, validateSignal } = require("./call-registry");
+const { createGroupCallRegistry } = require("./group-call-registry");
 const {
     OWNER_USERNAME, ROLE_LEVEL, roleOf, canAssignRole,
     canModerateUser, normalizeBanDuration, objectKey
@@ -409,7 +410,7 @@ function deliverPending(name) {
     }
 }
 
-const activeGroupCalls = new Map();
+const activeGroupCalls = createGroupCallRegistry({ maxParticipants: 5 });
 const activeGroupCallTimers = new Map();
 const directCallRegistry = createCallRegistry();
 const directCallTimers = new Map();
@@ -421,7 +422,11 @@ function clearGroupCallTimer(conversationId) {
 function expireDisconnectedGroupCall(conversationId, call) {
     clearGroupCallTimer(conversationId);
     const timer = setTimeout(() => {
-        if (activeGroupCalls.get(conversationId) === call && call.participants.length === 0) activeGroupCalls.delete(conversationId);
+        const current = activeGroupCalls.get(conversationId);
+        if (current && current.id === call.id && !current.participants.some(p => p.status === "joined")) {
+            const ended = activeGroupCalls.endIfEmpty(conversationId, "disconnected");
+            if (ended) notifyGroupCallEnded(ended);
+        }
         activeGroupCallTimers.delete(conversationId);
     }, 45000);
     if (timer && typeof timer.unref === "function") timer.unref();
@@ -435,9 +440,109 @@ function clearDirectCallTimer(callId) {
 }
 
 function notifyDirectCallEnded(call, reason) {
-    const payload = { callId: call.id, conversationId: call.conversationId, reason };
+    const payload = {
+        callId: call.id,
+        conversationId: call.conversationId,
+        reason,
+        endedAt: call.endedAt || Date.now(),
+        durationSeconds: Number.isFinite(call.durationSeconds) ? call.durationSeconds : 0,
+        participants: directCallParticipants(call)
+    };
     io.to("user:" + call.caller).emit("call:ended", payload);
     if (call.callee !== call.caller) io.to("user:" + call.callee).emit("call:ended", payload);
+    if (call.acceptedAt) appendCallSystemMessage(call);
+}
+
+function directCallParticipants(call) {
+    return [call.caller, call.callee].map(username => {
+        const account = findAccount(username);
+        const state = call.participantStates?.[username] || {};
+        return {
+            ...(account ? publicUser(account) : { username, displayName: "", avatar: "", role: "member" }),
+            muted: state.muted === true,
+            moderatorMuted: state.moderatorMuted === true
+        };
+    });
+}
+
+function groupCallParticipants(call, joinedOnly = true) {
+    return (call?.participants || [])
+        .filter(participant => !joinedOnly || participant.status === "joined")
+        .map(participant => {
+            const account = findAccount(participant.username);
+            return {
+                ...(account ? publicUser(account) : {
+                    username: participant.username,
+                    displayName: participant.displayName || "",
+                    avatar: participant.avatar || "",
+                    role: participant.role || "member"
+                }),
+                status: participant.status,
+                muted: participant.muted === true,
+                moderatorMuted: participant.moderatorMuted === true
+            };
+        });
+}
+
+function groupCallPublicState(call) {
+    return call ? {
+        active: call.status === "active",
+        callId: call.id,
+        conversationId: call.conversationId,
+        mediaType: call.mediaType,
+        startedAt: call.startedAt,
+        participants: groupCallParticipants(call),
+        declined: call.declined || []
+    } : { active: false };
+}
+
+function appendCallSystemMessage(call) {
+    if (!call?.id || !call.conversationId || !call.endedAt) return false;
+    const list = messages();
+    if (list.some(message => message.systemType === "call" && message.callId === call.id)) return false;
+    const endedAt = new Date(call.endedAt).toISOString();
+    list.push({
+        id: "call:" + call.id,
+        conversationId: call.conversationId,
+        from: "TalkChat",
+        text: "📞 Zəng bitdi",
+        system: true,
+        systemType: "call",
+        callId: call.id,
+        endedAt,
+        durationSeconds: Number.isFinite(call.durationSeconds) ? Math.max(0, call.durationSeconds) : 0,
+        createdAt: endedAt
+    });
+    saveMessages(list);
+    const conversation = conversations().find(item => item.id === call.conversationId);
+    for (const username of conversation?.participants || []) {
+        io.to("user:" + username).emit("messagesChanged", { conversationId: call.conversationId });
+    }
+    return true;
+}
+
+function notifyGroupCallEnded(call) {
+    appendCallSystemMessage(call);
+    const conversation = conversations().find(item => item.id === call.conversationId);
+    const payload = {
+        callId: call.id,
+        conversationId: call.conversationId,
+        endedAt: call.endedAt,
+        durationSeconds: call.durationSeconds || 0,
+        reason: call.endReason || "ended",
+        active: false
+    };
+    for (const username of conversation?.participants || []) {
+        io.to("user:" + username).emit("group-call:ended", payload);
+    }
+}
+
+function publishGroupCallState(call) {
+    const conversation = conversations().find(item => item.id === call?.conversationId);
+    const payload = groupCallPublicState(call);
+    for (const username of conversation?.participants || []) {
+        io.to("user:" + username).emit("group-call:state", payload);
+    }
 }
 
 
@@ -461,6 +566,10 @@ io.on("connection", socket => {
         socket.emit("call:resumed", payload);
         io.to("user:" + peer).emit("call:peer-reconnected", payload);
     }
+    const resumedGroupCall = activeGroupCalls.findForUser(name);
+    if (resumedGroupCall && resumedGroupCall.status === "active") {
+        socket.emit("group-call:resumed", groupCallPublicState(resumedGroupCall));
+    }
     function getCallPeer(conversationId) {
         const c = conversations().find(x =>
             x.id === conversationId && x.type === "direct" &&
@@ -482,10 +591,17 @@ socket.on("call:invite", data => {
   if (!data || typeof data.conversationId !== "string") return;
   const target = getCallPeer(data.conversationId);
   if (!target) { socket.emit("call:error", { conversationId: data.conversationId, code: "not-authorized" }); return; }
+  if (activeGroupCalls.hasUser(name) || activeGroupCalls.hasUser(target)) {
+    socket.emit("call:error", { conversationId: data.conversationId, code: "busy" });
+    return;
+  }
   const opened = directCallRegistry.invite({ conversationId: data.conversationId, caller: name, callee: target, mediaType: data.mediaType === "video" ? "video" : "audio" });
   if (!opened.ok) { socket.emit("call:error", { conversationId: data.conversationId, code: opened.code }); return; }
   const call = opened.call;
-  const payload = { callId: call.id, conversationId: call.conversationId, from: name, to: target, mediaType: call.mediaType };
+  const payload = {
+    callId: call.id, conversationId: call.conversationId, from: name, to: target,
+    mediaType: call.mediaType, participants: directCallParticipants(call)
+  };
   socket.emit("call:created", payload);
   io.to("user:" + target).emit("call:incoming", payload);
   push.send(target, "call", name, { conversationId: call.conversationId, callId: call.id, mediaType: call.mediaType });
@@ -503,7 +619,10 @@ socket.on("call:accept", data => {
   const accepted = directCallRegistry.accept({ callId: data.callId, conversationId: data.conversationId, actor: name });
   if (!accepted.ok) { socket.emit("call:error", { conversationId: data.conversationId, code: accepted.code }); return; }
   clearDirectCallTimer(accepted.call.id);
-  const payload = { callId: accepted.call.id, conversationId: accepted.call.conversationId, from: name, mediaType: accepted.call.mediaType };
+  const payload = {
+    callId: accepted.call.id, conversationId: accepted.call.conversationId, from: name,
+    mediaType: accepted.call.mediaType, participants: directCallParticipants(accepted.call)
+  };
   io.to("user:" + accepted.call.caller).emit("call:accepted", payload);
   io.to("user:" + accepted.call.callee).emit("call:answered", payload);
 });
@@ -521,8 +640,60 @@ socket.on("call:reject", data => {
 socket.on("call:signal", data => {
   if (!data || typeof data.conversationId !== "string") return;
   const relayed = directCallRegistry.signal({ callId: data.callId, conversationId: data.conversationId, actor: name, signal: data.signal });
-  if (!relayed.ok) { socket.emit("call:error", { conversationId: data.conversationId, code: relayed.code }); return; }
+  if (!relayed.ok) {
+    if (relayed.code === "moderator-muted") {
+      socket.emit("call:moderated-mute", {
+        callId: data.callId, conversationId: data.conversationId,
+        target: name, muted: true, moderatorMuted: true
+      });
+      return;
+    }
+    socket.emit("call:error", { conversationId: data.conversationId, code: relayed.code });
+    return;
+  }
   io.to("user:" + relayed.peer).emit("call:signal", { callId: relayed.call.id, conversationId: relayed.call.conversationId, from: name, signal: data.signal });
+  if (typeof data.signal?.muted === "boolean") {
+    const payload = {
+      callId: relayed.call.id,
+      conversationId: relayed.call.conversationId,
+      participants: directCallParticipants(relayed.call)
+    };
+    io.to("user:" + relayed.call.caller).emit("call:participants", payload);
+    io.to("user:" + relayed.call.callee).emit("call:participants", payload);
+  }
+});
+
+socket.on("call:moderator-mute", data => {
+  if (!data || typeof data.conversationId !== "string" || typeof data.target !== "string" ||
+      typeof data.muted !== "boolean") return;
+  const actor = findAccount(name);
+  if (!actor || ROLE_LEVEL[roleOf(actor)] < ROLE_LEVEL.moderator) {
+    socket.emit("call:error", { conversationId: data.conversationId, code: "not-authorized" });
+    return;
+  }
+  const result = directCallRegistry.setModeratorMuted({
+    callId: data.callId,
+    conversationId: data.conversationId,
+    actor: name,
+    target: data.target,
+    muted: data.muted,
+    authorized: true
+  });
+  if (!result.ok) {
+    socket.emit("call:error", { conversationId: data.conversationId, code: result.code });
+    return;
+  }
+  const payload = {
+    callId: result.call.id,
+    conversationId: result.call.conversationId,
+    target: data.target,
+    muted: data.muted,
+    moderatorMuted: data.muted,
+    participants: directCallParticipants(result.call),
+    by: name
+  };
+  io.to("user:" + result.call.caller).emit("call:moderated-mute", payload);
+  io.to("user:" + result.call.callee).emit("call:moderated-mute", payload);
 });
 
 socket.on("call:end", data => {
@@ -538,30 +709,45 @@ socket.on("call:end", data => {
         if (!data || typeof data.conversationId !== "string") return;
         const convo = getGroupCallConversation(data.conversationId, name);
         if (!convo) return;
-
-        if (activeGroupCalls.has(convo.id)) {
+        if (directCallRegistry.findForUser(name) || activeGroupCalls.hasUser(name)) {
             socket.emit("group-call:error", {
                 conversationId: convo.id,
-                message: "Bu qrupda artıq aktiv zəng var."
+                message: "Artıq başqa zəngdəsən."
             });
             return;
         }
-
         const mediaType = data.mediaType === "video" ? "video" : "audio";
         clearGroupCallTimer(convo.id);
-        activeGroupCalls.set(convo.id, { participants: [name], mediaType });
-
+        const opened = activeGroupCalls.start({
+            conversationId: convo.id,
+            username: name,
+            mediaType,
+            account: publicUser(findAccount(name) || { username: name })
+        });
+        if (!opened.ok) {
+            socket.emit("group-call:error", {
+                conversationId: convo.id,
+                message: opened.code === "already-active" ? "Bu qrupda artıq aktiv zəng var." : "Zəng başlatmaq alınmadı."
+            });
+            return;
+        }
+        const call = opened.call;
         socket.emit("group-call:joined", {
             conversationId: convo.id,
+            callId: call.id,
+            startedAt: call.startedAt,
             participants: [],
+            participantDetails: [],
             mediaType
         });
-
+        publishGroupCallState(call);
         convo.participants.filter(p => p !== name).forEach(p => {
             io.to(`user:${p}`).emit("group-call:incoming", {
                 conversationId: convo.id,
+                callId: call.id,
                 from: name,
-                mediaType
+                mediaType,
+                startedAt: call.startedAt
             });
             push.send(p, "group-call", name, { conversationId: convo.id, mediaType });
         });
@@ -579,41 +765,73 @@ socket.on("call:end", data => {
             });
             return;
         }
-
-        clearGroupCallTimer(convo.id);
-        if (call.participants.includes(name)) {
-            socket.emit("group-call:joined", {
-                conversationId: convo.id,
-                participants: call.participants.filter(p => p !== name),
-                mediaType: call.mediaType || "audio"
-            });
-            return;
-        }
-
-        if (call.participants.length >= 5) {
+        if (directCallRegistry.findForUser(name)) {
             socket.emit("group-call:error", {
                 conversationId: convo.id,
-                message: "Qrup zəngi maksimum 5 nəfər üçündür."
+                message: "Əvvəlcə fərdi zəngdən çıx."
             });
             return;
         }
-
-        const previous = [...call.participants];
-        call.participants.push(name);
-
-        previous.forEach(p => {
+        clearGroupCallTimer(convo.id);
+        const previous = call.participants
+            .filter(participant => participant.status === "joined")
+            .map(participant => participant.username)
+            .filter(username => username !== name);
+        const joined = activeGroupCalls.join({
+            conversationId: convo.id,
+            username: name,
+            account: publicUser(findAccount(name) || { username: name })
+        });
+        if (!joined.ok) {
+            socket.emit("group-call:error", {
+                conversationId: convo.id,
+                message: joined.code === "full"
+                    ? "Qrup zəngi maksimum 5 nəfər üçündür."
+                    : joined.code === "busy"
+                        ? "Artıq başqa zəngdəsən."
+                        : "Qrup zənginə qoşulmaq mümkün olmadı."
+            });
+            return;
+        }
+        const updatedCall = joined.call;
+        if (!joined.alreadyJoined) previous.forEach(p => {
             io.to(`user:${p}`).emit("group-call:peer-joined", {
                 conversationId: convo.id,
                 username: name,
+                participant: groupCallParticipants(updatedCall).find(item => item.username === name),
+                callId: updatedCall.id,
                 mediaType: call.mediaType || "audio"
             });
         });
-
         socket.emit("group-call:joined", {
             conversationId: convo.id,
+            callId: updatedCall.id,
+            startedAt: updatedCall.startedAt,
             participants: previous,
+            participantDetails: groupCallParticipants(updatedCall).filter(item => item.username !== name),
             mediaType: call.mediaType || "audio"
         });
+        publishGroupCallState(updatedCall);
+    });
+
+    socket.on("group-call:status", data => {
+        if (!data || typeof data.conversationId !== "string" ||
+            !getGroupCallConversation(data.conversationId, name)) return;
+        socket.emit("group-call:state", {
+            conversationId: data.conversationId,
+            ...groupCallPublicState(activeGroupCalls.get(data.conversationId))
+        });
+    });
+
+    socket.on("group-call:decline", data => {
+        if (!data || typeof data.conversationId !== "string" ||
+            !getGroupCallConversation(data.conversationId, name)) return;
+        const declined = activeGroupCalls.decline({
+            conversationId: data.conversationId,
+            username: name,
+            account: publicUser(findAccount(name) || { username: name })
+        });
+        if (declined.ok) publishGroupCallState(declined.call);
     });
 
     // İştirakçılar arasında WebRTC siqnalları
@@ -623,8 +841,27 @@ socket.on("call:end", data => {
 
         const convo = getGroupCallConversation(data.conversationId, name);
         const call = convo && activeGroupCalls.get(convo.id);
-        if (!call || !call.participants.includes(name) ||
-            !call.participants.includes(data.to) || !validateSignal(data.signal)) return;
+        const activeParticipants = call?.participants
+            .filter(participant => participant.status === "joined")
+            .map(participant => participant.username) || [];
+        if (!call || !activeParticipants.includes(name) ||
+            !activeParticipants.includes(data.to) || !validateSignal(data.signal)) return;
+        if (typeof data.signal.muted === "boolean") {
+            const state = call.participants.find(participant => participant.username === name);
+            if (state?.moderatorMuted && !data.signal.muted) {
+                socket.emit("group-call:participant-muted", {
+                    conversationId: convo.id, username: name, muted: true,
+                    moderatorMuted: true
+                });
+                return;
+            }
+            activeGroupCalls.setSelfMuted({
+                conversationId: convo.id,
+                username: name,
+                muted: data.signal.muted
+            });
+            publishGroupCallState(activeGroupCalls.get(convo.id));
+        }
 
         io.to(`user:${data.to}`).emit("group-call:signal", {
             conversationId: convo.id,
@@ -633,23 +870,69 @@ socket.on("call:end", data => {
         });
     });
 
+    socket.on("group-call:moderator-mute", data => {
+        if (!data || typeof data.conversationId !== "string" ||
+            typeof data.target !== "string" || typeof data.muted !== "boolean" ||
+            !getGroupCallConversation(data.conversationId, name)) return;
+        const actor = findAccount(name);
+        if (!actor || ROLE_LEVEL[roleOf(actor)] < ROLE_LEVEL.moderator) {
+            socket.emit("group-call:error", {
+                conversationId: data.conversationId,
+                message: "Bu əməliyyat üçün moderator icazəsi lazımdır."
+            });
+            return;
+        }
+        const result = activeGroupCalls.setModeratorMuted({
+            conversationId: data.conversationId,
+            actor: name,
+            target: data.target,
+            muted: data.muted,
+            authorized: true
+        });
+        if (!result.ok) {
+            socket.emit("group-call:error", {
+                conversationId: data.conversationId,
+                message: "İştirakçının mikrofon vəziyyəti dəyişdirilə bilmədi."
+            });
+            return;
+        }
+        for (const participant of groupCallParticipants(result.call)) {
+            io.to("user:" + participant.username).emit("group-call:participant-muted", {
+                conversationId: data.conversationId,
+                username: data.target,
+                muted: data.muted,
+                moderatorMuted: data.muted,
+                by: name
+            });
+        }
+        publishGroupCallState(result.call);
+    });
+
     // Qrup zəngindən çıx
     socket.on("group-call:leave", data => {
         if (!data || typeof data.conversationId !== "string") return;
         const call = activeGroupCalls.get(data.conversationId);
-        if (!getGroupCallConversation(data.conversationId, name) || !call || !call.participants.includes(name)) return;
-
-        call.participants = call.participants.filter(p => p !== name);
-        call.participants.forEach(p => {
-            io.to(`user:${p}`).emit("group-call:peer-left", {
-                conversationId: data.conversationId,
-                username: name
-            });
+        if (!getGroupCallConversation(data.conversationId, name) || !call ||
+            !call.participants.some(participant => participant.username === name && participant.status === "joined")) return;
+        const left = activeGroupCalls.leave({
+            conversationId: data.conversationId,
+            username: name,
+            reason: "left"
         });
-
-        if (call.participants.length === 0) {
+        if (!left.ok) return;
+        const remaining = groupCallParticipants(left.call);
+        for (const participant of remaining) {
+            io.to("user:" + participant.username).emit("group-call:peer-left", {
+                conversationId: data.conversationId,
+                username: name,
+                callId: call.id
+            });
+        }
+        if (left.ended) {
             clearGroupCallTimer(data.conversationId);
-            activeGroupCalls.delete(data.conversationId);
+            notifyGroupCallEnded(left.call);
+        } else {
+            publishGroupCallState(left.call);
         }
     });
 
@@ -689,12 +972,28 @@ socket.on("call:end", data => {
                     if (ended.ok) notifyDirectCallEnded(ended.call, "disconnected");
                 }
             }
-            // Remove offline members; keep an empty room briefly to allow a transient reconnect.
-            for (const [conversationId, call] of activeGroupCalls) {
-                if (!call.participants.includes(name)) continue;
-                call.participants = call.participants.filter(p => p !== name);
-                call.participants.forEach(p => io.to("user:" + p).emit("group-call:peer-left", { conversationId, username: name }));
-                if (call.participants.length === 0) expireDisconnectedGroupCall(conversationId, call);
+            // Reserve the participant's slot during reconnect and retain an empty session briefly.
+            const activeGroupCall = activeGroupCalls.findForUser(name);
+            if (activeGroupCall) {
+                const left = activeGroupCalls.leave({
+                    conversationId: activeGroupCall.conversationId,
+                    username: name,
+                    reason: "disconnected",
+                    keepIfEmpty: true
+                });
+                if (left.ok) {
+                    const remaining = groupCallParticipants(left.call);
+                    for (const participant of remaining) {
+                        io.to("user:" + participant.username).emit("group-call:peer-left", {
+                            conversationId: activeGroupCall.conversationId,
+                            username: name,
+                            callId: left.call.id,
+                            reconnecting: true
+                        });
+                    }
+                    publishGroupCallState(left.call);
+                    if (left.empty) expireDisconnectedGroupCall(activeGroupCall.conversationId, left.call);
+                }
             }
             onlineUsers.delete(name);
             const disconnectedAt = new Date().toISOString();
