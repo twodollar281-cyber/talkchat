@@ -54,12 +54,23 @@ public class CallService extends Service {
         if (intent != null && intent.getStringExtra("text") != null) text = intent.getStringExtra("text");
         if (intent != null && intent.hasExtra("camera")) cameraActive = intent.getBooleanExtra("camera", false);
         String action = intent == null ? null : intent.getAction();
-        if (ACTION_STOP_PROJECTION.equals(action)) stopProjection(true, false);
-        else if (ACTION_START_PROJECTION.equals(action)) startProjection(intent.getIntExtra(EXTRA_RESULT_CODE, 0), getProjectionData(intent));
-        else updateForeground(false);
-        return START_NOT_STICKY;
-    }
-
+        if (ACTION_STOP_PROJECTION.equals(action)) {
+    stopProjection(true, false);
+} else if (ACTION_START_PROJECTION.equals(action)) {
+    startProjection(
+        intent.getIntExtra(EXTRA_RESULT_CODE, 0),
+        getProjectionData(intent)
+    );
+} else if (ACTION_SHOW_OVERLAY.equals(action)) {
+    updateForeground(false);
+    showCallOverlay(intent);
+} else if (ACTION_UPDATE_OVERLAY.equals(action)) {
+    updateCallOverlay(intent);
+} else if (ACTION_HIDE_OVERLAY.equals(action)) {
+    hideCallOverlay();
+} else {
+    updateForeground(false);
+        }
     private Intent getProjectionData(Intent intent) {
         if (Build.VERSION.SDK_INT >= 33) return intent.getParcelableExtra(EXTRA_PROJECTION_DATA, Intent.class);
         //noinspection deprecation
