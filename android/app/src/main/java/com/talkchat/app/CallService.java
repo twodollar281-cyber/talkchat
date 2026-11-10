@@ -28,6 +28,9 @@ public class CallService extends Service {
     static final String CHANNEL = "call_ongoing";
     static final String ACTION_START_PROJECTION = "com.talkchat.app.START_SCREEN_CAPTURE";
     static final String ACTION_STOP_PROJECTION = "com.talkchat.app.STOP_SCREEN_CAPTURE";
+    static final String ACTION_SHOW_OVERLAY = "com.talkchat.app.SHOW_CALL_OVERLAY";
+    static final String ACTION_UPDATE_OVERLAY = "com.talkchat.app.UPDATE_CALL_OVERLAY";
+    static final String ACTION_HIDE_OVERLAY = "com.talkchat.app.HIDE_CALL_OVERLAY";
     static final String EXTRA_RESULT_CODE = "projectionResultCode";
     static final String EXTRA_PROJECTION_DATA = "projectionData";
     static volatile boolean active = false;
