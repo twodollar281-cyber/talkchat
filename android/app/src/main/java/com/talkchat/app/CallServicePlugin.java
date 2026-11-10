@@ -48,7 +48,18 @@ public void requestOverlayPermission(PluginCall call) {
         if (plugin == null || plugin.getActivity() == null) return;
         plugin.getActivity().runOnUiThread(() -> { if (instance == plugin) plugin.notifyListeners("screenCaptureStopped", new JSObject()); });
     }
+                              static void emitOverlayAction(String action) {
+    CallServicePlugin plugin = instance;
+    if (plugin == null || plugin.getActivity() == null) return;
 
+    plugin.getActivity().runOnUiThread(() -> {
+        if (instance != plugin) return;
+
+        JSObject data = new JSObject();
+        data.put("action", action);
+        plugin.notifyListeners("overlayAction", data);
+    });
+}
     @PluginMethod public void start(PluginCall call) {
         try {
             Intent intent = new Intent(getContext(), CallService.class);
