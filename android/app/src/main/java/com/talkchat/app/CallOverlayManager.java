@@ -219,6 +219,7 @@ public class CallOverlayManager {
                        String activeSpeaker, String participants) {
         if (overlay == null) return;
         if (duration != null) duration.setText(callDuration);
+        if (heading != null) heading.setText(title);
         if (speaker != null) speaker.setText("Danışan: " + activeSpeaker);
         if (status != null) status.setText(participants);
     }
