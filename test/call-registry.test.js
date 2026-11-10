@@ -55,3 +55,44 @@ test("ending clears both participants and is idempotent", () => {
   assert.equal(registry.findForUser("leyla"), null);
   assert.equal(registry.end({ callId: call.id, actor: "leyla" }).code, "not-found");
 });
+
+test("participant mute state is authoritative and moderator mute cannot be bypassed", () => {
+  const registry = makeRegistry();
+  const call = registry.invite({ conversationId: "dm-1", caller: "mod", callee: "member" }).call;
+  registry.accept({ callId: call.id, actor: "member" });
+  assert.equal(registry.signal({
+    callId: call.id, actor: "member", signal: { muted: true }
+  }).call.participantStates.member.muted, true);
+
+  assert.equal(registry.setModeratorMuted({
+    callId: call.id, conversationId: "dm-1", actor: "mod",
+    target: "member", muted: true
+  }).code, "not-authorized");
+  assert.equal(registry.setModeratorMuted({
+    callId: call.id, conversationId: "dm-1", actor: "mod",
+    target: "member", muted: true, authorized: true
+  }).call.participantStates.member.moderatorMuted, true);
+  assert.equal(registry.signal({
+    callId: call.id, actor: "member", signal: { muted: false }
+  }).code, "moderator-muted");
+  assert.equal(registry.setModeratorMuted({
+    callId: call.id, conversationId: "dm-1", actor: "mod",
+    target: "member", muted: false, authorized: true
+  }).call.participantStates.member.moderatorMuted, false);
+});
+
+test("call ending captures a single server end time and accepted duration", () => {
+  let now = 1_000;
+  const registry = createCallRegistry({
+    idFactory: () => "call-duration",
+    now: () => now
+  });
+  const call = registry.invite({ conversationId: "dm-1", caller: "aqil", callee: "leyla" }).call;
+  now = 2_000;
+  registry.accept({ callId: call.id, actor: "leyla" });
+  now = 5_600;
+  const ended = registry.end({ callId: call.id, actor: "aqil", reason: "ended" });
+  assert.equal(ended.call.endedAt, 5_600);
+  assert.equal(ended.call.durationSeconds, 3);
+  assert.equal(ended.call.endReason, "ended");
+});

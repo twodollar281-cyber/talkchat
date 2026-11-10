@@ -634,6 +634,86 @@
     c.callId = d.callId || c.callId; c.warn = "";
     if (c.pc && c.pc.connectionState !== "connected") restartIce(c); paint();
   });
+  
+  // ---------- TALKCHAT ANDROID CALL OVERLAY ----------
+  const nativePlugin = window.Capacitor?.Plugins?.CallService;
+  const appPlugin = window.Capacitor?.Plugins?.App;
+
+  let overlayListenerReady = false;
+
+  if (nativePlugin?.addListener) {
+    nativePlugin.addListener("overlayAction", ({ action } = {}) => {
+      if (!action) return;
+
+      switch (action) {
+        case "mic":
+        case "toggleMicrophone":
+          toggleMute();
+          break;
+
+        case "camera":
+        case "toggleCamera":
+          toggleCamera();
+          break;
+
+        case "end":
+        case "endCall":
+          hangUp();
+          break;
+
+        case "hide":
+          nativeCall("hideOverlay");
+          break;
+
+        case "return":
+        case "returnToCall":
+          nativeCall("hideOverlay");
+          break;
+      }
+    }).then(() => {
+      overlayListenerReady = true;
+    }).catch(console.error);
+  }
+
+  function updateNativeCallOverlay() {
+    const c = cur;
+
+    if (!nativePlugin || !c || c.over) return;
+
+    const duration = c.connectedAt
+      ? Math.floor((Date.now() - c.connectedAt) / 1000)
+      : 0;
+
+    nativeCall("updateOverlay", {
+      title: c.peer || "TalkChat",
+      duration: fmt(duration),
+      speaker: c.peer || "",
+      participants: JSON.stringify([c.peer || ""]),
+      mediaType: c.mediaType || "audio",
+      micMuted: !!c.muted,
+      cameraOn: !!c.cameraOn,
+      isGroup: false
+    });
+  }
+
+  if (appPlugin?.addListener && nativePlugin) {
+    appPlugin.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) {
+        nativeCall("hideOverlay");
+      } else if (cur && !cur.over) {
+        nativeCall("showOverlay", {
+          title: cur.peer || "TalkChat",
+          duration: "00:00",
+          speaker: cur.peer || "",
+          participants: JSON.stringify([cur.peer || ""]),
+          mediaType: cur.mediaType || "audio",
+          micMuted: !!cur.muted,
+          cameraOn: !!cur.cameraOn,
+          isGroup: false
+        });
+      }
+    }).catch(console.error);
+  }
 
   /* ---------- düğmeler ---------- */
   el.accept.onclick = acceptIncoming;
