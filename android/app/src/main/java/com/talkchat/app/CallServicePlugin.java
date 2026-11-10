@@ -121,7 +121,27 @@ public void showOverlay(PluginCall call) {
         call.reject("Could not show call overlay", e);
     }
 }
+@PluginMethod
+public void updateOverlay(PluginCall call) {
+    try {
+        Intent intent = new Intent(getContext(), CallService.class);
+        intent.setAction(CallService.ACTION_UPDATE_OVERLAY);
 
+        intent.putExtra("overlayTitle",
+            call.getString("title", "TalkChat"));
+        intent.putExtra("overlayDuration",
+            call.getString("duration", "00:00"));
+        intent.putExtra("overlaySpeaker",
+            call.getString("speaker", "TalkChat"));
+        intent.putExtra("overlayParticipants",
+            call.getString("participants", "Zəng davam edir"));
+
+        getContext().startService(intent);
+        call.resolve();
+    } catch (Exception e) {
+        call.reject("Could not update call overlay", e);
+    }
+}
 @PluginMethod
 public void hideOverlay(PluginCall call) {
     try {
