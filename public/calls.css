@@ -104,3 +104,36 @@
 #tccBox.is-sharing .tcc-mid{background:linear-gradient(180deg,rgba(0,0,0,.55),transparent)}
 #tccBox .tcc-bar{position:relative;z-index:5;gap:clamp(8px,2.5vw,24px)}
 @media(max-width:520px){#tccBox .tcc-local-video{right:12px;bottom:116px;width:28vw;max-width:116px;border-radius:12px}#tccBox .tcc-ic{width:54px;height:54px}}
+
+#tccBox .tcc-top{position:relative;z-index:7;display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 14px 6px}
+#tccBox .tcc-top-title{overflow:hidden;text-align:center;text-overflow:ellipsis;white-space:nowrap}
+#tccBox button.tcc-back,#tccBox button.tcc-more{width:42px;height:42px;display:grid;place-items:center;padding:0;border:1px solid rgba(190,150,255,.3);border-radius:14px;background:rgba(255,255,255,.08);color:#fff;font:inherit;font-size:22px;cursor:pointer}
+#tccBox button.tcc-back:hover,#tccBox button.tcc-more:hover{background:rgba(255,255,255,.14);transform:none}
+#tccBox button.tcc-back[hidden],#tccBox button.tcc-more[hidden]{display:none!important}
+#tccBox .tcc-menu{position:absolute;z-index:8;top:calc(66px + env(safe-area-inset-top));right:14px;width:min(92vw,390px);max-height:64vh;overflow:auto;padding:14px;border:1px solid rgba(190,150,255,.28);border-radius:18px;background:rgba(22,16,37,.97);box-shadow:0 18px 55px rgba(0,0,0,.45)}
+#tccBox .tcc-menu[hidden]{display:none!important}
+#tccBox .tcc-menu-title{display:block;margin:0 0 10px;font-size:14px}
+#tccBox .tcc-roster-row{display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid rgba(255,255,255,.08)}
+#tccBox .tcc-roster-avatar{width:38px;height:38px;display:grid;place-items:center;overflow:hidden;flex:none;border-radius:50%;background:linear-gradient(135deg,#b18aff,#6036ad);font-weight:800}
+#tccBox .tcc-roster-avatar img{width:100%;height:100%;object-fit:cover}
+#tccBox .tcc-roster-info{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+#tccBox .tcc-roster-info strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+#tccBox .tcc-roster-info small{color:#c9bfd8;font-size:11px}
+#tccBox .tcc-roster-action,#tccBox .tcc-menu-mic{border:1px solid rgba(190,150,255,.3);border-radius:10px;background:rgba(255,255,255,.08);color:#fff;padding:8px 10px;font:inherit;font-size:11px;cursor:pointer}
+#tccBox .tcc-menu-mic{width:100%;margin-top:12px}
+#tccBox .tcc-avatar,#tccBox .tcc-stage-avatar{position:relative;overflow:hidden}
+#tccBox .tcc-avatar img,#tccBox .tcc-stage-avatar img{width:100%;height:100%;object-fit:cover}
+#tccBox .tcc-avatar span,#tccBox .tcc-stage-avatar span{position:absolute}
+#tccBox .tcc-stage-participants{display:flex;justify-content:center;gap:14px;margin-top:10px}
+#tccBox .tcc-stage-person{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:74px}
+#tccBox .tcc-stage-avatar{width:52px;height:52px;display:grid;place-items:center;border:2px solid rgba(197,163,255,.45);border-radius:50%;background:linear-gradient(135deg,#b18aff,#6036ad);font-size:20px;font-weight:800;transition:box-shadow .15s,border-color .15s}
+#tccBox .tcc-stage-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+#tccBox .tcc-stage-mic{height:13px;color:#ff7580;font-size:13px;font-weight:900}
+#tccBox .tcc-stage-person.is-muted .tcc-stage-mic{visibility:visible}
+#tccBox .tcc-stage-person.is-speaking .tcc-stage-avatar,#tccBox .tcc-avatar.is-speaking{border-color:#2ecc71;box-shadow:0 0 0 3px rgba(46,204,113,.4),0 0 28px rgba(46,204,113,.55)}
+#tccBox .tcc-stage-person.is-speaking .tcc-stage-avatar{animation:tccSpeakerPulse .85s ease-in-out infinite alternate}
+@keyframes tccSpeakerPulse{from{transform:scale(1)}to{transform:scale(1.06)}}
+#tcCallBanner.tc-call-banner{display:flex;align-items:center;justify-content:center;width:calc(100% - 24px);margin:8px 12px 0;padding:12px 14px;border:1px solid rgba(190,150,255,.35);border-radius:14px;background:linear-gradient(110deg,rgba(112,65,176,.34),rgba(68,47,105,.28));color:#fff;text-align:left;font:inherit;font-size:14px;font-weight:600;line-height:1.35;cursor:pointer}
+#tcCallBanner.tc-call-banner[hidden]{display:none!important}
+#tcCallBanner.tc-call-banner:hover{border-color:rgba(197,163,255,.7);background:rgba(112,65,176,.42)}
+@media(prefers-reduced-motion:reduce){#tccBox .tcc-stage-person.is-speaking .tcc-stage-avatar{animation:none}}

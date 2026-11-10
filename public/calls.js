@@ -116,6 +116,16 @@
   callDenied: { tr: "Bu sohbet için arama iznin yok.", az: "Bu söhbət üçün zəng icazən yoxdur.", en: "You are not allowed to call from this chat.", ru: "Вам нельзя звонить из этого чата." },
   callFailed: { tr: "Arama başlatılamadı. Tekrar dene.", az: "Zəng başlatmaq alınmadı. Yenidən yoxla.", en: "The call could not start. Try again.", ru: "Не удалось начать звонок. Попробуйте ещё раз." },
   shareFail:  { tr: "Ekran paylaşımı başlatılamadı: ", az: "Ekran paylaşımı başlamadı: ", en: "Could not start screen sharing: ", ru: "Не удалось начать показ экрана: " },
+    back:       { tr: "Geri", az: "Geri", en: "Back", ru: "Назад" },
+    more:       { tr: "Daha çox", az: "Daha çox", en: "More", ru: "Ещё" },
+    participants:{ tr: "Katılımcılar", az: "İştirakçılar", en: "Participants", ru: "Участники" },
+    report:     { tr: "Şikayet et", az: "Şikayət et", en: "Report", ru: "Пожаловаться" },
+    mutePerson: { tr: "Katılımcıyı sessize al", az: "İştirakçını səssizə al", en: "Mute participant", ru: "Отключить микрофон участника" },
+    unmutePerson:{ tr: "Katılımcının sesini aç", az: "İştirakçının səsini aç", en: "Unmute participant", ru: "Включить микрофон участника" },
+    micOn:      { tr: "Mikrofon açık", az: "Mikrofon açıq", en: "Microphone on", ru: "Микрофон включён" },
+    micOff:     { tr: "Mikrofon kapalı", az: "Mikrofon bağlı", en: "Microphone off", ru: "Микрофон выключен" },
+    callContinues:{ tr: "📞 Arama devam ediyor — Katılmak için dokun", az: "📞 Zəng davam edir — Qoşulmaq üçün toxun", en: "📞 Call in progress — Tap to rejoin", ru: "📞 Звонок продолжается — Нажмите, чтобы вернуться" },
+    reportReason:{ tr: "Şikayet nedeni: Spam, Taciz, Uygunsuz içerik, Sahte hesap veya Diğer", az: "Şikayət səbəbi: Spam, Taciz, Uygunsuz içerik, Sahte hesap və ya Diğer", en: "Report reason: Spam, Taciz, Uygunsuz içerik, Sahte hesap, or Diğer", ru: "Причина: Spam, Taciz, Uygunsuz içerik, Sahte hesap или Diğer" },
   };
   const tx = (k) => (S[k] && (S[k][LANG()] || S[k].tr)) || k;
 
@@ -137,12 +147,22 @@
   box.className = "tcc";
   box.hidden = true;
   box.innerHTML = `
+    <header class="tcc-top">
+      <button type="button" id="tccBack" class="tcc-back" aria-label="Geri">←</button>
+      <strong id="tccTitle" class="tcc-top-title"></strong>
+      <button type="button" id="tccMore" class="tcc-more" aria-label="Daha çox" aria-expanded="false">⋮</button>
+    </header>
+    <div id="tccMenu" class="tcc-menu" hidden>
+      <strong class="tcc-menu-title"></strong>
+      <div id="tccRoster" class="tcc-roster"></div>
+    </div>
     <video id="tccVideo" class="tcc-video" autoplay playsinline muted hidden></video>
     <div class="tcc-mid">
-      <div id="tccAvatar" class="tcc-avatar"></div>
+      <div id="tccAvatar" class="tcc-avatar"><img alt=""><span></span></div>
       <strong id="tccName" class="tcc-name"></strong>
       <p id="tccStatus" class="tcc-status"></p>
       <p id="tccNote" class="tcc-note"></p>
+      <div id="tccStageParticipants" class="tcc-stage-participants"></div>
     </div>
     <div class="tcc-bar tcc-bar-in">${btn("tccDecline", "end")}${btn("tccAccept", "ok")}</div>
     <div class="tcc-bar tcc-bar-call">${btn("tccMute", "")}${btn("tccCamera", "")}${btn("tccSwitch", "")}${btn("tccScreen", "")}${btn("tccHang", "end")}</div>
@@ -158,11 +178,183 @@
   box.appendChild(localVideo);
   const $ = (id) => document.getElementById(id);
   const el = { video: $("tccVideo"), screenVideo, localVideo, avatar: $("tccAvatar"), name: $("tccName"), status: $("tccStatus"), note: $("tccNote"),
+               title: $("tccTitle"), back: $("tccBack"), more: $("tccMore"), menu: $("tccMenu"), menuTitle: $("tccMenu").querySelector(".tcc-menu-title"), roster: $("tccRoster"), stageParticipants: $("tccStageParticipants"),
                audio: $("tccAudio"), mute: $("tccMute"), camera: $("tccCamera"), switchCamera: $("tccSwitch"), screen: $("tccScreen"), accept: $("tccAccept"), decline: $("tccDecline"), hang: $("tccHang") };
   const setText = (node, t) => { if (node.textContent !== t) node.textContent = t; };
   const setIcon = (b, svg) => { const s = b.querySelector(".tcc-ic"); if (s.dataset.i !== svg) { s.innerHTML = IC[svg]; s.dataset.i = svg; } };
   const label = (b, t) => setText(b.querySelector(".tcc-lb"), t);
   const fmt = (s) => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  const displayName = (person) => String(person && (person.displayName || person.username) || "");
+  const initial = (person) => (displayName(person).trim()[0] || "?").toUpperCase();
+  function setAvatar(node, person) {
+    const img = node.querySelector("img"), fallback = node.querySelector("span");
+    const url = person && typeof person.avatar === "string" ? person.avatar : "";
+    if (img) {
+      if (img.dataset.src !== url) {
+        img.dataset.src = url;
+        img.dataset.failed = "false";
+        if (url) img.src = url;
+        else img.removeAttribute("src");
+      }
+      img.hidden = !url || img.dataset.failed === "true";
+      img.alt = displayName(person);
+      img.onerror = () => { img.dataset.failed = "true"; img.hidden = true; if (fallback) fallback.hidden = false; };
+      img.onload = () => { img.dataset.failed = "false"; img.hidden = false; if (fallback) fallback.hidden = true; };
+    }
+    if (fallback) {
+      setText(fallback, initial(person));
+      fallback.hidden = !!url && img && !img.hidden;
+    }
+  }
+  function callPeople(c) {
+    const people = Array.isArray(c && c.participants) ? c.participants.filter(p => p && typeof p.username === "string") : [];
+    if (c && me && !people.some(p => p.username === me)) people.unshift({ username: me, displayName: me });
+    if (c && c.peer && !people.some(p => p.username === c.peer)) people.push({ username: c.peer, displayName: c.peer });
+    return people;
+  }
+  const personByName = (c, username) => callPeople(c).find(p => p.username === username) || { username };
+
+  const bannerStates = new Map();
+  function renderCallBanner() {
+    const chat = document.getElementById("chatMessages");
+    if (!chat || !chat.parentElement) return;
+    let banner = document.getElementById("tcCallBanner");
+    if (!banner) {
+      banner = document.createElement("button");
+      banner.id = "tcCallBanner";
+      banner.type = "button";
+      banner.className = "tc-call-banner";
+      chat.parentElement.insertBefore(banner, chat);
+    }
+    const conversationId = window.TalkChatActiveConversationId || "";
+    const match = Array.from(bannerStates.values()).find(item => item && item.active && item.conversationId === conversationId);
+    banner.hidden = !match;
+    if (!match) return;
+    setText(banner, match.text || tx("callContinues"));
+    banner.onclick = () => { if (typeof match.onJoin === "function") match.onJoin(); };
+  }
+  window.TalkChatCallBanners = window.TalkChatCallBanners || {};
+  window.TalkChatCallBanners.update = (key, data) => {
+    if (data && data.active) bannerStates.set(key, data);
+    else bannerStates.delete(key);
+    renderCallBanner();
+  };
+  window.TalkChatCallBanners.refresh = renderCallBanner;
+  window.addEventListener("talkchat:active-conversation", renderCallBanner);
+
+  const stageTiles = new Map();
+  function renderStageParticipants(c) {
+    const people = c && c.accepted && !c.over ? callPeople(c) : [];
+    const keep = new Set(people.map(p => p.username));
+    for (const [username, tile] of stageTiles) {
+      if (!keep.has(username)) { tile.remove(); stageTiles.delete(username); }
+    }
+    for (const person of people) {
+      let tile = stageTiles.get(person.username);
+      if (!tile) {
+        tile = document.createElement("div"); tile.className = "tcc-stage-person"; tile.dataset.username = person.username;
+        const avatar = document.createElement("div"); avatar.className = "tcc-stage-avatar";
+        avatar.innerHTML = "<img alt=\"\"><span></span>";
+        const name = document.createElement("span"); name.className = "tcc-stage-name";
+        const mic = document.createElement("span"); mic.className = "tcc-stage-mic"; mic.setAttribute("aria-hidden", "true");
+        tile.append(avatar, name, mic); stageTiles.set(person.username, tile);
+      }
+      const avatar = tile.querySelector(".tcc-stage-avatar");
+      setAvatar(avatar, person);
+      setText(tile.querySelector(".tcc-stage-name"), person.username === me ? (LANG() === "en" ? "You" : LANG() === "ru" ? "Вы" : LANG() === "tr" ? "Sen" : "Sən") : displayName(person));
+      const muted = person.muted === true || person.moderatorMuted === true;
+      tile.classList.toggle("is-muted", muted);
+      tile.querySelector(".tcc-stage-mic").textContent = muted ? "×" : "";
+      el.stageParticipants.appendChild(tile);
+    }
+    updateSpeakerTiles(c);
+  }
+
+  let meterContext = null;
+  function createAudioMeter(stream) {
+    if (!stream || !stream.getAudioTracks || !stream.getAudioTracks().length) return null;
+    try {
+      if (!meterContext) meterContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (meterContext.state === "suspended") meterContext.resume().catch(() => {});
+      const source = meterContext.createMediaStreamSource(stream);
+      const analyser = meterContext.createAnalyser(); analyser.fftSize = 256;
+      source.connect(analyser);
+      return { source, analyser, data: new Uint8Array(analyser.fftSize) };
+    } catch { return null; }
+  }
+  function meterLevel(meter) {
+    if (!meter) return 0;
+    meter.analyser.getByteTimeDomainData(meter.data);
+    let sum = 0;
+    for (const value of meter.data) { const sample = (value - 128) / 128; sum += sample * sample; }
+    return Math.sqrt(sum / meter.data.length);
+  }
+  function updateSpeakerTiles(c) {
+    if (!c) return;
+    const localSpeaking = !c.muted && meterLevel(c.localMeter) > 0.035;
+    const remoteSpeaking = !c.remoteMuted && meterLevel(c.remoteMeter) > 0.035;
+    for (const [username, tile] of stageTiles) {
+      const speaking = username === me ? localSpeaking : remoteSpeaking && username === c.peer;
+      tile.classList.toggle("is-speaking", speaking);
+    }
+    el.avatar.classList.toggle("is-speaking", remoteSpeaking);
+  }
+  const disconnectMeter = meter => { try { meter && meter.source.disconnect(); } catch {} };
+  function renderDirectMenu(c) {
+    if (!c || el.menu.hidden) return;
+    const people = callPeople(c);
+    const self = people.find(p => p.username === me);
+    const canModerate = !!self && ["owner", "admin", "moderator"].includes(self.role);
+    setText(el.menuTitle, tx("participants") + (people.length ? " · " + people.length : ""));
+    el.roster.replaceChildren();
+    for (const person of people) {
+      const row = document.createElement("div"); row.className = "tcc-roster-row";
+      const avatar = document.createElement("div"); avatar.className = "tcc-roster-avatar"; avatar.innerHTML = "<img alt=\"\"><span></span>"; setAvatar(avatar, person);
+      const info = document.createElement("div"); info.className = "tcc-roster-info";
+      const name = document.createElement("strong"); setText(name, displayName(person));
+      const status = document.createElement("small");
+      const isMuted = person.muted === true || person.moderatorMuted === true;
+      setText(status, isMuted ? tx("micOff") : tx("micOn"));
+      info.append(name, status);
+      row.append(avatar, info);
+      if (person.username !== me && canModerate) {
+        const mod = document.createElement("button"); mod.type = "button"; mod.className = "tcc-roster-action";
+        mod.textContent = person.moderatorMuted ? tx("unmutePerson") : tx("mutePerson");
+        mod.onclick = () => socket.emit("call:moderator-mute", { callId: c.callId, conversationId: c.convo, target: person.username, muted: !person.moderatorMuted });
+        row.appendChild(mod);
+      }
+      if (person.username !== me) {
+        const report = document.createElement("button"); report.type = "button"; report.className = "tcc-roster-action"; report.textContent = tx("report");
+        report.onclick = () => reportCallParticipant(person, c);
+        row.appendChild(report);
+      }
+      el.roster.appendChild(row);
+    }
+    const mic = document.createElement("button"); mic.type = "button"; mic.className = "tcc-menu-mic";
+    mic.textContent = c.muted ? tx("unmute") : tx("mute");
+    mic.disabled = !!(self && self.moderatorMuted && c.muted);
+    mic.onclick = toggleMute;
+    el.roster.appendChild(mic);
+  }
+  async function reportCallParticipant(person, c) {
+    const reasons = ["Spam", "Taciz", "Uygunsuz içerik", "Sahte hesap", "Diğer"];
+    const reason = window.prompt(tx("reportReason"), "Diğer");
+    if (!reason) return;
+    if (!reasons.includes(reason.trim())) return alert(tx("reportReason"));
+    const description = window.prompt(tx("report") + " · " + displayName(person), "") || "";
+    try {
+      const response = await fetch("/api/reports", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemType: "user", itemId: person.username, reason: reason.trim(), description: ("Zəng zamanı şikayət · " + displayName(person) + " · callId: " + (c.callId || "") + " " + description).slice(0, 1000) })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || tx("callFailed"));
+      alert(LANG() === "en" ? "Report sent." : LANG() === "ru" ? "Жалоба отправлена." : "Şikayət göndərildi.");
+    } catch (error) { alert(error.message || tx("callFailed")); }
+  }
+  window.TalkChatCallReports = window.TalkChatCallReports || {};
+  window.TalkChatCallReports.submit = reportCallParticipant;
 
   /* ---------- durum ---------- */
   let cur = null; // aktif arama
@@ -171,7 +363,7 @@
   const newCall = (o) => ({ callId: null, mediaType: "audio", pc: null, vTrans: null, pending: [], cands: [], remoteSet: false, making: false, ignore: false,
     accepted: false, muted: false, sharing: false, remoteMuted: false, remoteSharing: false, over: false, connectedAt: 0,
     tick: null, ringTimer: null, warn: "", endText: "", screenTrack: null, relayCount: 0, turn: false, restartCount: 0, dg: { so: 0, sa: 0, ro: 0, ra: 0, cs: 0, cr: 0, err: "" },
-    connectTimer: null, failTimer: null, dropTimer: null, ...o });
+    connectTimer: null, failTimer: null, dropTimer: null, participants: [], minimized: false, localMeter: null, remoteMeter: null, speakerTick: null, ...o });
   const emit = (ev, convo, extra) => {
     const active = cur && cur.convo === convo ? cur : inc && inc.convo === convo ? inc : null;
     socket.emit(ev, { conversationId: convo, ...(active && active.callId ? { callId: active.callId } : {}), ...(extra || {}) });
@@ -184,16 +376,23 @@
 
   function paint() {
     const c = cur, i = inc, who = c ? c.peer : i ? i.peer : "";
-    box.hidden = !who; if (!who) return;
+    box.hidden = !who || !!(c && c.minimized); if (!who) return;
     const remoteCamera = !!(c && !c.over && c.mediaType === "video" && c.remoteCameraOn && el.video.srcObject);
     const remoteScreen = !!(c && !c.over && c.remoteSharing && el.screenVideo.srcObject);
     const localCamera = !!(c && !c.over && c.mediaType === "video" && c.cameraOn && c.local.getVideoTracks().length);
     box.classList.toggle("is-incoming", !c && !!i);
     box.classList.toggle("has-video", remoteCamera || remoteScreen);
     box.classList.toggle("is-sharing", remoteScreen);
+    el.back.hidden = !c || c.over;
+    el.more.hidden = !c || c.over;
+    setText(el.title, c ? displayName(personByName(c, c.peer)) : "");
+    el.more.setAttribute("aria-expanded", String(!el.menu.hidden));
     el.video.hidden = !remoteCamera; el.screenVideo.hidden = !remoteScreen; el.localVideo.hidden = !localCamera;
     el.avatar.hidden = remoteCamera || remoteScreen;
-    setText(el.avatar, who[0].toUpperCase()); setText(el.name, who);
+    const remotePerson = c ? personByName(c, c.peer) : (i && Array.isArray(i.participants) ? i.participants.find(p => p.username === i.peer) : null) || { username: who };
+    setAvatar(el.avatar, remotePerson);
+    setText(el.name, displayName(remotePerson) || who);
+    renderStageParticipants(c);
     let status;
     if (!c) status = tx(i.mediaType === "video" ? "videoIncoming" : "incoming");
     else if (c.over) status = c.endText || tx("ended");
@@ -223,6 +422,11 @@
     setIcon(el.switchCamera, "switch"); label(el.switchCamera, tx("switchCamera"));
     setIcon(el.screen, "screen"); label(el.screen, c && c.sharing ? tx("stopShare") : tx("share"));
     el.screen.classList.toggle("on", !!(c && c.sharing));
+    renderDirectMenu(c);
+    window.TalkChatCallBanners.update("direct-call", c && c.accepted && !c.over ? {
+      active: true, conversationId: c.convo, text: tx("callContinues"),
+      onJoin: () => { c.minimized = false; box.hidden = false; paint(); }
+    } : null);
   }
 
   /* ---------- zil sesi + bildirim ---------- */
@@ -285,7 +489,7 @@
   };
   // Bağlantı kurulamazsa: TURN yoksa / röle adayı hiç oluşmadıysa bunu açıkça söyle
   const failureText = (c) => (!c.turn || c.relayCount === 0 ? tx("noTurn") : tx("failed"));
-  const clearTimers = (c) => { clearTimeout(c.ringTimer); clearTimeout(c.connectTimer); clearTimeout(c.failTimer); clearTimeout(c.dropTimer); clearInterval(c.tick); };
+  const clearTimers = (c) => { clearTimeout(c.ringTimer); clearTimeout(c.connectTimer); clearTimeout(c.failTimer); clearTimeout(c.dropTimer); clearInterval(c.tick); clearInterval(c.speakerTick); };
   // ICE yeniden başlatma yalnız arayan tarafta (teklifi o verir) ve en fazla 2 kez
   function restartIce(c) {
     if (!c || c.over || !c.pc || c.role !== "caller" || c.restartCount >= 2) return false;
@@ -331,6 +535,9 @@
     if (!c.turn) { console.error("TalkChat: bu arama TURN olmadan başlıyor."); c.warn = tx("turnDown"); }
     const pc = new RTCPeerConnection({ iceServers });
     c.pc = pc;
+    c.localMeter = createAudioMeter(c.local);
+    clearInterval(c.speakerTick);
+    c.speakerTick = setInterval(() => updateSpeakerTiles(c), 140);
     // Olay işleyicileri HER ZAMAN await'lerden önce atanır: aksi halde negotiationneeded kaçabilir ve teklif hiç gönderilmez.
     const negotiate = async () => {
       if (c.over || c.pc !== pc) return;
@@ -350,7 +557,7 @@
     pc.onicecandidateerror = (e) => console.warn("TalkChat ICE aday hatası:", e.errorCode, e.errorText, e.url || "");
     pc.ontrack = (e) => {
       const stream = (e.streams && e.streams[0]) || new MediaStream([e.track]);
-      if (e.track.kind === "audio") { el.audio.srcObject = stream; playMedia(el.audio); }
+      if (e.track.kind === "audio") { el.audio.srcObject = stream; playMedia(el.audio); disconnectMeter(c.remoteMeter); c.remoteMeter = createAudioMeter(stream); updateSpeakerTiles(c); }
       else {
         const vi = pc.getTransceivers().filter((t) => t.receiver && t.receiver.track && t.receiver.track.kind === "video").indexOf(e.transceiver);
         if (vi === 0) { el.video.srcObject = stream; el.video.play().catch(() => {}); }
@@ -449,7 +656,7 @@
   }
 
   function showIncoming(d) {
-    inc = { callId: d.callId || null, mediaType: d.mediaType === "video" ? "video" : "audio", convo: d.conversationId, peer: d.from || "?" };
+    inc = { callId: d.callId || null, mediaType: d.mediaType === "video" ? "video" : "audio", convo: d.conversationId, peer: d.from || "?", participants: Array.isArray(d.participants) ? d.participants : [] };
     getIceServers().catch(() => {}); // kabul edilince beklememek için zil çalarken yükle
     paint();
     startRing();
@@ -487,6 +694,8 @@
   function endLocal(c, text, hold) {
     if (c.over) return;
     c.over = true; c.endText = text || ""; clearTimers(c); c.sharing = false;
+    el.menu.hidden = true; el.more.setAttribute("aria-expanded", "false");
+    disconnectMeter(c.localMeter); disconnectMeter(c.remoteMeter); c.localMeter = null; c.remoteMeter = null;
     try { if (c.nativeShare) c.nativeShare.stop().catch(() => {}); } catch {}
     try { if (c.screenTrack) c.screenTrack.stop(); } catch {}
     try { if (c.local) c.local.getTracks().forEach((t) => t.stop()); } catch {}
@@ -507,6 +716,8 @@
   function toggleMute() {
     const c = cur;
     if (!c || c.over || !c.local) return;
+    const self = callPeople(c).find(p => p.username === me);
+    if (c.muted && self && self.moderatorMuted) return;
     c.muted = !c.muted;
     c.local.getAudioTracks().forEach((t) => (t.enabled = !c.muted));
     sig(c, { muted: c.muted });
@@ -565,9 +776,14 @@
     if (!c || c.over || !d || d.conversationId !== c.convo || typeof d.callId !== "string") return;
     c.callId = d.callId;
     c.mediaType = d.mediaType === "video" ? "video" : "audio";
+    if (Array.isArray(d.participants)) c.participants = d.participants;
     paint();
   });
-  socket.on("call:answered", (d) => { if (inc && matchesCall(inc, d)) dismissIncoming(); });
+  socket.on("call:answered", (d) => {
+    const c = cur;
+    if (c && matchesCall(c, d)) { if (Array.isArray(d.participants)) c.participants = d.participants; paint(); return; }
+    if (inc && matchesCall(inc, d)) dismissIncoming();
+  });
   socket.on("call:error", (d) => {
     const c = cur;
     if (!c || c.over || !matchesCall(c, d)) return;
@@ -587,6 +803,7 @@
     if (!c || c.over || c.role !== "caller" || !matchesCall(c, d)) return;
     c.callId = d.callId || c.callId;
     c.mediaType = d.mediaType === "video" ? "video" : c.mediaType;
+    if (Array.isArray(d.participants)) c.participants = d.participants;
     if (c.pc || c.creating) return; // aynı çağrı için ikinci PeerConnection oluşturma
     c.creating = true;
     c.accepted = true;
@@ -598,6 +815,29 @@
   socket.on("call:signal", (d) => {
     const c = cur;
     if (c && !c.over && matchesCall(c, d)) handleSignal(c, d.signal);
+  });
+  socket.on("call:participants", d => {
+    const c = cur;
+    if (!c || c.over || !matchesCall(c, d) || !Array.isArray(d.participants)) return;
+    c.participants = d.participants;
+    c.remoteMuted = !!personByName(c, c.peer).muted;
+    c.muted = !!personByName(c, me).muted;
+    if (c.local) c.local.getAudioTracks().forEach(track => { track.enabled = !c.muted; });
+    paint();
+  });
+  socket.on("call:moderated-mute", d => {
+    const c = cur;
+    if (!c || c.over || !matchesCall(c, d)) return;
+    if (Array.isArray(d.participants)) c.participants = d.participants;
+    else if (d.target) c.participants = callPeople(c).map(person => person.username === d.target
+      ? { ...person, muted: true, moderatorMuted: d.moderatorMuted !== false }
+      : person);
+    if (d.target === me) {
+      c.muted = d.muted !== false;
+      if (c.local) c.local.getAudioTracks().forEach(track => { track.enabled = !c.muted; });
+    }
+    c.remoteMuted = !!personByName(c, c.peer).muted;
+    paint();
   });
   socket.on("call:rejected", (d) => {
     const c = cur;
@@ -643,6 +883,30 @@
   el.switchCamera.onclick = switchCamera;
   el.screen.onclick = toggleShare;
   el.hang.onclick = () => hangUp();
+  el.back.onclick = () => {
+    const c = cur;
+    if (!c || c.over) return;
+    c.minimized = true;
+    el.menu.hidden = true;
+    el.more.setAttribute("aria-expanded", "false");
+    if (typeof showPage === "function") showPage("messages");
+    box.hidden = true;
+    renderCallBanner();
+    paint();
+  };
+  el.more.onclick = () => {
+    const c = cur;
+    if (!c || c.over) return;
+    el.menu.hidden = !el.menu.hidden;
+    el.more.setAttribute("aria-expanded", String(!el.menu.hidden));
+    renderDirectMenu(c);
+  };
+  document.addEventListener("click", event => {
+    if (!el.menu.hidden && !event.target.closest("#tccMenu, #tccMore")) {
+      el.menu.hidden = true;
+      el.more.setAttribute("aria-expanded", "false");
+    }
+  });
   // Sohbet başlığındaki telefon düğmesi (id ile; eski aria-label de çalışır, dil çevirisi aria-label'i değiştirse bile id yeter)
   document.addEventListener("click", (e) => {
     const btn = e.target.closest('#tcCallBtn, #tcVideoCallBtn, [data-talk-original-aria-label="Səsli zəng"], [aria-label="Səsli zəng"]');

@@ -37,6 +37,14 @@
     sharing:    { tr: "Ekran paylaşıyor", az: "Ekran paylaşır", en: "Sharing screen", ru: "Демонстрирует экран" },
     cameraFail: { tr: "Kamera açılamadı.", az: "Kamera açıla bilmədi.", en: "Could not access the camera.", ru: "Не удалось включить камеру." },
     screenFail: { tr: "Ekran paylaşımı başlatılamadı.", az: "Ekran paylaşımı başlatılmadı.", en: "Could not start screen sharing.", ru: "Не удалось начать показ экрана." },
+    back:       { tr: "Geri", az: "Geri", en: "Back", ru: "Назад" },
+    more:       { tr: "Daha çok", az: "Daha çox", en: "More", ru: "Ещё" },
+    participants:{ tr: "Katılımcılar", az: "İştirakçılar", en: "Participants", ru: "Участники" },
+    report:     { tr: "Şikayet et", az: "Şikayət et", en: "Report", ru: "Пожаловаться" },
+    mutePerson: { tr: "Katılımcıyı sessize al", az: "İştirakçını səssizə al", en: "Mute participant", ru: "Отключить микрофон участника" },
+    unmutePerson:{ tr: "Katılımcının sesini aç", az: "İştirakçının səsini aç", en: "Unmute participant", ru: "Включить микрофон участника" },
+    micOn:      { tr: "Mikrofon açık", az: "Mikrofon açıq", en: "Microphone on", ru: "Микрофон включён" },
+    micOff:     { tr: "Mikrofon kapalı", az: "Mikrofon bağlı", en: "Microphone off", ru: "Микрофон выключен" },
   };
   const tx = (k) => (S[k] && (S[k][LANG()] || S[k].tr)) || k;
 
@@ -46,7 +54,21 @@
     background:radial-gradient(ellipse at 50% 12%,rgba(134,77,225,.34),transparent 55%),radial-gradient(ellipse at 90% 100%,rgba(83,45,145,.25),transparent 45%),#0d0a17;
     font-family:inherit;-webkit-tap-highlight-color:transparent}
   #tcGroupCall.tcg[hidden]{display:none!important}
-  #tcGroupCall .tcg-top{padding:calc(14px + env(safe-area-inset-top)) 18px 6px;text-align:center}
+  #tcGroupCall .tcg-top{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;align-items:center;gap:8px;padding:calc(10px + env(safe-area-inset-top)) 14px 6px;text-align:center}
+  #tcGroupCall .tcg-top-copy{min-width:0}
+  #tcGroupCall .tcg-back,#tcGroupCall .tcg-more{width:42px;height:42px;display:grid;place-items:center;border:1px solid rgba(190,150,255,.3);border-radius:14px;background:rgba(255,255,255,.08);color:#fff;font:inherit;font-size:22px;cursor:pointer}
+  #tcGroupCall .tcg-back[hidden],#tcGroupCall .tcg-more[hidden]{display:none!important}
+  #tcGroupCall .tcg-menu{position:absolute;z-index:12;top:calc(66px + env(safe-area-inset-top));right:14px;width:min(92vw,390px);max-height:64vh;overflow:auto;padding:14px;border:1px solid rgba(190,150,255,.28);border-radius:18px;background:rgba(22,16,37,.97);box-shadow:0 18px 55px rgba(0,0,0,.45)}
+  #tcGroupCall .tcg-menu[hidden]{display:none!important}
+  #tcGroupCall .tcg-menu-title{display:block;margin:0 0 10px;font-size:14px}
+  #tcGroupCall .tcg-roster-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid rgba(255,255,255,.08)}
+  #tcGroupCall .tcg-roster-avatar{width:38px;height:38px;display:grid;place-items:center;overflow:hidden;border-radius:50%;background:linear-gradient(135deg,#b18aff,#6036ad);flex:none;font-weight:800}
+  #tcGroupCall .tcg-roster-avatar img{width:100%;height:100%;object-fit:cover}
+  #tcGroupCall .tcg-roster-info{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+  #tcGroupCall .tcg-roster-info strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+  #tcGroupCall .tcg-roster-info small{color:#c9bfd8;font-size:11px}
+  #tcGroupCall .tcg-roster-action,#tcGroupCall .tcg-menu-mic{border:1px solid rgba(190,150,255,.3);border-radius:10px;background:rgba(255,255,255,.08);color:#fff;padding:8px 10px;font:inherit;font-size:11px;cursor:pointer}
+  #tcGroupCall .tcg-menu-mic{width:100%;margin-top:12px}
   #tcGroupCall .tcg-title{display:block;font-size:20px;font-weight:800;letter-spacing:-.3px}
   #tcGroupCall .tcg-sub{display:block;margin-top:2px;color:#c9bfd8;font-size:14px;font-variant-numeric:tabular-nums}
   #tcGroupCall .tcg-grid{flex:1;min-height:0;display:grid;gap:12px;padding:10px 14px;grid-auto-rows:minmax(0,1fr);grid-template-columns:1fr}
@@ -91,6 +113,7 @@
   const styleEl = document.createElement("style");
   styleEl.id = "tcgStyles";
   styleEl.textContent = css + "\n#tcGroupCall .tcg-tile video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}\n#tcGroupCall .tcg-tile video[hidden]{display:none!important}\n#tcGroupCall .tcg-tile .tcg-camera{z-index:0}\n#tcGroupCall .tcg-tile .tcg-screen{z-index:2;object-fit:contain}\n#tcGroupCall .tcg-share-label{position:absolute;z-index:4;top:8px;left:8px;padding:5px 9px;border-radius:999px;background:rgba(12,10,18,.72);font-size:11px}\n#tcGroupCall .tcg-share-label[hidden]{display:none}\n#tcGroupCall .tcg-av,#tcGroupCall .tcg-nm,#tcGroupCall .tcg-st,#tcGroupCall .tcg-badge{position:relative;z-index:3}\n#tcGroupCall .tcg-tile.has-camera .tcg-av{display:none}\n#tcGroupCall .tcg-tile.has-camera .tcg-nm{align-self:flex-start;margin-top:auto;background:rgba(12,10,18,.62);border-radius:999px;padding:5px 10px}\n#tcGroupCall .tcg-bar{gap:clamp(7px,2vw,22px)}\n@media(max-width:520px){#tcGroupCall .tcg-ic{width:52px;height:52px}#tcGroupCall .tcg-grid{gap:7px;padding:7px}}";
+  styleEl.textContent += "\n#tcGroupCall .tcg-av{overflow:hidden}#tcGroupCall .tcg-av img{width:100%;height:100%;object-fit:cover}#tcGroupCall .tcg-av span{position:absolute}";
   document.head.appendChild(styleEl);
 
   /* ---------- arayüz ---------- */
@@ -121,9 +144,17 @@
   panel.className = "tcg";
   panel.hidden = true;
   const top = document.createElement("header"); top.className = "tcg-top";
+  const backBtn = document.createElement("button"); backBtn.type = "button"; backBtn.className = "tcg-back"; backBtn.textContent = "←"; backBtn.setAttribute("aria-label", tx("back"));
+  const topCopy = document.createElement("div"); topCopy.className = "tcg-top-copy";
   const titleEl = document.createElement("strong"); titleEl.className = "tcg-title";
   const subEl = document.createElement("span"); subEl.className = "tcg-sub";
-  top.append(titleEl, subEl);
+  topCopy.append(titleEl, subEl);
+  const moreBtn = document.createElement("button"); moreBtn.type = "button"; moreBtn.className = "tcg-more"; moreBtn.textContent = "⋮"; moreBtn.setAttribute("aria-label", tx("more")); moreBtn.setAttribute("aria-expanded", "false");
+  top.append(backBtn, topCopy, moreBtn);
+  const menu = document.createElement("div"); menu.className = "tcg-menu"; menu.hidden = true;
+  const menuTitle = document.createElement("strong"); menuTitle.className = "tcg-menu-title";
+  const menuRoster = document.createElement("div"); menuRoster.className = "tcg-roster";
+  menu.append(menuTitle, menuRoster);
   const incBox = document.createElement("div"); incBox.className = "tcg-inc";
   const incAv = document.createElement("div"); incAv.className = "tcg-inc-av";
   const incNm = document.createElement("strong"); incNm.className = "tcg-inc-nm";
@@ -141,7 +172,7 @@
   const declineBtn = mkBtn("end", IC.hang);
   const joinBtn = mkBtn("ok", IC.phone);
   barIn.append(declineBtn, joinBtn);
-  panel.append(top, incBox, grid, barCall, barIn);
+  panel.append(top, menu, incBox, grid, barCall, barIn);
   (document.body || document.documentElement).appendChild(panel);
 
   /* ---------- durum ---------- */
@@ -151,10 +182,103 @@
   const queued = new Map();  // peer hələ yaranmamış siqnallar
   const earlyMuted = new Map();
   const tiles = new Map();
+  const observedCalls = new Map();
 
   const hue = (s) => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; };
   const fmt = (s) => Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
   const oneToOneVisible = () => { const b = document.getElementById("tccBox"); return !!(b && !b.hidden); };
+  const personName = person => String(person && (person.displayName || person.username) || "");
+  const groupPerson = (s, username) => (Array.isArray(s && s.participants) && s.participants.find(person => person.username === username)) || { username };
+  function updateFace(node, person) {
+    const image = node.querySelector("img"), fallback = node.querySelector("span");
+    if (!image || !fallback) return;
+    const url = typeof person?.avatar === "string" ? person.avatar : "";
+    if (image.dataset.src !== url) { image.dataset.src = url; image.dataset.failed = "false"; if (url) image.src = url; else image.removeAttribute("src"); }
+    image.hidden = !url || image.dataset.failed === "true";
+    image.alt = personName(person);
+    image.onerror = () => { image.dataset.failed = "true"; image.hidden = true; fallback.hidden = false; };
+    image.onload = () => { image.dataset.failed = "false"; image.hidden = false; fallback.hidden = true; };
+    setText(fallback, (personName(person).trim()[0] || "?").toUpperCase());
+    fallback.hidden = !!url && image.dataset.failed !== "true";
+  }
+  function updateGroupBanner(conversationId, callData) {
+    const key = "group-call:" + conversationId;
+    if (!callData || !callData.active) { window.TalkChatCallBanners?.update(key, null); return; }
+    window.TalkChatCallBanners?.update(key, {
+      active: true,
+      conversationId,
+      text: (LANG() === "en" ? "📞 Call in progress — Tap to rejoin" : LANG() === "ru" ? "📞 Звонок продолжается — Нажмите, чтобы вернуться" : LANG() === "tr" ? "📞 Arama devam ediyor — Katılmak için dokun" : "📞 Zəng davam edir — Qoşulmaq üçün toxun"),
+      onJoin: () => {
+        if (state && state.convo === conversationId) { state.minimized = false; menu.hidden = true; paint(); }
+        else joinCall(conversationId, callData.mediaType || "audio");
+      }
+    });
+  }
+  function applyGroupState(data) {
+    if (!data || !data.conversationId) return;
+    if (data.active === false) {
+      observedCalls.delete(data.conversationId);
+      updateGroupBanner(data.conversationId, null);
+      if (state && state.convo === data.conversationId) leave(false);
+      return;
+    }
+    observedCalls.set(data.conversationId, data);
+    updateGroupBanner(data.conversationId, data);
+    if (!state || state.convo !== data.conversationId) return;
+    state.callId = data.callId || state.callId;
+    state.startedAt = Number(data.startedAt) || state.startedAt;
+    state.participants = Array.isArray(data.participants) ? data.participants : state.participants;
+    const self = groupPerson(state, me);
+    if (self.username === me) {
+      state.muted = self.muted === true;
+      state.local.getAudioTracks().forEach(track => { track.enabled = !state.muted; });
+    }
+    for (const [username, peer] of state.peers) {
+      const participant = groupPerson(state, username);
+      peer.muted = participant.muted === true || participant.moderatorMuted === true;
+      peer.moderatorMuted = participant.moderatorMuted === true;
+    }
+    paint();
+  }
+  function renderGroupMenu() {
+    if (!state || menu.hidden) return;
+    const people = Array.isArray(state.participants) ? state.participants.filter(p => p && p.username) : [];
+    const self = people.find(p => p.username === me);
+    const canModerate = !!self && ["owner", "admin", "moderator"].includes(self.role);
+    menuTitle.textContent = tx("participants") + (people.length ? " · " + people.length : "");
+    menuRoster.replaceChildren();
+    for (const person of people) {
+      const row = document.createElement("div"); row.className = "tcg-roster-row";
+      const avatar = document.createElement("div"); avatar.className = "tcg-roster-avatar"; avatar.innerHTML = "<img alt=\"\"><span></span>"; updateFace(avatar, person);
+      const info = document.createElement("div"); info.className = "tcg-roster-info";
+      const name = document.createElement("strong"); name.textContent = personName(person);
+      const status = document.createElement("small"); status.textContent = person.muted || person.moderatorMuted ? tx("micOff") : tx("micOn");
+      info.append(name, status); row.append(avatar, info);
+      if (person.username !== me && canModerate) {
+        const mod = document.createElement("button"); mod.type = "button"; mod.className = "tcg-roster-action";
+        mod.textContent = person.moderatorMuted ? tx("unmutePerson") : tx("mutePerson");
+        mod.onclick = () => socket.emit("group-call:moderator-mute", { conversationId: state.convo, target: person.username, muted: !person.moderatorMuted });
+        row.appendChild(mod);
+      }
+      if (person.username !== me) {
+        const report = document.createElement("button"); report.type = "button"; report.className = "tcg-roster-action"; report.textContent = tx("report");
+        report.onclick = () => window.TalkChatCallReports?.submit(person, { callId: state.callId, convo: state.convo });
+        row.appendChild(report);
+      }
+      menuRoster.appendChild(row);
+    }
+    const ownMute = document.createElement("button"); ownMute.type = "button"; ownMute.className = "tcg-menu-mic";
+    ownMute.textContent = state.muted ? tx("unmute") : tx("mute");
+    ownMute.disabled = !!(self && self.moderatorMuted && state.muted);
+    ownMute.onclick = () => muteBtn.click();
+    menuRoster.appendChild(ownMute);
+  }
+  window.addEventListener("talkchat:active-conversation", event => {
+    const conversationId = event.detail && event.detail.id;
+    const conv = conversationsCache.find(item => item.id === conversationId);
+    if (conv && conv.type === "group" && socket.connected) socket.emit("group-call:status", { conversationId });
+    window.TalkChatCallBanners?.refresh?.();
+  });
 
   /* ---------- səs səviyyəsi (kim danışır) ---------- */
   let actx = null;
@@ -224,7 +348,7 @@
     const camera = document.createElement("video"); camera.className = "tcg-camera"; camera.autoplay = true; camera.playsInline = true; camera.muted = true; camera.hidden = true;
     const screen = document.createElement("video"); screen.className = "tcg-screen"; screen.autoplay = true; screen.playsInline = true; screen.muted = true; screen.hidden = true;
     const shareLabel = document.createElement("span"); shareLabel.className = "tcg-share-label"; shareLabel.hidden = true;
-    const av = document.createElement("div"); av.className = "tcg-av"; av.textContent = (String(name)[0] || "?").toUpperCase();
+    const av = document.createElement("div"); av.className = "tcg-av"; av.innerHTML = "<img alt=\"\"><span></span>";
     const h = hue(name); av.style.background = "linear-gradient(135deg,hsl(" + h + " 72% 64%),hsl(" + ((h + 42) % 360) + " 58% 36%))";
     const nm = document.createElement("div"); nm.className = "tcg-nm";
     const st = document.createElement("div"); st.className = "tcg-st";
@@ -233,17 +357,23 @@
   }
 
   function paint() {
-    const visible = !!(state || inc); panel.hidden = !visible; panel.classList.toggle("is-incoming", !state && !!inc);
+    const visible = !!(state || inc); panel.hidden = !visible || !!(state && state.minimized); panel.classList.toggle("is-incoming", !state && !!inc);
     if (!visible) return;
+    backBtn.hidden = !state;
+    moreBtn.hidden = !state;
+    moreBtn.setAttribute("aria-expanded", String(!menu.hidden));
     if (!state && inc) { setText(incAv, (inc.name[0] || "?").toUpperCase()); setText(incNm, inc.name); setText(incTx, inc.from + " " + tx("incoming")); setLabel(declineBtn, tx("decline")); setLabel(joinBtn, tx("join")); return; }
-    const names = [me, ...state.peers.keys()];
+    const activePeople = Array.isArray(state.participants) ? state.participants.filter(person => person && person.username) : [];
+    const names = Array.from(new Set([me, ...activePeople.map(person => person.username), ...state.peers.keys()]));
     for (const [n, el] of tiles) if (!names.includes(n)) { el.remove(); tiles.delete(n); }
     for (const n of names) { if (!tiles.has(n)) tiles.set(n, mkTile(n)); grid.appendChild(tiles.get(n)); }
     grid.dataset.n = String(names.length);
     let anyoneSharing = false;
     for (const n of names) {
       const t = tiles.get(n), isMe = n === me, p = isMe ? null : state.peers.get(n);
-      setText(t.querySelector(".tcg-nm"), isMe ? n + " (" + tx("you") + ")" : n);
+      const person = groupPerson(state, n);
+      setText(t.querySelector(".tcg-nm"), (personName(person) || n) + (isMe ? " (" + tx("you") + ")" : ""));
+      updateFace(t.querySelector(".tcg-av"), person);
       const cameraTrack = isMe ? state.cameraTrack : p && p.cameraStream && p.cameraStream.getVideoTracks()[0];
       const cameraStream = isMe ? (state.cameraTrack ? (state.localCameraStream || (state.localCameraStream = new MediaStream([state.cameraTrack]))) : null) : (p && p.cameraStream);
       const cameraEl = t.querySelector(".tcg-camera");
@@ -256,7 +386,7 @@
       const sharing = isMe ? state.sharing : !!(p && p.sharing);
       screenEl.hidden = !sharing || !screenStream; anyoneSharing = anyoneSharing || sharing;
       const shareLabel = t.querySelector(".tcg-share-label"); shareLabel.hidden = !sharing; setText(shareLabel, (isMe ? tx("you") : n) + " · " + tx("sharing"));
-      const muted = isMe ? state.muted : !!(p && p.muted); t.querySelector(".tcg-badge").hidden = !muted;
+      const muted = isMe ? state.muted : (p ? !!p.muted : person.muted === true || person.moderatorMuted === true); t.querySelector(".tcg-badge").hidden = !muted;
       let status = ""; if (!isMe && p) status = p.conn === "connected" ? (p.sharing ? tx("sharing") : "") : p.conn === "weak" ? tx("weak") : tx("connecting");
       setText(t.querySelector(".tcg-st"), status); if (muted) t.classList.remove("speaking");
     }
@@ -276,6 +406,7 @@
     const screenIcon = screenBtn.querySelector(".tcg-ic"); if (screenIcon.dataset.i !== "screen") { screenIcon.innerHTML = IC.screen; screenIcon.dataset.i = "screen"; }
     setLabel(screenBtn, state.sharing ? tx("stopShare") : tx("share")); screenBtn.classList.toggle("on", state.sharing);
     setLabel(leaveBtn, tx("leave"));
+    renderGroupMenu();
   }
 
   function pollSpeaking() {
@@ -301,7 +432,7 @@
     if (state) await leave();
     const conv = (typeof conversationsCache !== "undefined" && conversationsCache.find(c => c.id === convo)) || null;
     const local = await getMedia(mediaType);
-    state = { convo, name: (conv && conv.name) || "", mediaType, local, cameraTrack: local.getVideoTracks()[0] || null, cameraOn: mediaType === "video", facing: "user", screenTrack: null, screenStream: null, screenHandle: null, sharing: false, peers: new Map(), muted: false, startedAt: 0, tick: null, poll: null, meter: makeMeter(local), rejoining: false };
+    state = { convo, name: (conv && conv.name) || "", mediaType, local, cameraTrack: local.getVideoTracks()[0] || null, cameraOn: mediaType === "video", facing: "user", screenTrack: null, screenStream: null, screenHandle: null, sharing: false, peers: new Map(), participants: [], callId: null, muted: false, startedAt: 0, tick: null, poll: null, meter: makeMeter(local), rejoining: false, minimized: false };
     state.tick = setInterval(paint, 1000); state.poll = setInterval(pollSpeaking, 160);
     nativeCall("start", { title: "TalkChat", text: tx("native"), camera: mediaType === "video" }); takeWake(); paint(); return state;
   }
@@ -460,6 +591,8 @@
 
   muteBtn.onclick = () => {
     if (!state) return;
+    const self = groupPerson(state, me);
+    if (state.muted && self.moderatorMuted) return;
     state.muted = !state.muted;
     state.local.getAudioTracks().forEach(t => (t.enabled = !state.muted));
     for (const name of state.peers.keys()) signal(name, { muted: state.muted });
@@ -469,7 +602,32 @@
   switchBtn.onclick = switchCamera;
   screenBtn.onclick = toggleShare;
   leaveBtn.onclick = () => leave();
-  declineBtn.onclick = () => dismissIncoming();
+  backBtn.onclick = () => {
+    if (!state) return;
+    state.minimized = true;
+    menu.hidden = true;
+    moreBtn.setAttribute("aria-expanded", "false");
+    if (typeof showPage === "function") showPage("messages");
+    panel.hidden = true;
+    window.TalkChatCallBanners?.refresh?.();
+    paint();
+  };
+  moreBtn.onclick = () => {
+    if (!state) return;
+    menu.hidden = !menu.hidden;
+    moreBtn.setAttribute("aria-expanded", String(!menu.hidden));
+    renderGroupMenu();
+  };
+  document.addEventListener("click", event => {
+    if (!menu.hidden && !event.target.closest("#tcGroupCall .tcg-menu, #tcGroupCall .tcg-more")) {
+      menu.hidden = true;
+      moreBtn.setAttribute("aria-expanded", "false");
+    }
+  });
+  declineBtn.onclick = () => {
+    if (inc) socket.emit("group-call:decline", { conversationId: inc.convo });
+    dismissIncoming();
+  };
   joinBtn.onclick = async () => {
     const i = inc;
     if (!i) return;
@@ -490,7 +648,13 @@
   socket.on("group-call:joined", async d => {
     if (!state || !d || d.conversationId !== state.convo) return;
     state.rejoining = false;
-    if (!state.startedAt) state.startedAt = Date.now();
+    state.callId = d.callId || state.callId;
+    if (Number(d.startedAt)) state.startedAt = Number(d.startedAt);
+    if (Array.isArray(d.participantDetails)) {
+      const byName = new Map(state.participants.map(person => [person.username, person]));
+      d.participantDetails.forEach(person => { if (person && person.username) byName.set(person.username, person); });
+      state.participants = Array.from(byName.values());
+    }
     for (const name of (Array.isArray(d.participants) ? d.participants : [])) {
       if (name === me) continue;
       await makePeer(name, false);
@@ -503,6 +667,11 @@
 
   socket.on("group-call:peer-joined", async d => {
     if (!state || !d || d.conversationId !== state.convo || !d.username || d.username === me) return;
+    if (d.participant) {
+      const byName = new Map(state.participants.map(person => [person.username, person]));
+      byName.set(d.username, d.participant);
+      state.participants = Array.from(byName.values());
+    }
     try {
       await makePeer(d.username, true);
       paint();
@@ -516,7 +685,30 @@
   });
 
   socket.on("group-call:peer-left", d => {
-    if (state && d && d.conversationId === state.convo) removePeer(d.username);
+    if (state && d && d.conversationId === state.convo) {
+      removePeer(d.username);
+      if (!d.reconnecting) state.participants = state.participants.filter(person => person.username !== d.username);
+      paint();
+    }
+  });
+  socket.on("group-call:state", applyGroupState);
+  socket.on("group-call:resumed", applyGroupState);
+  socket.on("group-call:ended", d => {
+    if (!d || !d.conversationId) return;
+    applyGroupState({ ...d, active: false });
+  });
+  socket.on("group-call:participant-muted", d => {
+    if (!state || !d || d.conversationId !== state.convo) return;
+    state.participants = state.participants.map(person => person.username === d.username
+      ? { ...person, muted: d.muted === true, moderatorMuted: d.moderatorMuted === true }
+      : person);
+    const peer = state.peers.get(d.username);
+    if (peer) { peer.muted = d.muted === true; peer.moderatorMuted = d.moderatorMuted === true; }
+    if (d.username === me) {
+      state.muted = d.muted === true;
+      state.local.getAudioTracks().forEach(track => { track.enabled = !state.muted; });
+    }
+    paint();
   });
 
   socket.on("group-call:error", async d => {
@@ -535,6 +727,9 @@
   });
 
   socket.on("connect", () => {
+    const conversationId = window.TalkChatActiveConversationId;
+    const conversation = conversationsCache.find(item => item.id === conversationId);
+    if (conversation && conversation.type === "group") socket.emit("group-call:status", { conversationId });
     if (!state || !state.rejoining) return;
     socket.emit("group-call:join", { conversationId: state.convo });
   });
