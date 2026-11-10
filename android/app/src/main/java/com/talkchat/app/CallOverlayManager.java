@@ -112,7 +112,7 @@ public class CallOverlayManager {
         header.addView(duration);
         card.addView(header, lp(-1, 34));
 
-        TextView heading = text(title, 17, Color.WHITE);
+        heading = text(title, 17, Color.WHITE);
         heading.setGravity(Gravity.CENTER_VERTICAL);
         card.addView(heading, lp(-1, 36));
 
