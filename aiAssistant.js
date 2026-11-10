@@ -9,9 +9,6 @@ const MAX_STORED_MESSAGES = 60;
 const CONTEXT_MESSAGES = 12;
 const MAX_CONTEXT_CHARS = 8000;
 const MAX_OUTPUT_TOKENS = 600;
-const MAX_DAILY_REQUESTS = 40;
-const DEFAULT_DAILY_LIMIT = 8;
-const MAX_CONFIGURED_DAILY_LIMIT = 40;
 const DEFAULT_PER_MINUTE_LIMIT = 3;
 const MAX_CONFIGURED_PER_MINUTE_LIMIT = 6;
 const MAX_CONVERSATIONS = 12;
@@ -154,7 +151,7 @@ function cloudflareError(status, body) {
     const errors = Array.isArray(body?.errors) ? body.errors : [];
     const codes = new Set(errors.map(item => String(item?.code ?? "")));
     if (status === 429 || codes.has("3036")) {
-        return { status: 429, error: "Cloudflare AI gündəlik kvotaya və ya tutum limitinə çatıb. Sorğu təkrar göndərilməyib; limitin yenilənməsini gözlə." };
+        return { status: 429, error: "Cloudflare Workers AI Free gündəlik kvotası və ya tutum limiti dolub. AI sorğuları kvota yenilənənədək dayandırılıb; yenilənəndən sonra yenidən cəhd et. Tətbiq ödənişli plan və ya billing aktivləşdirmir." };
     }
     if ([401, 402, 403].includes(status) || ["3023", "5018", "5035"].some(code => codes.has(code))) {
         return { status: 503, error: "Cloudflare AI hesabı, model icazəsi və ya planı yoxlanmalıdır. Sorğu təkrar göndərilməyib." };
@@ -166,7 +163,6 @@ function cloudflareError(status, body) {
 }
 
 function installAIAssistant({ app, readJSON, saveJSON, requireAuth, currentUser, userRateLimit, env = process.env, fetchImpl = globalThis.fetch }) {
-    const dailyLimit = configuredLimit(env.AI_ASSISTANT_DAILY_LIMIT, DEFAULT_DAILY_LIMIT, MAX_CONFIGURED_DAILY_LIMIT);
     const perMinuteLimit = configuredLimit(env.AI_ASSISTANT_PER_MINUTE_LIMIT, DEFAULT_PER_MINUTE_LIMIT, MAX_CONFIGURED_PER_MINUTE_LIMIT);
     const readAll = () => {
         const data = readJSON("aiAssistant.json", {});
@@ -186,23 +182,6 @@ function installAIAssistant({ app, readJSON, saveJSON, requireAuth, currentUser,
         const all = readAll();
         all[username] = normalizeAccount(state);
         saveJSON("aiAssistant.json", all);
-    };
-    const takeDailyRequest = username => {
-        const today = new Date().toISOString().slice(0, 10);
-        const dailyData = readJSON("aiAssistantDailyUsage.json", {});
-        const accountCount = dailyData?.date === today ? Number(dailyData.count) || 0 : 0;
-        if (accountCount >= dailyLimit) return false;
-
-        const userData = readJSON("aiAssistantUsage.json", {});
-        const all = userData && typeof userData === "object" && !Array.isArray(userData) ? userData : {};
-        const previous = all[username];
-        const userCount = previous?.date === today ? Number(previous.count) || 0 : 0;
-        if (userCount >= MAX_DAILY_REQUESTS) return false;
-
-        saveJSON("aiAssistantDailyUsage.json", { date: today, count: accountCount + 1 });
-        all[username] = { date: today, count: userCount + 1 };
-        saveJSON("aiAssistantUsage.json", all);
-        return true;
     };
     const noStore = res => res.set("Cache-Control", "private, no-store");
     const perMinute = userRateLimit(60 * 1000, perMinuteLimit, "AI dəqiqəlik sorğu limiti dolub. Bir az sonra yenidən cəhd et.");
@@ -291,8 +270,6 @@ function installAIAssistant({ app, readJSON, saveJSON, requireAuth, currentUser,
             : state.conversations.find(item => item.id === state.currentConversationId);
         if (requestedId && !conversation)
             return res.status(404).json({ error: "AI söhbəti tapılmadı." });
-        if (!takeDailyRequest(username))
-            return res.status(429).json({ error: "TalkChat AI gündəlik sorğu limiti dolub. Limit UTC gecə yarısı yenilənəcək; sorğu göndərilməyib." });
         if (!conversation) {
             const now = new Date().toISOString();
             conversation = { id: crypto.randomUUID(), title: "Yeni söhbət", messages: [], createdAt: now, updatedAt: now };

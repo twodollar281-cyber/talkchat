@@ -94,7 +94,7 @@ function makeHarness({ env = TEST_ENV, fetchImpl = async () => successResponse()
     return { status: res.statusCode, headers: res.headers, body: res.body };
   }
 
-  return { request, routes, rateConfigs, store, fetchCount: () => fetchCount };
+  return { request, routes, rateConfigs, store, fetchCount: () => fetchCount, resetRateLimitWindow: () => rateCounts.clear() };
 }
 
 test("all AI endpoints require authentication before running handlers", async () => {
@@ -218,18 +218,99 @@ test("configured per-minute limits apply per authenticated user", async () => {
   assert.equal(harness.fetchCount(), 2);
 });
 
-test("configured daily quota is shared across users and blocks further provider calls", async () => {
-  const harness = makeHarness({ env: { ...TEST_ENV, AI_ASSISTANT_DAILY_LIMIT: "1" } });
-  const first = await harness.request("POST", ROUTES.messages, {
-    session: { username: "alice" }, body: { message: "first" }
+test("more than eight requests per user and more than fifty globally are allowed", async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const seed = {
+    "aiAssistantDailyUsage.json": { date: today, count: 50 },
+    "aiAssistantUsage.json": { alice: { date: today, count: 40 } }
+  };
+  const harness = makeHarness({
+    env: { ...TEST_ENV, AI_ASSISTANT_DAILY_LIMIT: "8", AI_ASSISTANT_GLOBAL_DAILY_LIMIT: "50" },
+    initialData: seed
   });
-  const second = await harness.request("POST", ROUTES.messages, {
-    session: { username: "bob" }, body: { username: "alice", message: "second" }
+  for (let i = 0; i < 9; i++) {
+    if (i > 0 && i % 3 === 0) harness.resetRateLimitWindow();
+    const result = await harness.request("POST", ROUTES.messages, {
+      session: { username: "alice" }, body: { message: "question " + i }
+    });
+    assert.equal(result.status, 200, "user request " + (i + 1));
+  }
+  assert.equal(harness.fetchCount(), 9);
+  assert.deepEqual(harness.store["aiAssistantDailyUsage.json"], seed["aiAssistantDailyUsage.json"]);
+  assert.deepEqual(harness.store["aiAssistantUsage.json"], seed["aiAssistantUsage.json"]);
+
+  const globalHarness = makeHarness({
+    env: { ...TEST_ENV, AI_ASSISTANT_DAILY_LIMIT: "8", AI_ASSISTANT_GLOBAL_DAILY_LIMIT: "50" }
   });
-  assert.equal(first.status, 200);
-  assert.equal(second.status, 429);
-  assert.match(second.body.error, /gündəlik/i);
-  assert.equal(harness.fetchCount(), 1);
+  for (let user = 0; user < 17; user++) {
+    for (let question = 0; question < 3; question++) {
+      const result = await globalHarness.request("POST", ROUTES.messages, {
+        session: { username: "user-" + user }, body: { message: "question " + question }
+      });
+      assert.equal(result.status, 200, "shared request " + (user * 3 + question + 1));
+    }
+  }
+  assert.equal(globalHarness.fetchCount(), 51);
+});
+
+test("Cloudflare Free quota errors are clear and the next available request works", async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const seed = {
+    "aiAssistantDailyUsage.json": { date: today, count: 50 },
+    "aiAssistantUsage.json": { alice: { date: today, count: 40 } }
+  };
+  const replies = [
+    { ok: false, status: 429, json: async () => ({ success: false, errors: [{ code: 3036, message: "provider quota" }] }) },
+    successResponse("Quota renewed")
+  ];
+  const harness = makeHarness({ initialData: seed, fetchImpl: async () => replies.shift() });
+  const exhausted = await harness.request("POST", ROUTES.messages, {
+    session: { username: "alice" }, body: { message: "first question" }
+  });
+  assert.equal(exhausted.status, 429);
+  assert.match(exhausted.body.error, /Workers AI Free.*kvota.*yenilənənədək/i);
+  assert.match(exhausted.body.error, /ödənişli plan.*billing aktivləşdirmir/i);
+  assert.equal(harness.fetchCount(), 1, "quota error is not automatically retried");
+  assert.deepEqual(harness.store["aiAssistantDailyUsage.json"], seed["aiAssistantDailyUsage.json"]);
+  assert.deepEqual(harness.store["aiAssistantUsage.json"], seed["aiAssistantUsage.json"]);
+
+  const available = await harness.request("POST", ROUTES.messages, {
+    session: { username: "alice" }, body: { message: "after quota reset" }
+  });
+  assert.equal(available.status, 200);
+  assert.equal(available.body.message.content, "Quota renewed");
+  assert.equal(harness.fetchCount(), 2);
+  assert.equal(harness.store["aiAssistantDailyUsage.json"].count, 50);
+  assert.equal(harness.store["aiAssistantUsage.json"].alice.count, 40);
+});
+
+test("the default three-per-minute limit also caps parallel requests per user", async () => {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  let releaseProvider;
+  const providerGate = new Promise(resolve => { releaseProvider = resolve; });
+  const harness = makeHarness({ fetchImpl: async () => {
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await providerGate;
+    inFlight--;
+    return successResponse();
+  } });
+  const pending = Promise.all(Array.from({ length: 4 }, (_, i) => harness.request("POST", ROUTES.messages, {
+    session: { username: "alice" }, body: { message: "parallel " + i }
+  })));
+  await new Promise(resolve => setImmediate(resolve));
+  const callsBeforeRelease = harness.fetchCount();
+  const concurrentBeforeRelease = inFlight;
+  releaseProvider();
+  const results = await pending;
+  assert.equal(harness.rateConfigs[0].windowMs, 60 * 1000);
+  assert.equal(harness.rateConfigs[0].limit, 3);
+  assert.equal(callsBeforeRelease, 3);
+  assert.equal(concurrentBeforeRelease, 3);
+  assert.equal(maxInFlight, 3);
+  assert.equal(results.filter(result => result.status === 200).length, 3);
+  assert.equal(results.filter(result => result.status === 429).length, 1);
 });
 
 test("prompt length is rejected before sending a provider request", async () => {
