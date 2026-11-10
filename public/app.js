@@ -31,6 +31,7 @@ function showPage(name) {
   const page = $(name + "Page");
   if (page) page.hidden = false;
   document.querySelectorAll(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.page === name));
+  document.querySelector(".bottom-nav")?.classList.toggle("tc-ai-active", name === "ai");
   if (name === "home") loadFeed();
   if (name === "profile") loadMyProfile();
   if (name === "notifications") loadNotifications();

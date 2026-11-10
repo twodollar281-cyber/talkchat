@@ -100,6 +100,7 @@
 
 @keyframes tcAiPulse { 50% { box-shadow: 0 0 0 5px rgba(255,91,123,.11); } }
 @media (max-width: 760px) {
+  .bottom-nav.tc-ai-active { display: none !important; }
   #aiPage.tc-ai-page:not([hidden]) { padding: max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left)); }
   .tc-ai-workspace { gap: 9px; }
   .tc-ai-heading { flex-wrap: wrap; align-content: center; gap: 8px; min-height: 92px; padding-bottom: 8px; }
