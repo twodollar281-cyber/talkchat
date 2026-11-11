@@ -423,7 +423,7 @@
     setIcon(el.screen, "screen"); label(el.screen, c && c.sharing ? tx("stopShare") : tx("share"));
     el.screen.classList.toggle("on", !!(c && c.sharing));
     
-    renderDirectMenu(c);
+        renderDirectMenu(c);
     window.TalkChatCallBanners.update("direct-call", c && c.accepted && !c.over ? {
       active: true, conversationId: c.convo, text: tx("callContinues"),
       onJoin: () => { c.minimized = false; box.hidden = false; paint(); }
