@@ -428,7 +428,11 @@
       onJoin: () => { c.minimized = false; box.hidden = false; paint(); }
     } : null);
   }
-
+   
+  if (c && !c.over) {
+    syncDirectNativeOverlay(false);
+      }
+}
   /* ---------- zil sesi + bildirim ---------- */
   let ringCtx = null, ringTimer = null;
   function startRing() {
@@ -482,6 +486,118 @@
   };
   const micErrorText = (e) => { const t = MIC_T[LANG()] || MIC_T.tr; return `${t[0]}\n\n${t[1]}: ${e && e.name ? e.name : "UnknownError"}\n${e && e.message ? e.message : t[2]}`; };
 
+     // Android system overlay permission
+  async function requestDirectOverlayPermission() {
+    const P = window.Capacitor?.Plugins?.CallService;
+
+    if (!P?.checkOverlayPermission || !P?.requestOverlayPermission) {
+      return false;
+    }
+
+    try {
+      let result = await P.checkOverlayPermission();
+
+      if (!result?.granted) {
+        result = await P.requestOverlayPermission();
+      }
+
+      return !!result?.granted;
+    } catch (error) {
+      console.warn("TalkChat overlay permission:", error);
+      return false;
+    }
+  }
+
+    // ---------- PRIVATE CALL NATIVE OVERLAY ----------
+  const directAppPlugin = window.Capacitor?.Plugins?.App;
+
+  function syncDirectNativeOverlay(show = false) {
+    const c = cur;
+
+    if (!c || c.over) {
+      nativeCall("hideOverlay");
+      return;
+    }
+
+    const participants = callPeople(c).map(person => ({
+      username: person.username,
+      displayName: person.displayName || person.name || person.username,
+      avatar: person.avatar || ""
+    }));
+
+    const seconds = c.connectedAt
+      ? Math.floor((Date.now() - c.connectedAt) / 1000)
+      : 0;
+
+    const data = {
+      title: displayName(personByName(c, c.peer)) || c.peer || "TalkChat",
+      text: NATIVE_T[LANG()] || NATIVE_T.tr,
+      duration: fmt(seconds),
+      speaker: "",
+      participants: JSON.stringify(participants),
+      mediaType: c.mediaType || "audio",
+      micMuted: !!c.muted,
+      cameraOn: !!c.cameraOn,
+      isGroup: false
+    };
+
+    nativeCall(show ? "showOverlay" : "updateOverlay", data);
+  }
+
+  if (directAppPlugin?.addListener) {
+    directAppPlugin.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) {
+        nativeCall("hideOverlay");
+      } else if (cur && !cur.over) {
+        syncDirectNativeOverlay(true);
+      }
+    }).catch(console.error);
+  }
+
+  const directCallPlugin = window.Capacitor?.Plugins?.CallService;
+
+  if (directCallPlugin?.addListener) {
+    directCallPlugin.addListener("overlayAction", ({ action } = {}) => {
+      if (!action) return;
+
+      switch (action) {
+        case "mic":
+          if (cur && !cur.over) {
+            toggleMute();
+            syncDirectNativeOverlay();
+          }
+          break;
+
+        case "camera":
+          if (cur && !cur.over) {
+            toggleCamera();
+            syncDirectNativeOverlay();
+          }
+          break;
+
+        case "end":
+          hangUp();
+          break;
+
+        case "hide":
+          nativeCall("hideOverlay");
+          break;
+
+        case "return":
+          nativeCall("hideOverlay");
+
+          if (cur && !cur.over) {
+            cur.minimized = false;
+            if (typeof showPage === "function") {
+              showPage("messages");
+            }
+            paint();
+          }
+          break;
+      }
+    }).catch(console.error);
+}
+   
   // Otomatik oynatma engellenirse bir sonraki dokunuşta yeniden dene (ses gelmeme sorunu)
   const playMedia = (node) => {
     const p = node.play();
@@ -644,6 +760,7 @@
     if (p) return alert(p);
     if (!socket.connected) return alert(tx("offline"));
     askNotify();
+    await requestDirectOverlayPermission();
     getIceServers().catch(() => {}); // TURN bilgisini önceden ısıt
     let local;
     try { local = await getMedia(mode); } catch (e) { console.error("TalkChat media error:", e); return alert(micErrorText(e)); }
