@@ -2,7 +2,12 @@
    Server hadisələri dəyişməyib: group-call:start/join/leave/signal və incoming/joined/peer-joined/peer-left/error. */
 (() => {
   "use strict";
-  if (window.TalkChatGroupCalls) return;
+  const callDebug = (stage, detail = {}) => window.TalkChatAndroidCallDebug?.log?.(stage, detail);
+  callDebug("GROUP_SCRIPT_EVAL", { alreadyLoaded: !!window.TalkChatGroupCalls });
+  if (window.TalkChatGroupCalls) {
+    callDebug("GROUP_GUARD_EXIT");
+    return;
+  }
 
   const MAX = 5;
   const ICE = window.TC_ICE_SERVERS || [
@@ -533,7 +538,23 @@ if (appNativePlugin?.addListener) {
   /* ---------- mikrofon və vəziyyət ---------- */
   async function getMedia(mediaType) {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error(tx("noMic"));
-    return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: mediaType === "video" ? { facingMode: { ideal: "user" }, width: { ideal: 960 }, height: { ideal: 540 } } : false });
+    try {
+      await window.TalkChatAndroidCallDebug?.requestMediaPermissions?.(mediaType, "group");
+      callDebug("GET_MEDIA_REQUEST", { callType: "group", mode: mediaType });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: mediaType === "video" ? { facingMode: { ideal: "user" }, width: { ideal: 960 }, height: { ideal: 540 } } : false
+      });
+      callDebug("GET_MEDIA_SUCCESS", {
+        callType: "group", mode: mediaType,
+        audio: stream.getAudioTracks().length > 0,
+        video: stream.getVideoTracks().length > 0
+      });
+      return stream;
+    } catch (error) {
+      callDebug("GET_MEDIA_ERROR", { callType: "group", mode: mediaType, name: error?.name || "Error", message: error?.message || "" });
+      throw error;
+    }
   }
 
   async function ensureState(convo, mediaType = "audio") {
@@ -633,18 +654,28 @@ if (appNativePlugin?.addListener) {
   }
 
   async function startCall(conversationId, mediaType = "audio") {
+    callDebug("START_CALL", { callType: "group", mode: mediaType, socketConnected: !!socket.connected });
     const conv = conversationsCache.find(c => c.id === conversationId);
     if (!conv || conv.type !== "group") return;
     if (state) return alert(tx("already"));
     if (oneToOneVisible()) return alert(tx("busy1"));
     if (!socket.connected) return alert(tx("offline"));
-    try { await ensureState(conversationId, mediaType === "video" ? "video" : "audio"); socket.emit("group-call:start", { conversationId, mediaType: state.mediaType }); }
+    try {
+      await ensureState(conversationId, mediaType === "video" ? "video" : "audio");
+      callDebug("SOCKET_EMIT", { event: "group-call:start", mode: state.mediaType, socketConnected: !!socket.connected });
+      socket.emit("group-call:start", { conversationId, mediaType: state.mediaType });
+    }
     catch (e) { await leave(false); alert((e && e.message) || tx("micFail")); }
   }
 
   async function joinCall(conversationId, mediaType = "audio") {
+    callDebug("START_CALL", { callType: "group_join", mode: mediaType, socketConnected: !!socket.connected });
     if (!socket.connected) return alert(tx("offline"));
-    try { await ensureState(conversationId, mediaType === "video" ? "video" : "audio"); socket.emit("group-call:join", { conversationId }); }
+    try {
+      await ensureState(conversationId, mediaType === "video" ? "video" : "audio");
+      callDebug("SOCKET_EMIT", { event: "group-call:join", mode: state.mediaType, socketConnected: !!socket.connected });
+      socket.emit("group-call:join", { conversationId });
+    }
     catch (e) { await leave(false); alert((e && e.message) || tx("micFail")); }
   }
 
@@ -856,4 +887,5 @@ if (appNativePlugin?.addListener) {
   toggleMute: () => muteBtn.click(),
   toggleCamera
 };
+  callDebug("GROUP_MODULE_READY", { startCall: typeof window.TalkChatGroupCalls.startCall === "function" });
 })();
