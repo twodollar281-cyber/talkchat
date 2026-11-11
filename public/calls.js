@@ -9,7 +9,17 @@
        olay işleyicileri artık await'lerden ÖNCE atanır; anlaşılır hata mesajları. */
 (() => {
   "use strict";
-  if (typeof socket === "undefined" || window.__tccLoaded) return;
+  const callDebug = (stage, detail = {}) => window.TalkChatAndroidCallDebug?.log?.(stage, detail);
+  callDebug("CALLS_SCRIPT_EVAL", {
+    socketAvailable: typeof socket !== "undefined",
+    alreadyLoaded: !!window.__tccLoaded,
+    directButton: !!document.getElementById("tcCallBtn"),
+    videoButton: !!document.getElementById("tcVideoCallBtn")
+  });
+  if (typeof socket === "undefined" || window.__tccLoaded) {
+    callDebug("CALLS_GUARD_EXIT", { socketAvailable: typeof socket !== "undefined", alreadyLoaded: !!window.__tccLoaded });
+    return;
+  }
   window.__tccLoaded = true;
 
   const RING_MS = window.TCC_RING_MS || 40000; // arayan bu kadar bekler
@@ -471,7 +481,25 @@
     if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return tx("needHttps");
     return "";
   };
-  const getMedia = (mode, facing = "user") => navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: mode === "video" ? { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } } : false });
+  const getMedia = async (mode, facing = "user") => {
+    try {
+      await window.TalkChatAndroidCallDebug?.requestMediaPermissions?.(mode, "direct");
+      callDebug("GET_MEDIA_REQUEST", { callType: "direct", mode });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: mode === "video" ? { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } } : false
+      });
+      callDebug("GET_MEDIA_SUCCESS", {
+        callType: "direct", mode,
+        audio: stream.getAudioTracks().length > 0,
+        video: stream.getVideoTracks().length > 0
+      });
+      return stream;
+    } catch (error) {
+      callDebug("GET_MEDIA_ERROR", { callType: "direct", mode, name: error?.name || "Error", message: error?.message || "" });
+      throw error;
+    }
+  };
   const NATIVE_T = { tr: "Arama devam ediyor", az: "Zəng davam edir", en: "Call in progress", ru: "Идёт звонок" };
   const nativeCall = (m, args) => {
     try {
@@ -752,6 +780,7 @@
 
   /* ---------- arama akışı ---------- */
   async function startCall(mode = "audio") {
+    callDebug("START_CALL", { callType: "direct", mode, socketConnected: !!socket.connected });
     if (busy()) return alert(tx("already"));
     const conv = conversationsCache.find((x) => x.id === activeConversation);
     if (!conv || conv.type === "group") return alert(conv ? tx("group") : tx("noPeer"));
@@ -768,6 +797,7 @@
     const mediaType = mode === "video" ? "video" : "audio";
     const c = (cur = newCall({ convo: conv.id, peer, role: "caller", local, stage: "calling", mediaType, cameraOn: mediaType === "video", remoteCameraOn: true, facing: "user" }));
     paint();
+    callDebug("SOCKET_EMIT", { event: "call:invite", mode: c.mediaType, socketConnected: !!socket.connected });
     emit("call:invite", c.convo, { mediaType: c.mediaType });
     c.ringTimer = setTimeout(() => { if (cur === c && !c.accepted && !c.over) hangUp(tx("noAnswer")); }, RING_MS);
     const callService = window.Capacitor?.Plugins?.CallService;
@@ -1038,6 +1068,7 @@
     e.preventDefault();
     const mode = btn.id === "tcVideoCallBtn" ? "video" : "audio";
     const conv = conversationsCache.find(x => x.id === activeConversation);
+    callDebug("BUTTON_CLICK", { buttonId: btn.id || "aria-label", mode, group: conv?.type === "group" });
     if (conv && conv.type === "group") {
       if (!window.TalkChatGroupCalls?.startCall) {
         console.error("TalkChat: group call module is unavailable.");
@@ -1052,6 +1083,10 @@
       console.error("TalkChat call error:", error);
       alert(tx("callFailed"));
     });
+  });
+  callDebug("CALL_HANDLER_ATTACHED", {
+    directButton: !!document.getElementById("tcCallBtn"),
+    videoButton: !!document.getElementById("tcVideoCallBtn")
   });
   window.addEventListener("beforeunload", () => { if (cur && !cur.over) emit("call:end", cur.convo); });
 })();

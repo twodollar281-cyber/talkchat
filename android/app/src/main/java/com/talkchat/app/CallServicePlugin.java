@@ -1,31 +1,45 @@
 package com.talkchat.app;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.provider.Settings;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
+import android.util.Log;
 
 import androidx.core.content.ContextCompat;
 import androidx.activity.result.ActivityResult;
 
 import com.getcapacitor.annotation.ActivityCallback;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
-@CapacitorPlugin(name = "CallService")
+@CapacitorPlugin(name = "CallService", permissions = {
+        @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO }),
+        @Permission(alias = "camera", strings = { Manifest.permission.CAMERA })
+})
 public class CallServicePlugin extends Plugin {
 
+    private static final String DEBUG_TAG = "TalkChatCallDebug";
     private static volatile CallServicePlugin instance;
+
+    private void logPluginError(String operation, Exception error) {
+        Log.e(DEBUG_TAG, "NATIVE_PLUGIN_ERROR " + operation, error);
+    }
 
     @Override
     public void load() {
         super.load();
         instance = this;
+        Log.i(DEBUG_TAG, "CALL_SERVICE_PLUGIN_LOADED");
     }
 
     @Override
@@ -34,6 +48,39 @@ public class CallServicePlugin extends Plugin {
             instance = null;
         }
         super.handleOnDestroy();
+    }
+
+    @PluginMethod
+    public void logCallDiagnostic(PluginCall call) {
+        String stage = call.getString("stage", "UNKNOWN").replaceAll("[^A-Za-z0-9_:-]", "");
+        if (stage.length() > 60) stage = stage.substring(0, 60);
+        String detail = call.getString("detail", "").replace('\n', ' ').replace('\r', ' ');
+        if (detail.length() > 700) detail = detail.substring(0, 700);
+        Log.i(DEBUG_TAG, "WEBVIEW " + stage + " " + detail);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void requestCallPermissions(PluginCall call) {
+        boolean cameraRequested = Boolean.TRUE.equals(call.getBoolean("camera", false));
+        Log.i(DEBUG_TAG, "PERMISSION_REQUEST microphone=true camera=" + cameraRequested);
+        String[] aliases = cameraRequested
+                ? new String[] { "microphone", "camera" }
+                : new String[] { "microphone" };
+        requestPermissionForAliases(aliases, call, "callMediaPermissionsResult");
+    }
+
+    @PermissionCallback
+    public void callMediaPermissionsResult(PluginCall call) {
+        if (call == null) return;
+        boolean microphoneGranted = getPermissionState("microphone") == PermissionState.GRANTED;
+        boolean cameraRequested = Boolean.TRUE.equals(call.getBoolean("camera", false));
+        boolean cameraGranted = !cameraRequested || getPermissionState("camera") == PermissionState.GRANTED;
+        Log.i(DEBUG_TAG, "PERMISSION_RESULT microphone=" + microphoneGranted + " camera=" + (cameraRequested ? cameraGranted : "not_requested"));
+        JSObject result = new JSObject();
+        result.put("microphone", microphoneGranted);
+        result.put("camera", cameraGranted);
+        call.resolve(result);
     }
 
     // ------------------------------------------
@@ -79,6 +126,7 @@ public class CallServicePlugin extends Plugin {
             );
 
         } catch (Exception e) {
+            logPluginError("requestOverlayPermission", e);
             call.reject("Overlay permission request failed", e);
         }
     }
@@ -211,6 +259,7 @@ public class CallServicePlugin extends Plugin {
             call.resolve();
 
         } catch (Exception e) {
+            logPluginError("start", e);
             call.reject("Could not start call service", e);
         }
     }
@@ -227,6 +276,7 @@ public class CallServicePlugin extends Plugin {
             call.resolve();
 
         } catch (Exception e) {
+            logPluginError("stop", e);
             call.reject("Could not stop call service", e);
         }
     }
@@ -263,6 +313,7 @@ public class CallServicePlugin extends Plugin {
             );
 
         } catch (Exception e) {
+            logPluginError("startScreenShare", e);
             call.reject("Could not request screen capture permission", e);
         }
     }
@@ -312,6 +363,7 @@ public class CallServicePlugin extends Plugin {
             call.resolve();
 
         } catch (Exception e) {
+            logPluginError("screenCaptureResult", e);
             call.reject("Could not start screen capture", e);
         }
     }
@@ -333,6 +385,7 @@ public class CallServicePlugin extends Plugin {
             call.resolve();
 
         } catch (Exception e) {
+            logPluginError("stopScreenShare", e);
             call.reject("Could not stop screen capture", e);
         }
     }
@@ -419,6 +472,7 @@ public class CallServicePlugin extends Plugin {
             call.resolve();
 
         } catch (Exception e) {
+            logPluginError("showOverlay", e);
             call.reject("Could not show call overlay", e);
         }
     }
@@ -442,6 +496,7 @@ public class CallServicePlugin extends Plugin {
             call.resolve();
 
         } catch (Exception e) {
+            logPluginError("updateOverlay", e);
             call.reject("Could not update call overlay", e);
         }
     }
@@ -463,6 +518,7 @@ public class CallServicePlugin extends Plugin {
             call.resolve();
 
         } catch (Exception e) {
+            logPluginError("hideOverlay", e);
             call.reject("Could not hide call overlay", e);
         }
     }
