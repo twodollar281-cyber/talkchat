@@ -482,6 +482,28 @@
   };
   const micErrorText = (e) => { const t = MIC_T[LANG()] || MIC_T.tr; return `${t[0]}\n\n${t[1]}: ${e && e.name ? e.name : "UnknownError"}\n${e && e.message ? e.message : t[2]}`; };
 
+     // Android system overlay permission
+  async function requestDirectOverlayPermission() {
+    const P = window.Capacitor?.Plugins?.CallService;
+
+    if (!P?.checkOverlayPermission || !P?.requestOverlayPermission) {
+      return false;
+    }
+
+    try {
+      let result = await P.checkOverlayPermission();
+
+      if (!result?.granted) {
+        result = await P.requestOverlayPermission();
+      }
+
+      return !!result?.granted;
+    } catch (error) {
+      console.warn("TalkChat overlay permission:", error);
+      return false;
+    }
+  }
+
   // Otomatik oynatma engellenirse bir sonraki dokunuşta yeniden dene (ses gelmeme sorunu)
   const playMedia = (node) => {
     const p = node.play();
