@@ -666,6 +666,7 @@
     if (p) return alert(p);
     if (!socket.connected) return alert(tx("offline"));
     askNotify();
+    await requestDirectOverlayPermission();
     getIceServers().catch(() => {}); // TURN bilgisini önceden ısıt
     let local;
     try { local = await getMedia(mode); } catch (e) { console.error("TalkChat media error:", e); return alert(micErrorText(e)); }
