@@ -428,6 +428,10 @@
       active: true, conversationId: c.convo, text: tx("callContinues"),
       onJoin: () => { c.minimized = false; box.hidden = false; paint(); }
     } : null);
+
+    if (c && !c.over) {
+      syncDirectNativeOverlay(false);
+    }
   }
    
   /* ---------- zil sesi + bildirim ---------- */
