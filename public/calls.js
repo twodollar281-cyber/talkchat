@@ -504,6 +504,96 @@
     }
   }
 
+    // ---------- PRIVATE CALL NATIVE OVERLAY ----------
+  const directAppPlugin = window.Capacitor?.Plugins?.App;
+
+  function syncDirectNativeOverlay(show = false) {
+    const c = cur;
+
+    if (!c || c.over) {
+      nativeCall("hideOverlay");
+      return;
+    }
+
+    const participants = callPeople(c).map(person => ({
+      username: person.username,
+      displayName: person.displayName || person.name || person.username,
+      avatar: person.avatar || ""
+    }));
+
+    const seconds = c.connectedAt
+      ? Math.floor((Date.now() - c.connectedAt) / 1000)
+      : 0;
+
+    const data = {
+      title: displayName(personByName(c, c.peer)) || c.peer || "TalkChat",
+      text: NATIVE_T[LANG()] || NATIVE_T.tr,
+      duration: fmt(seconds),
+      speaker: "",
+      participants: JSON.stringify(participants),
+      mediaType: c.mediaType || "audio",
+      micMuted: !!c.muted,
+      cameraOn: !!c.cameraOn,
+      isGroup: false
+    };
+
+    nativeCall(show ? "showOverlay" : "updateOverlay", data);
+  }
+
+  if (directAppPlugin?.addListener) {
+    directAppPlugin.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) {
+        nativeCall("hideOverlay");
+      } else if (cur && !cur.over) {
+        syncDirectNativeOverlay(true);
+      }
+    }).catch(console.error);
+  }
+
+  const directCallPlugin = window.Capacitor?.Plugins?.CallService;
+
+  if (directCallPlugin?.addListener) {
+    directCallPlugin.addListener("overlayAction", ({ action } = {}) => {
+      if (!action) return;
+
+      switch (action) {
+        case "mic":
+          if (cur && !cur.over) {
+            toggleMute();
+            syncDirectNativeOverlay();
+          }
+          break;
+
+        case "camera":
+          if (cur && !cur.over) {
+            toggleCamera();
+            syncDirectNativeOverlay();
+          }
+          break;
+
+        case "end":
+          hangUp();
+          break;
+
+        case "hide":
+          nativeCall("hideOverlay");
+          break;
+
+        case "return":
+          nativeCall("hideOverlay");
+
+          if (cur && !cur.over) {
+            cur.minimized = false;
+            if (typeof showPage === "function") {
+              showPage("messages");
+            }
+            paint();
+          }
+          break;
+      }
+    }).catch(console.error);
+}
+   
   // Otomatik oynatma engellenirse bir sonraki dokunuşta yeniden dene (ses gelmeme sorunu)
   const playMedia = (node) => {
     const p = node.play();
