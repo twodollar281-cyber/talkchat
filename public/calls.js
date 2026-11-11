@@ -428,7 +428,11 @@
       onJoin: () => { c.minimized = false; box.hidden = false; paint(); }
     } : null);
   }
-
+   
+  if (c && !c.over) {
+    syncDirectNativeOverlay(false);
+      }
+}
   /* ---------- zil sesi + bildirim ---------- */
   let ringCtx = null, ringTimer = null;
   function startRing() {
