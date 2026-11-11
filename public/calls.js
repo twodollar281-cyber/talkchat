@@ -422,17 +422,18 @@
     setIcon(el.switchCamera, "switch"); label(el.switchCamera, tx("switchCamera"));
     setIcon(el.screen, "screen"); label(el.screen, c && c.sharing ? tx("stopShare") : tx("share"));
     el.screen.classList.toggle("on", !!(c && c.sharing));
+    
     renderDirectMenu(c);
     window.TalkChatCallBanners.update("direct-call", c && c.accepted && !c.over ? {
       active: true, conversationId: c.convo, text: tx("callContinues"),
       onJoin: () => { c.minimized = false; box.hidden = false; paint(); }
     } : null);
+
+    if (c && !c.over) {
+      syncDirectNativeOverlay(false);
+    }
   }
    
-  if (c && !c.over) {
-    syncDirectNativeOverlay(false);
-      }
-}
   /* ---------- zil sesi + bildirim ---------- */
   let ringCtx = null, ringTimer = null;
   function startRing() {
