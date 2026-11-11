@@ -761,7 +761,6 @@
     if (p) return alert(p);
     if (!socket.connected) return alert(tx("offline"));
     askNotify();
-    await requestDirectOverlayPermission();
     getIceServers().catch(() => {}); // TURN bilgisini önceden ısıt
     let local;
     try { local = await getMedia(mode); } catch (e) { console.error("TalkChat media error:", e); return alert(micErrorText(e)); }
@@ -771,6 +770,12 @@
     paint();
     emit("call:invite", c.convo, { mediaType: c.mediaType });
     c.ringTimer = setTimeout(() => { if (cur === c && !c.accepted && !c.over) hangUp(tx("noAnswer")); }, RING_MS);
+    const callService = window.Capacitor?.Plugins?.CallService;
+    if (callService?.checkOverlayPermission && callService?.requestOverlayPermission) {
+      requestDirectOverlayPermission().then(granted => {
+        if (granted && cur === c && !c.over) syncDirectNativeOverlay(false);
+      }).catch(error => console.warn("TalkChat overlay permission:", error));
+    }
   }
 
   function showIncoming(d) {
@@ -1027,15 +1032,26 @@
   });
   // Sohbet başlığındaki telefon düğmesi (id ile; eski aria-label de çalışır, dil çevirisi aria-label'i değiştirse bile id yeter)
   document.addEventListener("click", (e) => {
-    const btn = e.target.closest('#tcCallBtn, #tcVideoCallBtn, [data-talk-original-aria-label="Səsli zəng"], [aria-label="Səsli zəng"]');
+    const target = e.target instanceof Element ? e.target : null;
+    const btn = target && target.closest('#tcCallBtn, #tcVideoCallBtn, [data-talk-original-aria-label="Səsli zəng"], [aria-label="Səsli zəng"]');
     if (!btn) return;
+    e.preventDefault();
     const mode = btn.id === "tcVideoCallBtn" ? "video" : "audio";
     const conv = conversationsCache.find(x => x.id === activeConversation);
     if (conv && conv.type === "group") {
-      if (window.TalkChatGroupCalls) { e.preventDefault(); window.TalkChatGroupCalls.startCall(activeConversation, mode); }
+      if (!window.TalkChatGroupCalls?.startCall) {
+        console.error("TalkChat: group call module is unavailable.");
+        alert(tx("callFailed"));
+        return;
+      }
+      Promise.resolve(window.TalkChatGroupCalls.startCall(activeConversation, mode))
+        .catch(error => { console.error("TalkChat group call error:", error); alert(tx("callFailed")); });
       return;
     }
-    startCall(mode);
+    startCall(mode).catch(error => {
+      console.error("TalkChat call error:", error);
+      alert(tx("callFailed"));
+    });
   });
   window.addEventListener("beforeunload", () => { if (cur && !cur.over) emit("call:end", cur.convo); });
 })();

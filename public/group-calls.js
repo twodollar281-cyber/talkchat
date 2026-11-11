@@ -27,6 +27,7 @@
     busy1:      { tr: "Önce mevcut aramayı bitir.", az: "Əvvəlcə mövcud zəngi bitir.", en: "End your current call first.", ru: "Сначала завершите текущий звонок." },
     noMic:      { tr: "Mikrofon kullanılamıyor.", az: "Mikrofon əlçatan deyil.", en: "Microphone is not available.", ru: "Микрофон недоступен." },
     micFail:    { tr: "Mikrofon açılamadı.", az: "Mikrofon açıla bilmədi.", en: "Could not open the microphone.", ru: "Не удалось включить микрофон." },
+    offline:    { tr: "Sunucu bağlantısı yok. Birazdan tekrar dene.", az: "Serverə bağlantı yoxdur. Bir az sonra yenidən yoxla.", en: "Server connection is unavailable. Try again shortly.", ru: "Нет подключения к серверу. Попробуйте позже." },
     error:      { tr: "Grup araması hatası.", az: "Qrup zəngi xətası.", en: "Group call error.", ru: "Ошибка группового звонка." },
     native:     { tr: "Grup araması devam ediyor", az: "Qrup zəngi davam edir", en: "Group call in progress", ru: "Идёт групповой звонок" },
     cameraOn:   { tr: "Kamerayı kapat", az: "Kameranı bağla", en: "Turn camera off", ru: "Выключить камеру" },
@@ -636,11 +637,13 @@ if (appNativePlugin?.addListener) {
     if (!conv || conv.type !== "group") return;
     if (state) return alert(tx("already"));
     if (oneToOneVisible()) return alert(tx("busy1"));
+    if (!socket.connected) return alert(tx("offline"));
     try { await ensureState(conversationId, mediaType === "video" ? "video" : "audio"); socket.emit("group-call:start", { conversationId, mediaType: state.mediaType }); }
     catch (e) { await leave(false); alert((e && e.message) || tx("micFail")); }
   }
 
   async function joinCall(conversationId, mediaType = "audio") {
+    if (!socket.connected) return alert(tx("offline"));
     try { await ensureState(conversationId, mediaType === "video" ? "video" : "audio"); socket.emit("group-call:join", { conversationId }); }
     catch (e) { await leave(false); alert((e && e.message) || tx("micFail")); }
   }
