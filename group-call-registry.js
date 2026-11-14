@@ -185,6 +185,17 @@ function createGroupCallRegistry(options = {}) {
       return byUser.has(username);
     },
 
+    // Still-ringing group calls for a user who reconnected: active, recent, and the user has not
+    // joined, declined or left yet. Used to replay "group-call:incoming" after a dropped socket.
+    pendingInvites({ username, conversationIds = [], maxAgeMs = 45_000 } = {}) {
+      if (!validText(username)) return [];
+      const t = now();
+      return conversationIds
+        .map(id => calls.get(id))
+        .filter(call => call && call.status === "active" && t - call.startedAt <= maxAgeMs && !call.participants.has(username))
+        .map(snapshot);
+    },
+
     get size() {
       return calls.size;
     }

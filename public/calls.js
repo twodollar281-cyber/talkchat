@@ -359,6 +359,7 @@
   /* ---------- durum ---------- */
   let cur = null; // aktif arama
   let inc = null; // gelen arama (henüz cevaplanmadı)
+  let ringGrace = null; // bağlantı kopunca zil ekranını hemen kapatmamak için bekleme zamanlayıcısı
   const busy = () => (cur && !cur.over) || !!inc;
   const newCall = (o) => ({ callId: null, mediaType: "audio", pc: null, vTrans: null, pending: [], cands: [], remoteSet: false, making: false, ignore: false,
     accepted: false, muted: false, sharing: false, remoteMuted: false, remoteSharing: false, over: false, connectedAt: 0,
@@ -786,6 +787,7 @@
     notify(inc.peer);
   }
   function dismissIncoming() {
+    clearTimeout(ringGrace); ringGrace = null;
     inc = null;
     stopRing();
     paint();
@@ -916,7 +918,8 @@
   socket.on("call:incoming", (d) => {
     if (!d || !d.conversationId) return;
     // Sunucu aynı çağrıyı yeniden gönderdiyse (yeniden bağlanma) tekrar işleme / reddetme
-    if (d.callId && ((inc && inc.callId === d.callId) || (cur && !cur.over && cur.callId === d.callId))) return;
+    if (d.callId && inc && inc.callId === d.callId) { clearTimeout(ringGrace); ringGrace = null; return; } // yeniden bağlanınca sunucu aynı çağrıyı tekrar gönderdi: zil ekranı geçerli
+    if (d.callId && cur && !cur.over && cur.callId === d.callId) return;
     if (busy()) { emit("call:reject", d.conversationId); return; } // meşgul: arayan boşuna beklemesin
     if (cur && cur.over) cur = null;
     showIncoming(d);
@@ -977,9 +980,14 @@
     }
   });
   socket.on("disconnect", () => {
-    if (inc) dismissIncoming();
+    // Arka planda mobil bağlantı kopması gelen arama ekranını anında kapatmasın: yeniden bağlanma için süre tanı.
+    if (inc) { const i = inc; clearTimeout(ringGrace); ringGrace = setTimeout(() => { if (inc === i) dismissIncoming(); }, 30000); }
     const c = cur;
     if (c && !c.over) { c.warn = tx("reconnecting"); paint(); }
+  });
+  socket.on("connect", () => {
+    // Yeniden bağlandık: sunucu hâlâ çalan çağrıyı yeniden gönderir; gelmezse (çağrı bitti) zil ekranını kapat.
+    if (inc) { const i = inc; clearTimeout(ringGrace); ringGrace = setTimeout(() => { if (inc === i) dismissIncoming(); }, 4000); }
   });
   socket.on("call:peer-reconnecting", d => {
     const c = cur; if (!c || c.over || !matchesCall(c, d)) return;
