@@ -19,8 +19,8 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // WebView-in fayl seçicini (fayllara yönləndirməni) dəstəkləməsi üçün:
-        if (this.bridge != getBridge() && this.bridge.getWebView() != null) {
+        // WebView-in fayl seçicini dəstəkləməsi üçün:
+        if (this.bridge != null && this.bridge.getWebView() != null) {
             setupFileChoosers(this.bridge.getWebView());
         }
     }
@@ -65,10 +65,10 @@ public class MainActivity extends BridgeActivity {
                 if (dataString != null) {
                     results = new Uri[]{Uri.parse(dataString)};
                 } else if (intent.getClipData() != null) {
-                    int count = intent.getItemCount();
+                    int count = intent.getClipData().getItemCount();
                     results = new Uri[count];
                     for (int i = 0; i < count; i++) {
-                        results[i] = intent.getClipData().getItemAt(i).getURI();
+                        results[i] = intent.getClipData().getItemAt(i).getUri();
                     }
                 }
             }
