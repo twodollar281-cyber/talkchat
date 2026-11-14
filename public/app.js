@@ -45,6 +45,9 @@ function showPage(name) {
   if (name === "live") window.TalkChatLive?.load();
   if (name === "ai") window.TalkChatAI?.load();
   if (name === "profile") window.TalkChatCollections?.load();
+  if (name === "player") window.TalkChatPlayer?.load();
+  if (name === "store") window.TalkChatStore?.load();
+  window.dispatchEvent(new CustomEvent("talkchat:pagechange", { detail: { page: name } }));
 }
 document.querySelectorAll("[data-page]").forEach(b => b.addEventListener("click", () => showPage(b.dataset.page)));
 $("loginTab").onclick = () => setAuthMode("login");
@@ -95,6 +98,15 @@ function enterApp() {
   setTimeout(() => { try { registerPush(); } catch(e) { console.error(e); } }, 4000);
   window.dispatchEvent(new CustomEvent("talkchat:entered", { detail: { username: me } }));
 }
+
+// Tətbiq arxa plandan qayıdanda socket qopubsa dərhal yenidən qoş (gələn zəng bərpası üçün)
+function tcReconnectSocket() {
+  try { if (me && !socket.connected) socket.connect(); } catch (e) { console.warn("socket reconnect:", e && e.message); }
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) tcReconnectSocket(); });
+window.addEventListener("online", tcReconnectSocket);
+window.addEventListener("focus", tcReconnectSocket);
+try { window.Capacitor?.Plugins?.App?.addListener?.("appStateChange", s => { if (s && s.isActive) tcReconnectSocket(); }); } catch {}
 
 // ---- Push bildirişləri (yalnız Android tətbiqində) ----
 window.__pushToken = null;
