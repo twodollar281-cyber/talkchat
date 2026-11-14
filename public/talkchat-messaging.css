@@ -902,3 +902,17 @@
     transition-duration: .01ms !important;
   }
 }
+
+/* Mobil: mesajlar paneli sağ-sol simmetrik olsun (mənfi margin sağda boşluq yaradırdı) */
+@media (max-width: 760px) {
+  #app #messagesPage.ig-dm,
+  #app #messagesPage.ig-dm.tc-keyboard-open {
+    width: 100% !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    border-left: 1px solid var(--tc-chat-line) !important;
+    border-right: 1px solid var(--tc-chat-line) !important;
+    border-radius: 18px !important;
+  }
+}

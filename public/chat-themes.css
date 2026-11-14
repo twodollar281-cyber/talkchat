@@ -21,3 +21,21 @@
   .tc-chat-theme-grid, .tc-chat-theme-actions { grid-template-columns: 1fr; }
   .tc-chat-theme-actions .text-button { grid-column: auto; }
 }
+
+/* TalkStore mövzusu bütün tətbiqə tətbiq olunanda (body.tc-app-themed chat-themes.js tərəfindən qoyulur) */
+body.tc-app-themed { background: var(--bg) !important; color: var(--text) !important; }
+body.tc-app-themed #app.app-shell,
+body.tc-app-themed .app-main-shell,
+body.tc-app-themed #app main,
+body.tc-app-themed #app .topbar { background: var(--bg) !important; color: var(--text) !important; }
+body.tc-app-themed #app .bottom-nav,
+body.tc-app-themed .tc-menu-dialog,
+body.tc-app-themed .post-card,
+body.tc-app-themed .profile-card,
+body.tc-app-themed .composer,
+body.tc-app-themed .user-row,
+body.tc-app-themed .notification,
+body.tc-app-themed .tc-store-card,
+body.tc-app-themed #messagesPage.ig-dm,
+body.tc-app-themed #messagesPage.ig-dm .ig-side { background: var(--panel) !important; color: var(--text) !important; }
+body.tc-app-themed .primary { background: var(--purple) !important; }
