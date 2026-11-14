@@ -77,8 +77,8 @@
     try {
       let before = null;
       try {
-        const g = await fetch("/api/chat-themes/default", { credentials: "same-origin" });
-        if (g.ok) { const gb = await g.json().catch(() => null); const cand = gb && (gb.theme || gb); if (isTheme(cand)) before = { background: cand.background, incoming: cand.incoming, outgoing: cand.outgoing, incomingText: cand.incomingText, outgoingText: cand.outgoingText, bubbleStyle: cand.bubbleStyle }; }
+        const g = await fetch("/api/chat-themes", { credentials: "same-origin" });
+        if (g.ok) { const gb = await g.json().catch(() => null); const cand = gb && gb.default; if (isTheme(cand)) before = { background: cand.background, incoming: cand.incoming, outgoing: cand.outgoing, incomingText: cand.incomingText, outgoingText: cand.outgoingText, bubbleStyle: cand.bubbleStyle }; }
       } catch {}
       const res = await fetch("/api/chat-themes/default", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(item.theme) });
       const body = await res.json().catch(() => ({}));
@@ -86,7 +86,7 @@
       if (before && JSON.stringify(before) !== JSON.stringify(item.theme)) { prevTheme = before; try { localStorage.setItem(PREV_KEY, JSON.stringify(before)); } catch {} }
       applied = item.id; writeStr(APPLIED_KEY, applied);
       toast(item.name + " standart söhbət mövzusu oldu.");
-      try { window.TalkChatThemes?.reload?.(); } catch {}
+      try { window.TalkChatChatThemes?.load?.(); } catch {}
       return true;
     } catch (e) { toast(e.message); return false; }
   }
@@ -98,7 +98,7 @@
       if (!res.ok) throw new Error(body.error || "Əvvəlki mövzu bərpa olunmadı.");
       applied = ""; writeStr(APPLIED_KEY, ""); prevTheme = null; writeStr(PREV_KEY, "");
       toast("Əvvəlki mövzu bərpa olundu.");
-      try { window.TalkChatThemes?.reload?.(); } catch {}
+      try { window.TalkChatChatThemes?.load?.(); } catch {}
       go("home");
     } catch (e) { toast(e.message); }
   }
@@ -128,9 +128,21 @@
 
   /* ---------- state helpers ---------- */
   const isOwned = item => item.type === "theme" ? applied === item.id : collected.has(item.id);
-  function collect(item) {
-    if (collected.has(item.id)) return;
-    collected.add(item.id); save(); toast(item.name + " kolleksiyaya əlavə olundu."); render();
+  async function applyFrame(item) {
+    try {
+      const res = await fetch("/api/profile/frame", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ frame: item ? item.id : "" }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Çərçivə tətbiq olunmadı.");
+      try { window.TalkFrames?.paintMine(body.frame); } catch {}
+      try { window.loadMyProfile && window.loadMyProfile(); } catch {}
+      toast(item ? item.name + " profilinə tətbiq olundu." : "Çərçivə götürüldü.");
+      return true;
+    } catch (e) { toast(e.message); return false; }
+  }
+  async function collect(item) {
+    if (!collected.has(item.id)) { collected.add(item.id); save(); toast(item.name + " kolleksiyaya əlavə olundu."); }
+    if (item.type === "frame") await applyFrame(item);
+    render();
   }
   function toggleFav(item) {
     if (favs.has(item.id)) { favs.delete(item.id); toast("Sevimlilərdən çıxarıldı."); } else { favs.add(item.id); toast(item.name + " sevimlilərə əlavə olundu."); }
@@ -225,6 +237,7 @@
     box.appendChild(checklist(item));
     const primary = el("button", "ts-primary"); primary.type = "button";
     if (item.type === "theme") { primary.append(svgSpan(SVG.dl), el("span", null, applied === item.id ? "Tətbiq olunub ✓" : "Tətbiq Et")); primary.onclick = () => go("apply"); }
+    else if (item.type === "frame") { const has = collected.has(item.id); primary.append(svgSpan(SVG.check), el("span", null, has ? "Profilə tətbiq et" : "Yüklə və profilə tətbiq et")); primary.onclick = () => collect(item); }
     else { const has = collected.has(item.id); primary.append(svgSpan(has ? SVG.check : SVG.dl), el("span", null, has ? "Kolleksiyadadır" : item.type === "pack" ? "Yüklə" : "Kolleksiyaya əlavə et")); primary.disabled = has; primary.onclick = () => collect(item); }
     const fav = el("button", "ts-secondary" + (favs.has(item.id) ? " on" : "")); fav.type = "button";
     fav.append(svgSpan(SVG.heart), el("span", null, favs.has(item.id) ? "Sevimlilərdən çıxar" : "Sevimlilərimə Əlavə Et")); fav.onclick = () => toggleFav(item);
