@@ -4,9 +4,9 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.webkit.ValueCallback;
-import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebChromeClient;
 
 public class MainActivity extends BridgeActivity {
     public static boolean mediaPlaying = false;
@@ -25,16 +25,10 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    @Override
-    public void onStart() {
-        super.onStart();
-        if (this.bridge != null && this.bridge.getWebView() != null) {
-            setupFileChoosers(this.bridge.getWebView());
-        }
-    }
-
     private void setupFileChoosers(WebView webView) {
-        webView.setWebChromeClient(new WebChromeClient() {
+        // MÜHÜM: Capacitor-un BridgeWebChromeClient-ini əvəz etmirik, genişləndiririk.
+        // Əks halda onPermissionRequest işləmir və getUserMedia "NotAllowedError: Permission denied" verir.
+        webView.setWebChromeClient(new BridgeWebChromeClient(this.bridge) {
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
                 if (uploadMessage != null) {
