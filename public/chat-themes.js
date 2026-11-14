@@ -38,8 +38,17 @@
     const radius = value.bubbleStyle === "square" ? "5px" : value.bubbleStyle === "soft" ? "12px" : "22px";
     root.style.setProperty("--tc-chat-bubble-radius", radius);
   }
+  function applyApp(theme) {
+    const rs = document.documentElement.style;
+    const map = { "--bg": "background", "--panel": "incoming", "--panel2": "incoming", "--text": "incomingText", "--purple": "outgoing" };
+    document.body.classList.toggle("tc-app-themed", !!theme);
+    for (const [cssVar, key] of Object.entries(map)) {
+      if (theme) rs.setProperty(cssVar, theme[key]); else rs.removeProperty(cssVar);
+    }
+  }
   function applyFor(id = activeId()) {
     applyTheme(themeFor(id));
+    applyApp(settings.default);
   }
   async function loadSettings() {
     try {
@@ -142,4 +151,5 @@
 
   loadSettings();
   window.TalkChatChatThemes = { load: loadSettings };
+  window.TalkChatThemes = { reload: loadSettings };
 })();

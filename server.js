@@ -1157,8 +1157,10 @@ return res.json({
         });
     }
 });
+const PROFILE_FRAMES = new Set(["item-frame-neon", "item-frame-galaxy", "item-frame-royal", "item-frame-cyber"]);
 function publicUser(user) {
     return {
+        frame: PROFILE_FRAMES.has(user.frame) ? user.frame : "",
         username: user.username,
         role: roleOf(user),
         displayName: user.displayName || "",
@@ -1186,6 +1188,7 @@ function publicPost(post, userList = users(), viewerUsername = "") {
         })),
         authorName: author?.displayName || "",
         authorAvatar: author?.avatar || "",
+        authorFrame: PROFILE_FRAMES.has(author?.frame) ? author.frame : "",
         authorRole: roleOf(author),
         authorVerified: author?.verified === true
     };
@@ -1654,6 +1657,17 @@ app.put("/api/profile", requireAuth, (req, res) => {
         lastSeenVisibility: ACTIVITY_VISIBILITIES.has(user.lastSeenVisibility) ? user.lastSeenVisibility : "everyone",
         privacySettings: privacySettingsFor(user)
     });
+});
+app.put("/api/profile/frame", requireAuth, (req, res) => {
+    const frame = req.body?.frame;
+    if (frame !== "" && frame !== null && (typeof frame !== "string" || !PROFILE_FRAMES.has(frame)))
+        return res.status(400).json({ error: "Çərçivə düzgün deyil." });
+    const list = users();
+    const user = list.find(u => u.username === currentUser(req));
+    if (!user) return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+    user.frame = frame || "";
+    saveUsers(list);
+    res.json({ frame: user.frame });
 });
 app.post("/api/profile/avatar", requireAuth, socialUpload.single("file"), async (req, res) => {
     if (!req.file || !req.file.mimetype.startsWith("image/")) {

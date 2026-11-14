@@ -1,0 +1,29 @@
+/* TalkStore profil çərçivələri — data-frame atributu olan hər avatarda görünür */
+[data-frame="item-frame-neon"]   { --f1:#2f7bff; --f2:#8a3dff; }
+[data-frame="item-frame-galaxy"] { --f1:#c04dff; --f2:#36c5ff; }
+[data-frame="item-frame-royal"]  { --f1:#ffd45e; --f2:#c8901a; }
+[data-frame="item-frame-cyber"]  { --f1:#36c5ff; --f2:#7c3aed; }
+[data-frame^="item-frame-"] {
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #11111d, 0 0 0 4px var(--f1), 0 0 0 6px var(--f2), 0 0 14px 5px var(--f2) !important;
+  overflow: visible;
+}
+.ig-av[data-frame^="item-frame-"] { overflow: visible; }
+.ig-av[data-frame^="item-frame-"] img { border-radius: 50%; }
+.avatar-wrap[data-frame="item-frame-neon"]::after,
+.avatar-wrap[data-frame="item-frame-royal"]::after {
+  content: "👑"; position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 22px; z-index: 3;
+}
+
+.tc-frame-open { display: inline-block; margin: 6px auto 10px; }
+#tcFrameDialog { max-width: 420px; width: calc(100% - 28px); border: 1px solid rgba(255,255,255,.12); border-radius: 18px; background: #181327; color: #f8f5ff; padding: 16px; }
+#tcFrameDialog::backdrop { background: rgba(0,0,0,.6); }
+.tc-frame-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.tc-frame-head h2 { margin: 0; font-size: 18px; }
+.tc-frame-hint { color: #b4a9c7; font-size: 13px; margin: 0 0 12px; }
+.tc-frame-grid { list-style: none; margin: 0; padding: 8px 4px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.tc-frame-opt { background: transparent; border: 0; color: inherit; display: grid; justify-items: center; gap: 8px; cursor: pointer; font-size: 12px; padding: 6px 2px; border-radius: 12px; }
+.tc-frame-opt.active { outline: 2px solid #8b5cf6; }
+.tc-frame-opt .tc-frame-prev { width: 54px; height: 54px; border-radius: 50%; background: linear-gradient(135deg,#8257ff,#347ec7); display: grid; place-items: center; font-weight: 700; }
+.tc-frame-empty { grid-column: 1 / -1; text-align: center; color: #b4a9c7; font-size: 13px; }
+.tc-frame-status { min-height: 18px; font-size: 13px; color: #b4a9c7; margin: 8px 0 0; }
