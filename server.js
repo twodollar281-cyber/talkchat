@@ -582,6 +582,15 @@ io.on("connection", socket => {
     if (ringingCall && ringingCall.status === "ringing" && ringingCall.callee === name) {
         socket.emit("call:incoming", { callId: ringingCall.id, conversationId: ringingCall.conversationId, from: ringingCall.caller, to: name, mediaType: ringingCall.mediaType });
     }
+    if (!activeGroupCalls.hasUser(name)) {
+        const myGroupIds = conversations()
+            .filter(c => c.type === "group" && Array.isArray(c.participants) && c.participants.includes(name))
+            .map(c => c.id);
+        for (const gc of activeGroupCalls.pendingInvites({ username: name, conversationIds: myGroupIds })) {
+            const starter = (gc.participants.find(p => p.status === "joined") || {}).username || "";
+            socket.emit("group-call:incoming", { conversationId: gc.conversationId, callId: gc.id, from: starter, mediaType: gc.mediaType, startedAt: gc.startedAt });
+        }
+    }
     onlineUsers.set(name, (onlineUsers.get(name) || 0) + 1);
     publishPresence(name);
 
