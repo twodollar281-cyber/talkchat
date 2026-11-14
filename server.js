@@ -3163,6 +3163,10 @@ app.post("/api/rooms/:id/messages/:messageId/react", requireAuth, (req, res) => 
 const PORT = process.env.PORT || 3000;
 async function startServer() {
     if (supa.enabled) await supa.ensurePrivateBucket();
+    
+     // app, io və verilənlər bazası (store) hazır olduqdan sonra bura yazırsan:
+    registerTalkChatPR43Features(app, io, store); 
+    
     server.listen(PORT, "0.0.0.0", () => console.log(`TalkChat V2 işləyir: http://localhost:${PORT}`));
 }
 startServer().catch(error => {
