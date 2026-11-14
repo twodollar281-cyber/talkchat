@@ -26,6 +26,31 @@ function getMessaging() {
     return messagingInstance;
 }
 
+const isCallKind = kind => kind === "call" || kind === "group-call";
+
+// dataOnly=true: zəng push-u "notification" bloku olmadan göndərilir ki, tətbiq arxa planda/bağlı olanda belə
+// native CallMessagingService işə düşüb tam ekran zəng bildirişi göstərsin. Köhnə APK-lar üçün standart rejim saxlanılıb.
+function buildMessage({ token, kind, fromName, body, extraData = {}, dataOnly = false }) {
+    const data = { kind, sender: String(fromName || ""), ...Object.fromEntries(Object.entries(extraData).map(([k, v]) => [k, String(v)])) };
+    const call = isCallKind(kind);
+    const android = { priority: "high", ...(call ? { ttl: 30000 } : {}) };
+    if (call && dataOnly) {
+        return { token, data: { ...data, title: "TalkChat", body }, android };
+    }
+    return {
+        token,
+        notification: { title: "TalkChat", body },
+        data,
+        android: {
+            ...android,
+            notification: {
+                channelId: call ? "calls" : "messages",
+                ...(call ? { priority: "max", visibility: "public", sticky: false, defaultVibrateTimings: true } : {})
+            }
+        }
+    };
+}
+
 function createPush({ readJSON, saveJSON }) {
     const load = () => readJSON("pushTokens.json");
 
@@ -46,15 +71,8 @@ function createPush({ readJSON, saveJSON }) {
                     : kind === "group-call" ? texts.groupCall(fromName)
                     : texts.message(fromName);
                 try {
-                    const r = await messaging.send({
-                        token: t.token,
-                        notification: { title: "TalkChat", body },
-                        data: { kind, sender: String(fromName || ""), ...Object.fromEntries(Object.entries(extraData).map(([k, v]) => [k, String(v)])) },
-                        android: {
-                            priority: "high",
-                            notification: { channelId: kind === "call" ? "calls" : "messages" }
-                        }
-                    });
+                    const dataOnly = process.env.FCM_CALL_DATA_ONLY === "true";
+                    const r = await messaging.send(buildMessage({ token: t.token, kind, fromName, body, extraData, dataOnly }));
                     console.log("FCM gonderildi:", username, kind, r);
                 } catch (e) {
                     const code = e.code || e.message || "";
@@ -70,4 +88,4 @@ function createPush({ readJSON, saveJSON }) {
     };
 }
 
-module.exports = { createPush };
+module.exports = { createPush, buildMessage };

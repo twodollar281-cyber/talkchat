@@ -26,6 +26,8 @@
   <link rel="stylesheet" href="chat-themes.css?v=1">
   <link rel="stylesheet" href="ai-assistant.css?v=3">
   <link rel="stylesheet" href="talkchat-messaging.css?v=1">
+  <link rel="stylesheet" href="talkplayer.css?v=2">
+  <link rel="stylesheet" href="talkstore.css?v=2">
 </head>
 <body>
   <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -414,6 +416,72 @@
         </div>
       </section>
 
+      <section id="playerPage" class="page tc-player-page" hidden aria-label="TalkPlayer">
+        <header class="tp-top">
+          <div class="tp-top-text"><span class="eyebrow">MUSİQİ</span><h1>TalkPlayer</h1></div>
+          <button id="tcPlayerAdd" class="tc-player-add" type="button"><span class="tp-add-ico" data-icon="plus" aria-hidden="true"></span><span>Mahnı əlavə et</span></button>
+        </header>
+        <label class="tp-search" for="tcPlayerSearch"><span data-icon="search" aria-hidden="true"></span><input id="tcPlayerSearch" class="tp-player-search" type="search" placeholder="Mahnı və ya ifaçı axtar..." autocomplete="off" aria-label="Mahnı axtar"></label>
+        <div id="tcPlayerTabs" class="tp-tabs" role="tablist" hidden>
+          <button type="button" role="tab" data-ptab="browse" class="active">Kəşf et</button>
+          <button type="button" role="tab" data-ptab="library">Kitabxana</button>
+        </div>
+        <div id="tcPlayerHome" class="tp-home"></div>
+        <div id="tcPlayerListHead" class="tc-player-head" hidden>
+          <button id="tcPlayerBack" class="tp-back" type="button" aria-label="Geri"><span data-icon="back" aria-hidden="true"></span></button>
+          <h2 id="tcPlayerListTitle">Siyahı</h2>
+          <button id="tcPlayerClear" class="tc-player-clear" type="button" hidden>Hamısını sil</button>
+        </div>
+        <input id="tcPlayerFile" type="file" accept="audio/*" multiple hidden>
+        <ul id="tcPlayerList" class="tc-player-list" hidden></ul>
+        <div id="tcPlayerEmpty" class="tc-player-empty">
+          <span class="tp-empty-ico" data-icon="music" aria-hidden="true"></span>
+          <b>Hələ mahnı yoxdur</b>
+          <span>Cihazından audio fayl seç və kitabxananı yarat.</span>
+          <button id="tcPlayerEmptyAdd" class="tc-player-add" type="button"><span class="tp-add-ico" data-icon="plus" aria-hidden="true"></span><span>Mahnı əlavə et</span></button>
+        </div>
+      </section>
+      <section id="storePage" class="page tc-store-page" hidden aria-label="TalkStore">
+        <header class="ts-top">
+          <button id="tcStoreBack" class="ts-round" type="button" aria-label="Geri" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+          <span id="tcStoreLogo" class="ts-logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6.5 8h11l1 11.2a1.4 1.4 0 0 1-1.4 1.5H6.9a1.4 1.4 0 0 1-1.4-1.5L6.5 8z"/><path d="M9 8V6.8a3 3 0 0 1 6 0V8"/><path d="m12 11.6.8 1.7 1.8.2-1.3 1.2.4 1.8-1.7-.9-1.7.9.4-1.8-1.3-1.2 1.8-.2z" class="ts-star"/></svg></span>
+          <h1 id="tcStoreTitle" class="ts-title">TalkStore</h1>
+          <span id="tcStoreGemChip" class="ts-gems" title="Kolleksiyandakı elementlər"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M9 3l3 18M15 3l-3 18" class="ts-gem-lines"/></svg><b id="tcStoreGems">0</b></span>
+        </header>
+        <label class="ts-search" for="tcStoreSearch"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="tcStoreSearch" class="tc-store-search" type="search" placeholder="Mağazada axtar..." aria-label="Mağazada axtar" autocomplete="off"></label>
+
+        <div id="tcStoreHome" class="ts-view">
+          <div class="ts-hero">
+            <div class="ts-hero-text"><h2>TalkStore</h2><p>Tətbiqini fərdiləşdir! <span aria-hidden="true">✨</span></p><button id="tcStoreStart" class="ts-cta" type="button">Başla <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+            <div class="ts-hero-art" aria-hidden="true"><svg viewBox="0 0 120 120"><defs><linearGradient id="tsBag" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a98bff"/><stop offset="1" stop-color="#6d3df2"/></linearGradient></defs><path d="M38 36c0-14 9-22 22-22s22 8 22 22" fill="none" stroke="#c9b6ff" stroke-width="7" stroke-linecap="round"/><path d="M24 40h72l6 62a8 8 0 0 1-8 9H26a8 8 0 0 1-8-9z" fill="url(#tsBag)"/><path d="m60 56 5.6 11.8 12.9 1.6-9.5 8.9 2.5 12.8L60 84.6l-11.5 6.5L51 78.3l-9.5-8.9 12.9-1.6z" fill="#fff"/></svg></div>
+            <div class="ts-dots" aria-hidden="true"><i class="on"></i><i></i><i></i></div>
+          </div>
+          <div class="ts-cats" role="tablist" aria-label="Kateqoriyalar">
+            <button type="button" class="ts-cat" data-store-tab="themes"><span class="ts-cat-ico ico-theme" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.7-.8 1.7-1.7 0-.5-.2-.9-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1 .8-1.7 1.8-1.7H16a5 5 0 0 0 5-5c0-3.7-4-7-9-7z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/></svg></span><b>Themes</b><small>Mövzular</small></button>
+            <button type="button" class="ts-cat" data-store-tab="stickers"><span class="ts-cat-ico ico-sticker" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v8l-7 7H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M14 21v-5a2 2 0 0 1 2-2h5"/><circle cx="9" cy="10" r="1"/><circle cx="15" cy="10" r="1"/><path d="M8.5 14c1 1.2 2.2 1.7 3.5 1.7"/></svg></span><b>Stickers</b><small>Stikerlər</small></button>
+            <button type="button" class="ts-cat" data-store-tab="frames"><span class="ts-cat-ico ico-frame" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20.5c.8-3.8 3.5-5.8 7.5-5.8s6.7 2 7.5 5.8"/></svg></span><b>Profile</b><small>Dizaynlar</small></button>
+          </div>
+          <div class="ts-sechead"><h2>Populyar Məhsullar</h2><button id="tcStoreAll" class="ts-link" type="button">Hamısına bax <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+          <ul id="tcStorePopular" class="ts-grid"></ul>
+          <div class="ts-sechead"><h2>Tətbiqlər</h2></div>
+          <ul id="tcStoreApps" class="ts-apps"></ul>
+        </div>
+
+        <div id="tcStoreListView" class="ts-view" hidden>
+          <div id="tcStoreTabs" class="ts-pills tc-store-tabs" role="tablist" aria-label="Sıralama">
+            <button type="button" role="tab" data-store-sort="popular" class="active">Populyar</button>
+            <button type="button" role="tab" data-store-sort="new">Yeni</button>
+            <button type="button" role="tab" data-store-sort="mine">Kolleksiyam</button>
+          </div>
+          <small id="tcStoreCollected" class="ts-note"></small>
+          <ul id="tcStoreList" class="ts-grid tc-store-list"></ul>
+          <p id="tcStoreEmpty" class="tc-store-empty" hidden>Heç nə tapılmadı.</p>
+        </div>
+
+        <div id="tcStoreDetail" class="ts-view" hidden></div>
+        <div id="tcStoreApply" class="ts-view" hidden></div>
+        <div id="tcStoreDone" class="ts-view ts-done" hidden></div>
+      </section>
       <section id="notificationsPage" class="page" hidden>
         <h1>Bildirişlər</h1><div id="notificationList" class="stack"></div>
       </section>
@@ -574,6 +642,8 @@
         <button type="button" data-page="discover"><span aria-hidden="true">⌕</span>Discover</button>
         <button type="button" data-page="live"><span aria-hidden="true">●</span>Canlı yayımlar</button>
         <button type="button" data-page="reels"><span aria-hidden="true">▶</span>Reels</button>
+        <button type="button" data-page="player"><span aria-hidden="true">♫</span>TalkPlayer</button>
+        <button type="button" data-page="store"><span aria-hidden="true">🛍</span>TalkStore</button>
         <button type="button" data-page="messages"><span aria-hidden="true">▣</span>Mesajlar</button>
         <button type="button" data-page="ai"><span aria-hidden="true">✦</span>TalkChat AI</button>
         <button type="button" data-page="notifications"><span aria-hidden="true">♧</span>Bildirişlər</button>
@@ -676,6 +746,45 @@
     </div>
     <button id="tcIntroSkip" class="tc-intro-skip" type="button">Skip</button>
   </section>
+  <div id="tcPlayerNP" class="tc-player-np" role="dialog" aria-modal="true" aria-label="İndi oxunur" hidden>
+    <div class="tp-np-bg" aria-hidden="true"></div>
+    <div class="tp-np-inner">
+      <div class="tp-np-top">
+        <button id="tcPlayerNPClose" class="tp-np-btn" type="button" aria-label="Bağla"><span data-icon="down" aria-hidden="true"></span></button>
+        <span class="tp-np-label">İndi oxunur</span>
+        <button id="tcPlayerThemeBtn" class="tp-np-btn" type="button" aria-label="Mövzular (TalkStore)"><span data-icon="palette" aria-hidden="true"></span></button>
+      </div>
+      <div class="tc-player-card">
+        <div id="tcPlayerArt" class="tc-player-art" aria-hidden="true">♪</div>
+        <div class="tp-np-meta">
+          <div class="tp-np-names"><p id="tcPlayerTitle" class="tc-player-title">Mahnı seçilməyib</p><p id="tcPlayerArtist" class="tc-player-artist"></p></div>
+          <button id="tcPlayerLike" class="tp-np-like" type="button" aria-label="Bəyən" aria-pressed="false"><span data-icon="heart" aria-hidden="true"></span></button>
+        </div>
+        <div class="tp-seek">
+          <input id="tcPlayerSeek" type="range" min="0" max="0" value="0" step="1" aria-label="Mahnıda irəli-geri" disabled>
+          <div class="tc-player-times"><span id="tcPlayerCur">0:00</span><span id="tcPlayerDur">0:00</span></div>
+        </div>
+        <div class="tc-player-controls">
+          <button id="tcPlayerShuffle" type="button" aria-label="Qarışdır" aria-pressed="false"><span data-icon="shuffle" aria-hidden="true"></span></button>
+          <button id="tcPlayerPrev" type="button" aria-label="Əvvəlki"><span data-icon="prev" aria-hidden="true"></span></button>
+          <button id="tcPlayerPlay" class="tc-player-play" type="button" aria-label="Oxut"><span data-icon="play" aria-hidden="true"></span></button>
+          <button id="tcPlayerNext" type="button" aria-label="Növbəti"><span data-icon="next" aria-hidden="true"></span></button>
+          <button id="tcPlayerRepeat" type="button" aria-label="Təkrar" aria-pressed="false"><span data-icon="repeat" aria-hidden="true"></span></button>
+        </div>
+        <div class="tp-np-foot">
+          <button id="tcPlayerSleep" class="tp-np-btn" type="button" aria-label="Yuxu taymeri" title="Yuxu taymeri"><span data-icon="timer" aria-hidden="true"></span></button>
+          <div class="tc-player-volume"><span data-icon="volume" aria-hidden="true"></span><input id="tcPlayerVolume" type="range" min="0" max="100" value="80" aria-label="Səs"></div>
+          <button id="tcPlayerQueueBtn" class="tp-np-btn" type="button" aria-label="Siyahı" title="Siyahı"><span data-icon="queue" aria-hidden="true"></span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="tcMiniPlayer" class="tc-mini-player" hidden>
+    <button id="tcMiniOpen" class="tc-mini-open" type="button" aria-label="TalkPlayer-i aç"><span class="tc-mini-cover" aria-hidden="true">♪</span><span id="tcMiniTitle" class="tc-mini-title">TalkPlayer</span><span id="tcMiniArtist" class="tc-mini-artist"></span></button>
+    <button id="tcMiniPlay" class="tc-mini-btn" type="button" aria-label="Oxut"><span data-icon="play" aria-hidden="true"></span></button>
+    <button id="tcMiniNext" class="tc-mini-btn" type="button" aria-label="Növbəti"><span data-icon="next" aria-hidden="true"></span></button>
+    <span id="tcMiniBar" class="tc-mini-bar" aria-hidden="true"></span>
+  </div>
   <div id="tcToastRegion" class="tc-toast-region" aria-live="polite" aria-atomic="true"></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="talkchat-2027.js?v=1"></script>
@@ -689,5 +798,7 @@
   <script src="calls.js?v=6"></script>
   <script src="group-calls.js?v=4"></script>
   <script src="live-streams.js?v=1"></script>
+  <script src="talkplayer.js?v=2"></script>
+  <script src="talkstore.js?v=2"></script>
 </body>
 </html>

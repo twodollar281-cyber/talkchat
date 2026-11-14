@@ -232,6 +232,16 @@ public class CallServicePlugin extends Plugin {
     }
 
     // ------------------------------------------
+    // MEDIA KEEP-ALIVE (TalkPlayer background playback)
+    // ------------------------------------------
+
+    @PluginMethod
+    public void setMediaKeepAlive(PluginCall call) {
+        MainActivity.mediaPlaying = Boolean.TRUE.equals(call.getBoolean("active", false));
+        call.resolve();
+    }
+
+    // ------------------------------------------
     // SCREEN SHARING
     // ------------------------------------------
 

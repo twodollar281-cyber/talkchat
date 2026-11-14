@@ -17,6 +17,7 @@ const crypto = require("crypto");
 const { redactReplyPreviews, removeBlockedFollower, prepareForwardMedia } = require("./review-fixes");
 const { createCallRegistry, validateSignal } = require("./call-registry");
 const { createGroupCallRegistry } = require("./group-call-registry");
+const { registerTalkChatPR43Features } = require('./server_patches');
 const {
     OWNER_USERNAME, ROLE_LEVEL, roleOf, canAssignRole,
     canModerateUser, normalizeBanDuration, objectKey
@@ -581,6 +582,15 @@ io.on("connection", socket => {
     const ringingCall = directCallRegistry.findForUser(name);
     if (ringingCall && ringingCall.status === "ringing" && ringingCall.callee === name) {
         socket.emit("call:incoming", { callId: ringingCall.id, conversationId: ringingCall.conversationId, from: ringingCall.caller, to: name, mediaType: ringingCall.mediaType });
+    }
+    if (!activeGroupCalls.hasUser(name)) {
+        const myGroupIds = conversations()
+            .filter(c => c.type === "group" && Array.isArray(c.participants) && c.participants.includes(name))
+            .map(c => c.id);
+        for (const gc of activeGroupCalls.pendingInvites({ username: name, conversationIds: myGroupIds })) {
+            const starter = (gc.participants.find(p => p.status === "joined") || {}).username || "";
+            socket.emit("group-call:incoming", { conversationId: gc.conversationId, callId: gc.id, from: starter, mediaType: gc.mediaType, startedAt: gc.startedAt });
+        }
     }
     onlineUsers.set(name, (onlineUsers.get(name) || 0) + 1);
     publishPresence(name);
@@ -3153,6 +3163,10 @@ app.post("/api/rooms/:id/messages/:messageId/react", requireAuth, (req, res) => 
 const PORT = process.env.PORT || 3000;
 async function startServer() {
     if (supa.enabled) await supa.ensurePrivateBucket();
+    
+     // app, io və verilənlər bazası (store) hazır olduqdan sonra bura yazırsan:
+    registerTalkChatPR43Features(app, io, store); 
+    
     server.listen(PORT, "0.0.0.0", () => console.log(`TalkChat V2 işləyir: http://localhost:${PORT}`));
 }
 startServer().catch(error => {
