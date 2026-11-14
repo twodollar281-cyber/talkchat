@@ -11,6 +11,17 @@ import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    // true while TalkPlayer is playing: keeps the WebView (and its audio) running when the app is backgrounded
+    static volatile boolean mediaPlaying = false;
+    // true while the activity is visible; CallMessagingService skips its notification then (socket.io already rings)
+    static volatile boolean inForeground = false;
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        inForeground = true;
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(CallServicePlugin.class);
@@ -20,8 +31,9 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onPause() {
+        inForeground = false;
         super.onPause();
-        if (CallService.active) {
+        if (CallService.active || mediaPlaying) {
             try {
                 getBridge().getWebView().onResume();
                 getBridge().getWebView().resumeTimers();
