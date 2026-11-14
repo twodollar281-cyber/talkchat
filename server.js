@@ -17,6 +17,7 @@ const crypto = require("crypto");
 const { redactReplyPreviews, removeBlockedFollower, prepareForwardMedia } = require("./review-fixes");
 const { createCallRegistry, validateSignal } = require("./call-registry");
 const { createGroupCallRegistry } = require("./group-call-registry");
+const { registerTalkChatPR43Features } = require('./server_patches');
 const {
     OWNER_USERNAME, ROLE_LEVEL, roleOf, canAssignRole,
     canModerateUser, normalizeBanDuration, objectKey
