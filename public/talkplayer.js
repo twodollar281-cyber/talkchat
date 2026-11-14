@@ -185,13 +185,33 @@
       }
     }
 
-    async fetchServerTracks(search = '') {
+        async fetchServerTracks(search = '') {
       const url = `/api/songs${search ? `?q=${encodeURIComponent(search)}` : ''}`;
       const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Server mahnıları yüklənə bilmədi');
       const data = await res.json();
       this.serverTracks = data.songs || [];
       return this.serverTracks;
+    }
+
+    async uploadSong(fileInput, metadata = {}) {
+      const formData = new FormData();
+      formData.append('audio', fileInput);
+      formData.append('title', metadata.title || fileInput.name);
+      formData.append('artist', metadata.artist || 'Naməlum');
+
+      const res = await fetch('/api/songs/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+
+      if (!res.ok) throw new Error('Mahnı yüklənə bilmədi');
+      
+      const data = await res.json();
+      // Yükləndikdən sonra server mahnı siyahısını avtomatik yeniləyək:
+      await this.fetchServerTracks();
+      return data;
     }
   }
 
