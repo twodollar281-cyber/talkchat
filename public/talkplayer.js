@@ -185,7 +185,8 @@
       }
     }
 
-        async fetchServerTracks(search = '') {
+        
+       async fetchServerTracks(search = '') {
       const url = `/api/songs${search ? `?q=${encodeURIComponent(search)}` : ''}`;
       const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error('Server mahnıları yüklənə bilmədi');
@@ -209,11 +210,35 @@
       if (!res.ok) throw new Error('Mahnı yüklənə bilmədi');
       
       const data = await res.json();
-      // Yükləndikdən sonra server mahnı siyahısını avtomatik yeniləyək:
       await this.fetchServerTracks();
       return data;
     }
   }
+
+  // --- BU HİSSƏNİ də talkplayer.js-in sonuna əlavə edə bilərsən ---
+  document.addEventListener('DOMContentLoaded', () => {
+    const addSongBtn = document.querySelector('#tcPlayerAdd');
+    const fileInput = document.querySelector('#fileInput');
+
+    if (addSongBtn && fileInput) {
+      addSongBtn.addEventListener('click', () => fileInput.click());
+
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          await window.TalkPlayer.uploadSong(file, {
+            title: file.name.replace(/\.[^/.]+$/, ""),
+            artist: 'Naməlum'
+          });
+          alert('Mahnı uğurla yükləndi!');
+          fileInput.value = '';
+        } catch (err) {
+          alert('Yükləmə xətası: ' + err.message);
+        }
+      });
+    }
+  });
 
   window.TalkPlayer = new TalkPlayerController();
 })();
