@@ -157,3 +157,28 @@
 @media (min-width: 700px) { .ts-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .ts-art { height: 150px; } .ts-hero { min-height: 220px; padding: 30px 32px; } .ts-apps { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 360px) { .ts-hero { padding: 20px 16px 26px; } .ts-cat b { font-size: .85rem; } .ts-art { height: 112px; } }
 @media (prefers-reduced-motion: reduce) { .ts-view, .ts-card, .ts-hero-art, .ts-ring, .ts-done-ring { animation: none !important; } .ts-card, .ts-pills button { transition: none; } }
+
+/* ---------- Gems / premium / app-preview ---------- */
+button.ts-gems { border: 0; color: inherit; cursor: pointer; }
+.ts-price { color: #5cc8ff; }
+.ts-appview { display: grid; gap: 10px; padding-bottom: 6px; }
+.ts-appview > * { position: relative; }
+.ts-appview::before { background: var(--bg); background-image: none; }
+.ts-app-bar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 4px; color: var(--text); }
+.ts-app-bar i { width: 28px; height: 28px; border-radius: 50%; background: var(--purple); }
+.ts-app-card { margin: 0 12px; padding: 12px 14px; border-radius: 16px; background: var(--panel); color: var(--text); display: grid; gap: 2px; }
+.ts-app-card small { opacity: .7; }
+.ts-app-btn { margin: 0 12px; padding: 11px; border-radius: 14px; text-align: center; font-weight: 700; background: var(--purple); color: var(--tc-out-text); }
+.ts-appview .ts-msg { border-radius: var(--rad); }
+.ts-app-nav { display: flex; justify-content: space-around; margin: 4px 8px 8px; padding: 10px; border-radius: 16px; background: var(--panel); color: var(--text); }
+.ts-app-nav span { opacity: .55; } .ts-app-nav span.on { opacity: 1; color: var(--purple); }
+.tg-balance { display: grid; justify-items: center; gap: 2px; padding: 20px; margin-bottom: 12px; border-radius: 22px; background: linear-gradient(135deg, #1d1342, #2c1a6b); border: 1px solid rgba(167,139,250,.25); }
+.tg-balance b { font-size: 2.2rem; } .tg-balance small { color: var(--ts-muted); }
+.tg-ico { font-size: 1.8rem; color: #5cc8ff; } .tg-ico svg { fill: rgba(92,200,255,.28); }
+.tg-h { margin: 18px 2px 8px; font-size: 1.05rem; }
+.tg-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tg-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 16px; background: var(--ts-card); border: 1px solid var(--ts-border); }
+.tg-info { display: grid; gap: 2px; min-width: 0; } .tg-info small { color: var(--ts-muted); }
+.tg-reward { color: var(--ts-green); font-weight: 700; } .tg-reward.neg { color: #f87171; }
+.tg-empty { padding: 14px; text-align: center; color: var(--ts-muted); }
+.tg-row button:disabled { opacity: .55; }

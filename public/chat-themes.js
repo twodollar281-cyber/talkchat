@@ -38,13 +38,16 @@
     const radius = value.bubbleStyle === "square" ? "5px" : value.bubbleStyle === "soft" ? "12px" : "22px";
     root.style.setProperty("--tc-chat-bubble-radius", radius);
   }
+  /* Tətbiq rəngləri: TalkStore preview-si də eyni xəritədən istifadə edir (preview = real görünüş). */
+  const APP_VARS = { "--bg": "background", "--panel": "incoming", "--panel2": "incoming", "--text": "incomingText", "--purple": "outgoing", "--tc-out-text": "outgoingText" };
+  const appVars = theme => Object.fromEntries(Object.entries(APP_VARS).map(([cssVar, key]) => [cssVar, theme[key]]));
   function applyApp(theme) {
     const rs = document.documentElement.style;
-    const map = { "--bg": "background", "--panel": "incoming", "--panel2": "incoming", "--text": "incomingText", "--purple": "outgoing" };
     document.body.classList.toggle("tc-app-themed", !!theme);
-    for (const [cssVar, key] of Object.entries(map)) {
+    for (const [cssVar, key] of Object.entries(APP_VARS)) {
       if (theme) rs.setProperty(cssVar, theme[key]); else rs.removeProperty(cssVar);
     }
+    try { if (theme) localStorage.setItem("tcAppTheme", JSON.stringify(theme)); else localStorage.removeItem("tcAppTheme"); } catch {}
   }
   function applyFor(id = activeId()) {
     applyTheme(themeFor(id));
@@ -149,7 +152,9 @@
     if ($("tcChatThemeDialog")?.open) fillForm(themeFor(event.detail?.id || ""));
   });
 
+  /* Səhifə açılanda dizayn gecikmədən (son saxlanan mövzu ilə) görünsün. */
+  try { const cached = JSON.parse(localStorage.getItem("tcAppTheme") || "null"); if (cached) applyApp(cached); } catch {}
   loadSettings();
-  window.TalkChatChatThemes = { load: loadSettings };
+  window.TalkChatChatThemes = { load: loadSettings, appVars };
   window.TalkChatThemes = { reload: loadSettings };
 })();

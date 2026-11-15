@@ -57,8 +57,28 @@
   let view = "home", tab = "themes", sort = "popular", query = "", current = null, from = "home";
   let collected = readSet(KEY), favs = readSet(FAV_KEY), applied = readStr(APPLIED_KEY);
   let prevTheme = null;
+  let gems = null, busy = false; /* server-authoritative: balans, alınanlar, tapşırıqlar */
   try { const p = JSON.parse(localStorage.getItem(PREV_KEY) || "null"); if (isTheme(p)) prevTheme = p; } catch {}
   const save = () => writeSet(KEY, collected);
+  const GEM_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="M2 9h20M9 3l3 18M15 3l-3 18" class="ts-gem-lines"/></svg>';
+  async function gemsApi(url, method, body) {
+    const res = await fetch(url, { method: method || "GET", credentials: "same-origin", headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Əməliyyat alınmadı.");
+    return data;
+  }
+  function setGems(data) {
+    gems = data;
+    (data.catalog || []).forEach(p => {
+      const list = p.type === "theme" ? CATALOG.themes : CATALOG.items;
+      const base = { id: p.id, name: p.name, desc: p.desc, price: p.price, premium: true, fresh: true, pop: true };
+      if (p.type === "theme") base.theme = p.theme; else { base.kind = "frame"; base.ring = p.ring; base.crown = false; }
+      const i = list.findIndex(x => x.id === p.id);
+      if (i >= 0) list[i] = base; else list.push(base);
+    });
+  }
+  async function loadGems() { try { setGems(await gemsApi("/api/gems")); } catch { gems = null; } render(); }
+  const ownedPremium = item => !!gems && gems.owned.includes(item.id);
 
   const all = () => [...CATALOG.themes.map(x => ({ ...x, type: "theme" })), ...CATALOG.items.map(x => ({ ...x, type: x.kind })), ...CATALOG.apps.map(x => ({ ...x, type: "app" }))];
   const byType = kind => all().filter(x => x.type === kind || (kind === "frame" && x.type === "badge"));
@@ -127,7 +147,7 @@
   function art(item, big) { return item.type === "theme" ? themeArt(item, big) : item.type === "frame" ? frameArt(item, big) : item.type === "pack" ? packArt(item, big) : badgeArt(item); }
 
   /* ---------- state helpers ---------- */
-  const isOwned = item => item.type === "theme" ? applied === item.id : collected.has(item.id);
+  const isOwned = item => item.premium ? ownedPremium(item) : item.type === "theme" ? applied === item.id : collected.has(item.id);
   async function applyFrame(item) {
     try {
       const res = await fetch("/api/profile/frame", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ frame: item ? item.id : "" }) });
@@ -139,7 +159,14 @@
       return true;
     } catch (e) { toast(e.message); return false; }
   }
+  async function buy(item) {
+    if (busy) return; busy = true;
+    try { setGems(await gemsApi("/api/gems/purchase", "POST", { id: item.id })); toast(item.name + " alındı!"); }
+    catch (e) { toast(e.message); }
+    busy = false; render();
+  }
   async function collect(item) {
+    if (item.premium) { if (ownedPremium(item) && item.type === "frame") await applyFrame(item); render(); return; }
     if (!collected.has(item.id)) { collected.add(item.id); save(); toast(item.name + " kolleksiyaya əlavə olundu."); }
     if (item.type === "frame") await applyFrame(item);
     render();
@@ -155,7 +182,7 @@
   function back() {
     if (view === "apply") return go("detail");
     if (view === "detail") return go(from === "list" ? "list" : "home");
-    if (view === "done") return go("home");
+    if (view === "done" || view === "gems") return go("home");
     if (view === "list") { query = ""; const s = $("tcStoreSearch"); if (s) s.value = ""; return go("home"); }
   }
   function openCategory(t, s) { tab = TABS[t] ? t : "themes"; sort = s || "popular"; go("list"); }
@@ -177,10 +204,10 @@
     if (isOwned(item)) { const ok = svgSpan(SVG.check, "ts-badge-ok"); a.appendChild(ok); }
     const name = el("b", "ts-card-name", item.name);
     const meta = el("div", "ts-card-meta");
-    const free = el("span", "ts-free"); free.append(svgSpan(SVG.star, "ts-star-ico"), el("span", null, "Pulsuz"));
+    const free = el("span", "ts-free"); if (item.premium) { free.classList.add("ts-price"); free.append(svgSpan(GEM_SVG, "ts-star-ico"), el("span", null, ownedPremium(item) ? "Səndədir" : String(item.price))); } else free.append(svgSpan(SVG.star, "ts-star-ico"), el("span", null, "Pulsuz"));
     const dl = el("button", "ts-dl"); dl.type = "button"; dl.setAttribute("aria-label", item.type === "theme" ? item.name + " — ətraflı" : collected.has(item.id) ? "Kolleksiyadadır" : item.name + " — yüklə");
-    dl.innerHTML = item.type !== "theme" && collected.has(item.id) ? SVG.check : SVG.dl;
-    dl.onclick = e => { e.stopPropagation(); if (item.type === "theme") { current = item; go("detail"); } else collect(item); };
+    dl.innerHTML = item.type !== "theme" && isOwned(item) ? SVG.check : SVG.dl;
+    dl.onclick = e => { e.stopPropagation(); if (item.type === "theme" || item.premium) { current = item; go("detail"); } else collect(item); };
     meta.append(free, dl);
     li.append(a, name, meta, hit); return li;
   }
@@ -190,7 +217,7 @@
     let rows = tab === "all" || q ? all() : byType(TABS[tab].kind);
     if (!q && tab === "all") rows = rows.filter(x => x.type !== "app");
     if (q) rows = rows.filter(x => (x.name + " " + x.desc).toLowerCase().includes(q));
-    if (sort === "mine") rows = rows.filter(x => x.type !== "app" && (collected.has(x.id) || favs.has(x.id) || applied === x.id));
+    if (sort === "mine") rows = rows.filter(x => x.type !== "app" && (isOwned(x) || favs.has(x.id) || applied === x.id));
     else if (sort === "new") rows = rows.filter(x => x.fresh).concat(rows.filter(x => !x.fresh));
     else rows = rows.filter(x => x.pop).concat(rows.filter(x => !x.pop));
     return rows;
@@ -215,8 +242,8 @@
   function checklist(item) {
     const ul = el("ul", "ts-checks");
     let rows;
-    if (item.type === "theme") rows = ["Tam tətbiq mövzusu", isDark(item.theme.background) ? "Qaranlıq dizayn" : "Açıq dizayn", "Bubble üslubu: " + ({ rounded: "yumru", soft: "yumşaq", square: "düz" })[item.theme.bubbleStyle]];
-    else if (item.type === "frame") rows = ["Profil üçün çərçivə dizaynı", "Kolleksiyana əlavə olunur", "Tamamilə pulsuz"];
+    if (item.type === "theme") rows = ["Tam tətbiq mövzusu", isDark(item.theme.background) ? "Qaranlıq dizayn" : "Açıq dizayn", "Bubble üslubu: " + ({ rounded: "yumru", soft: "yumşaq", square: "düz" })[item.theme.bubbleStyle]].concat(item.premium ? [item.price + " Gems"] : []);
+    else if (item.type === "frame") rows = ["Profil üçün çərçivə dizaynı", item.premium ? "Bir dəfə alınır, istənilən vaxt tətbiq olunur" : "Kolleksiyana əlavə olunur", item.premium ? item.price + " Gems" : "Tamamilə pulsuz"];
     else if (item.type === "pack") rows = [(item.emojis || []).length + " emoji", "Kolleksiyana əlavə olunur", "Tamamilə pulsuz"];
     else rows = ["Kolleksiyana əlavə olunur", "Tamamilə pulsuz"];
     rows.forEach(r => { const li = el("li"); li.append(svgSpan(SVG.check, "ts-check"), el("span", null, r)); ul.appendChild(li); });
@@ -229,14 +256,16 @@
     const item = current, hero = el("div", "ts-detail-hero " + item.type);
     hero.appendChild(art(item, true));
     const head = el("div", "ts-detail-head"); head.append(el("h2", null, item.name));
-    const free = el("span", "ts-free-pill", "Pulsuz"); head.appendChild(free);
+    const free = el("span", "ts-free-pill", item.premium ? (ownedPremium(item) ? "Səndədir" : "💎 " + item.price) : "Pulsuz"); head.appendChild(free);
     const sub = el("p", "ts-detail-sub"); sub.append(svgSpan(SVG.star, "ts-star-ico"), el("span", null, item.type === "theme" ? "Söhbət mövzusu" : item.type === "frame" ? "Profil çərçivəsi" : item.type === "pack" ? "Emoji paketi" : "Nişan"));
     const desc = el("p", "ts-detail-desc", item.type === "pack" ? item.name + " — söhbətlərdə istifadə üçün emoji kolleksiyası." : item.desc);
     box.append(hero, head, sub, desc);
     if (item.type === "pack") { const grid = el("div", "ts-emoji-grid"); (item.emojis || []).forEach(e => grid.appendChild(el("span", null, e))); box.appendChild(grid); }
     box.appendChild(checklist(item));
     const primary = el("button", "ts-primary"); primary.type = "button";
-    if (item.type === "theme") { primary.append(svgSpan(SVG.dl), el("span", null, applied === item.id ? "Tətbiq olunub ✓" : "Tətbiq Et")); primary.onclick = () => go("apply"); }
+    if (item.premium && !ownedPremium(item)) { primary.append(svgSpan(GEM_SVG), el("span", null, item.price + " Gems ilə al")); primary.disabled = busy; primary.onclick = () => buy(item); if (gems && gems.balance < item.price) box.appendChild(el("p", "ts-detail-desc", "Balansın: " + gems.balance + " Gems. Gems Center-də tapşırıqlarla qazan.")); }
+    else if (item.type === "theme") { primary.append(svgSpan(SVG.dl), el("span", null, applied === item.id ? "Tətbiq olunub ✓" : "Tətbiq Et")); primary.onclick = () => go("apply"); }
+    else if (item.type === "frame" && item.premium) { primary.append(svgSpan(SVG.check), el("span", null, "Profilə tətbiq et")); primary.onclick = () => collect(item); }
     else if (item.type === "frame") { const has = collected.has(item.id); primary.append(svgSpan(SVG.check), el("span", null, has ? "Profilə tətbiq et" : "Yüklə və profilə tətbiq et")); primary.onclick = () => collect(item); }
     else { const has = collected.has(item.id); primary.append(svgSpan(has ? SVG.check : SVG.dl), el("span", null, has ? "Kolleksiyadadır" : item.type === "pack" ? "Yüklə" : "Kolleksiyaya əlavə et")); primary.disabled = has; primary.onclick = () => collect(item); }
     const fav = el("button", "ts-secondary" + (favs.has(item.id) ? " on" : "")); fav.type = "button";
@@ -248,16 +277,51 @@
     const box = $("tcStoreApply"); if (!box || !current) return;
     box.textContent = "";
     const item = current, t = item.theme;
-    const phone = el("div", "ts-phone"); phone.style.setProperty("--bg", t.background); phone.style.setProperty("--in", t.incoming); phone.style.setProperty("--out", t.outgoing); phone.style.setProperty("--in-t", t.incomingText); phone.style.setProperty("--out-t", t.outgoingText);
-    phone.setAttribute("role", "img"); phone.setAttribute("aria-label", item.name + " söhbət önizləməsi");
-    const bar = el("div", "ts-phone-bar"); bar.append(el("i"), el("b", null, "TalkChat"), el("small", null, "online")); phone.appendChild(bar);
+    const phone = el("div", "ts-phone ts-appview");
+    /* Real tətbiqlə eyni rəng xəritəsi (chat-themes.js appVars) — preview = tətbiq. */
+    const vars = window.TalkChatChatThemes?.appVars?.(t) || {};
+    Object.entries(vars).forEach(([k, v]) => phone.style.setProperty(k, v));
+    phone.style.setProperty("--in", t.incoming); phone.style.setProperty("--out", t.outgoing); phone.style.setProperty("--in-t", t.incomingText); phone.style.setProperty("--out-t", t.outgoingText);
+    phone.style.setProperty("--rad", t.bubbleStyle === "square" ? "5px" : t.bubbleStyle === "soft" ? "12px" : "22px");
+    phone.setAttribute("role", "img"); phone.setAttribute("aria-label", item.name + " tətbiq önizləməsi");
+    const bar = el("div", "ts-app-bar"); bar.append(el("b", null, "TalkChat"), el("i"));
+    const card = el("div", "ts-app-card"); card.append(el("b", null, "Salam, dostum 👋"), el("small", null, "Yeni bildirişlərin var"));
+    const cta = el("div", "ts-app-btn", "Paylaş");
     const chat = el("div", "ts-chat");
-    [["l", "Salam! 👋", "09:41"], ["r", "Necəsən? 💜", "09:42"], ["l", "Çox yaxşıyam!", "09:42"]].forEach(([side, txt, time]) => { const b = el("div", "ts-msg " + side); b.append(el("span", null, txt), el("small", null, time)); chat.appendChild(b); });
-    phone.appendChild(chat);
-    const inp = el("div", "ts-chat-input"); inp.append(el("span", null, "Mesaj yaz..."), el("i")); phone.appendChild(inp);
+    [["l", "Salam! 👋", "09:41"], ["r", "Necəsən? 💜", "09:42"]].forEach(([side, txt, time]) => { const b = el("div", "ts-msg " + side); b.append(el("span", null, txt), el("small", null, time)); chat.appendChild(b); });
+    const nav = el("div", "ts-app-nav"); ["●", "▣", "▶", "☺"].forEach((x, i) => nav.appendChild(el("span", i === 0 ? "on" : "", x)));
+    phone.append(bar, card, cta, chat, nav);
     const btn = el("button", "ts-primary sticky"); btn.type = "button"; btn.textContent = "Tətbiq Et";
     btn.onclick = async () => { btn.disabled = true; btn.textContent = "Tətbiq olunur..."; const ok = await applyTheme(item); if (ok) go("done"); else { btn.disabled = false; btn.textContent = "Tətbiq Et"; } };
     box.append(phone, btn);
+  }
+
+  /* ---------- Gems Center ---------- */
+  async function gemsAction(url, body) {
+    if (busy) return; busy = true;
+    try { setGems(await gemsApi(url, "POST", body)); toast("Gems hesabına əlavə olundu."); } catch (e) { toast(e.message); }
+    busy = false; render();
+  }
+  function renderGems() {
+    const box = $("tcStoreGemsView"); if (!box) return;
+    box.textContent = "";
+    if (!gems) { box.appendChild(el("p", "ts-detail-desc", "Gems məlumatı yüklənmədi. Yenidən daxil ol.")); return; }
+    const bal = el("div", "tg-balance"); bal.append(svgSpan(GEM_SVG, "tg-ico"), el("b", null, String(gems.balance)), el("small", null, "Cari balans"));
+    const row = (title, sub, right) => { const li = el("li", "tg-row"); const t = el("div", "tg-info"); t.append(el("b", null, title), el("small", null, sub)); li.append(t, right); return li; };
+    const reward = n => el("span", "tg-reward", "+" + n);
+    const list = el("ul", "tg-list");
+    const dailyBtn = el("button", "ts-pill-btn tc-store-btn", gems.login.claimed ? "Alındı ✓" : "Al +" + gems.login.reward); dailyBtn.type = "button"; dailyBtn.disabled = gems.login.claimed || busy;
+    dailyBtn.onclick = () => gemsAction("/api/gems/claim-daily");
+    list.appendChild(row("Gündəlik mükafat", "Hər gün bir dəfə", dailyBtn));
+    gems.daily.forEach(t => list.appendChild(row(t.label, t.done ? "Tamamlandı ✓" : t.progress + " / " + t.target, reward(t.reward))));
+    list.appendChild(row("Həftəlik tapşırıq", gems.weekly.label + " — " + (gems.weekly.done ? "Tamamlandı ✓" : gems.weekly.progress + " / " + gems.weekly.target), reward(gems.weekly.reward)));
+    const pb = el("button", "ts-pill-btn tc-store-btn", gems.profile.claimed ? "Alındı ✓" : "Al +" + gems.profile.reward); pb.type = "button"; pb.disabled = gems.profile.claimed || !gems.profile.complete || busy;
+    pb.onclick = () => gemsAction("/api/gems/claim-profile");
+    list.appendChild(row("Profili tamamla", gems.profile.claimed ? "Bir dəfəlik mükafat alınıb" : gems.profile.need, pb));
+    const hist = el("ul", "tg-list");
+    if (!gems.history.length) hist.appendChild(el("li", "tg-empty", "Hələ tarixçə yoxdur."));
+    gems.history.slice(0, 20).forEach(h => { const li = el("li", "tg-row"); const t = el("div", "tg-info"); t.append(el("b", null, h.label), el("small", null, new Date(h.at).toLocaleString("az-AZ"))); li.append(t, el("span", "tg-reward" + (h.amount < 0 ? " neg" : ""), (h.amount > 0 ? "+" : "") + h.amount)); hist.appendChild(li); });
+    box.append(bal, el("h3", "tg-h", "Mükafatlar və tapşırıqlar"), list, el("h3", "tg-h", "Tarixçə"), hist);
   }
 
   function renderDone() {
@@ -270,25 +334,26 @@
   }
 
   function render() {
-    const views = { home: "tcStoreHome", list: "tcStoreListView", detail: "tcStoreDetail", apply: "tcStoreApply", done: "tcStoreDone" };
+    const views = { home: "tcStoreHome", list: "tcStoreListView", detail: "tcStoreDetail", apply: "tcStoreApply", done: "tcStoreDone", gems: "tcStoreGemsView" };
     const q = query.trim();
     if (q && view === "home") { tab = "all"; view = "list"; }
     Object.entries(views).forEach(([k, id]) => { const n = $(id); if (n) n.hidden = k !== view; });
     const backBtn = $("tcStoreBack"); if (backBtn) backBtn.hidden = view === "home";
-    const title = $("tcStoreTitle"); if (title) title.textContent = view === "home" || view === "done" ? "TalkStore" : view === "apply" ? "Mövzunu Tətbiq Et" : q ? "Axtarış" : (TABS[tab] || TABS.themes).title;
-    const search = document.querySelector(".ts-search"); if (search) search.hidden = view === "detail" || view === "apply" || view === "done";
-    const gems = $("tcStoreGems"); if (gems) gems.textContent = String(collected.size);
-    const chip = $("tcStoreGemChip"); if (chip) chip.hidden = view === "apply" || view === "done";
+    const title = $("tcStoreTitle"); if (title) title.textContent = view === "home" || view === "done" ? "TalkStore" : view === "gems" ? "Gems Center" : view === "apply" ? "Mövzunu Tətbiq Et" : q ? "Axtarış" : (TABS[tab] || TABS.themes).title;
+    const search = document.querySelector(".ts-search"); if (search) search.hidden = view === "detail" || view === "apply" || view === "done" || view === "gems";
+    const gemsNum = $("tcStoreGems"); if (gemsNum) gemsNum.textContent = String(gems ? gems.balance : 0);
+    const chip = $("tcStoreGemChip"); if (chip) chip.hidden = view === "apply" || view === "done" || view === "gems";
     const count = $("tcStoreCollected"); if (count) count.textContent = collected.size ? collected.size + " element kolleksiyanda" : "";
     document.querySelectorAll(".ts-cat[data-store-tab]").forEach(b => b.classList.toggle("active", view === "list" && b.dataset.storeTab === tab && !q));
-    if (view === "home") renderHome(); else if (view === "list") renderList(); else if (view === "detail") renderDetail(); else if (view === "apply") renderApply(); else renderDone();
+    if (view === "home") renderHome(); else if (view === "list") renderList(); else if (view === "detail") renderDetail(); else if (view === "apply") renderApply(); else if (view === "gems") renderGems(); else renderDone();
   }
 
-  function load() { view = "home"; query = ""; const s = $("tcStoreSearch"); if (s) s.value = ""; render(); }
+  function load() { view = "home"; query = ""; const s = $("tcStoreSearch"); if (s) s.value = ""; render(); loadGems(); }
   document.querySelectorAll(".ts-cat[data-store-tab]").forEach(b => b.addEventListener("click", () => { query = ""; const s = $("tcStoreSearch"); if (s) s.value = ""; openCategory(b.dataset.storeTab); }));
   document.querySelectorAll("[data-store-sort]").forEach(b => b.addEventListener("click", () => { sort = b.dataset.storeSort; render(); }));
   $("tcStoreSearch")?.addEventListener("input", e => { query = e.target.value; render(); });
   $("tcStoreBack")?.addEventListener("click", back);
+  $("tcStoreGemChip")?.addEventListener("click", () => { go("gems"); loadGems(); });
   $("tcStoreStart")?.addEventListener("click", () => openCategory("themes"));
   $("tcStoreAll")?.addEventListener("click", () => openCategory("all"));
   window.TalkChatStore = { load, open, catalog: CATALOG };
