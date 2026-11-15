@@ -1157,7 +1157,7 @@ return res.json({
         });
     }
 });
-const PROFILE_FRAMES = new Set(["item-frame-neon", "item-frame-galaxy", "item-frame-royal", "item-frame-cyber"]);
+const PROFILE_FRAMES = new Set(["item-frame-neon", "item-frame-galaxy", "item-frame-royal", "item-frame-cyber", "item-frame-aurora", "item-frame-inferno", "item-frame-diamond"]);
 function publicUser(user) {
     return {
         frame: PROFILE_FRAMES.has(user.frame) ? user.frame : "",
@@ -1430,8 +1430,11 @@ require("./savedCollections").installSavedCollections({
     app, posts, readJSON, saveJSON, requireAuth, currentUser,
     canViewContent, isBlockedBetween, publicPost
 });
+const gems = require("./gems").installGems({
+    app, users, posts, readJSON, saveJSON, requireAuth, currentUser
+});
 require("./chatThemes").installChatThemes({
-    app, readJSON, saveJSON, conversations, requireAuth, currentUser
+    app, readJSON, saveJSON, conversations, requireAuth, currentUser, isLockedTheme: gems.isLockedTheme
 });
 require("./aiAssistant").installAIAssistant({
     app, readJSON, saveJSON, requireAuth, currentUser, userRateLimit
@@ -1662,6 +1665,7 @@ app.put("/api/profile/frame", requireAuth, (req, res) => {
     const frame = req.body?.frame;
     if (frame !== "" && frame !== null && (typeof frame !== "string" || !PROFILE_FRAMES.has(frame)))
         return res.status(400).json({ error: "Çərçivə düzgün deyil." });
+    if (!gems.canUseFrame(currentUser(req), frame)) return res.status(403).json({ error: "Bu çərçivəni əvvəl TalkStore-dan almalısan." });
     const list = users();
     const user = list.find(u => u.username === currentUser(req));
     if (!user) return res.status(404).json({ error: "İstifadəçi tapılmadı." });

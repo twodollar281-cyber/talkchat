@@ -16,7 +16,7 @@ function normalizeTheme(value) {
     return theme;
 }
 
-function installChatThemes({ app, readJSON, saveJSON, conversations, requireAuth, currentUser }) {
+function installChatThemes({ app, readJSON, saveJSON, conversations, requireAuth, currentUser, isLockedTheme = () => false }) {
     const readAll = () => {
         const data = readJSON("chatThemes.json", {});
         return data && typeof data === "object" && !Array.isArray(data) ? data : {};
@@ -60,6 +60,7 @@ function installChatThemes({ app, readJSON, saveJSON, conversations, requireAuth
         const theme = normalizeTheme(req.body);
         if (!theme) return res.status(400).json({ error: "Mövzu rəngləri və bubble forması düzgün deyil." });
         const username = currentUser(req);
+        if (isLockedTheme(username, theme)) return res.status(403).json({ error: "Bu premium mövzunu əvvəl TalkStore-dan almalısan." });
         const value = getUserThemes(username);
         value.default = theme;
         saveUserThemes(username, value);
@@ -82,6 +83,7 @@ function installChatThemes({ app, readJSON, saveJSON, conversations, requireAuth
             return res.status(404).json({ error: "Söhbət tapılmadı." });
         const theme = normalizeTheme(req.body);
         if (!theme) return res.status(400).json({ error: "Mövzu rəngləri və bubble forması düzgün deyil." });
+        if (isLockedTheme(username, theme)) return res.status(403).json({ error: "Bu premium mövzunu əvvəl TalkStore-dan almalısan." });
         const value = getUserThemes(username);
         value.conversations[id] = theme;
         saveUserThemes(username, value);
