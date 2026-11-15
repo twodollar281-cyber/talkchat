@@ -29,6 +29,7 @@
   <link rel="stylesheet" href="talkplayer.css?v=2">
   <link rel="stylesheet" href="talkstore.css?v=2">
   <link rel="stylesheet" href="profile-frames.css?v=1">
+  <link rel="stylesheet" href="profile-v2.css?v=1">
 </head>
 <body>
   <svg class="tc-svg-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -488,104 +489,129 @@
       </section>
 
       <section id="profilePage" class="page" hidden>
-        <h1>Mənim profilim</h1>
-        <div class="profile-card">
-          <div class="profile-cover" aria-hidden="true"><span>TalkChat</span><span class="profile-cover-orb"></span></div>
-          <div class="avatar-wrap"><img id="myAvatar" alt="Profil şəkli"><span id="avatarFallback">?</span></div>
-          <label class="file-label">Profil şəklini dəyiş<input id="avatarFile" type="file" accept="image/*"></label>
-          <button id="tcFrameOpen" class="secondary tc-frame-open" type="button">Çərçivə dəyiş</button>
-          <h2 id="myUsername">@username</h2>
-          <p id="myDisplayNameValue" class="profile-display-name"></p>
-          <div id="myStats" class="stats"></div>
-          <a id="myProfileLink" class="profile-link" href="" target="_blank" rel="noopener noreferrer" hidden></a>
-          <label class="lang-picker">Dil
-            <select id="talkLanguage">
-              <option value="az">Azərbaycan dili</option>
-              <option value="tr">Türkçe</option>
-              <option value="en">English</option>
-              <option value="ru">Русский</option>
-            </select>
-          </label>
+        <div id="profileMain" class="pf-main">
+          <div class="profile-card pf-hero">
+            <div class="profile-cover" aria-hidden="true"><span></span><span class="profile-cover-orb"></span></div>
+            <div class="pf-top">
+              <div class="avatar-wrap"><img id="myAvatar" alt="Profil şəkli"><span id="avatarFallback">?</span></div>
+              <div class="pf-id">
+                <h2 id="myDisplayNameValue" class="pf-name"></h2>
+                <p class="pf-handle"><span id="myUsername">@username</span><span id="myBadges" class="pf-badges"></span></p>
+              </div>
+            </div>
+            <p id="myBioText" class="pf-bio"></p>
+            <a id="myProfileLink" class="profile-link pf-link" href="" target="_blank" rel="noopener noreferrer" hidden></a>
+            <div id="myStats" class="stats pf-stats"></div>
+            <div class="pf-actions">
+              <button id="editProfileOpen" class="primary" type="button">Profili redaktə et</button>
+              <button id="tcFrameOpen" class="secondary tc-frame-open" type="button">Çərçivə</button>
+              <button id="profileSettingsOpen" class="secondary pf-icon-btn" type="button" aria-label="Ayarlar" title="Ayarlar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+            </div>
+            <p id="profileStatus" class="status" role="status" aria-live="polite"></p>
+          </div>
+
+          <section class="profile-posts-section pf-posts">
+            <div class="pf-posts-head">
+              <h2>Paylaşımlarım</h2>
+              <div class="pf-view" role="tablist" aria-label="Görünüş">
+                <button type="button" class="active" data-pf-view="grid" aria-label="Şəbəkə"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><rect x="14" y="14" width="6" height="6"/></svg></button>
+                <button type="button" data-pf-view="list" aria-label="Siyahı"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+              </div>
+            </div>
+            <div id="myPostsGrid" class="pf-grid"></div>
+            <div id="myPosts" class="feed" hidden></div>
+          </section>
+          <section class="tc-collections-section" aria-labelledby="savedCollectionsTitle">
+            <div class="tc-collections-heading"><div><span class="eyebrow">ŞƏXSİ KİTABI</span><h2 id="savedCollectionsTitle">Yadda saxlanmış kolleksiyalar</h2></div></div>
+            <form id="savedCollectionCreateForm" class="tc-collection-create">
+              <label class="sr-only" for="savedCollectionName">Kolleksiya adı</label>
+              <input id="savedCollectionName" maxlength="60" placeholder="Məsələn, Sonra oxu" required>
+              <button class="primary" type="submit">Kolleksiya yarat</button>
+            </form>
+            <p id="savedCollectionsStatus" class="status" aria-live="polite"></p>
+            <div id="savedCollectionsList" class="tc-collections-list" aria-live="polite"></div>
+          </section>
+        </div>
+
+        <div id="profileSettings" class="pf-settings" hidden>
+          <div class="pf-set-head">
+            <button id="profileSettingsBack" class="pf-back" type="button" aria-label="Geri">←</button>
+            <h1>Ayarlar</h1>
+          </div>
+          <div class="pf-tabs" role="tablist">
+            <button type="button" class="active" data-pset="account">Hesab</button>
+            <button type="button" data-pset="privacy">Məxfilik</button>
+            <button type="button" data-pset="notifications">Bildirişlər</button>
+            <button type="button" data-pset="appearance">Görünüş</button>
+            <button type="button" data-pset="security">Təhlükəsizlik</button>
+          </div>
+          <p id="psetStatus" class="status" role="status" aria-live="polite"></p>
+
+          <div class="pf-pane" id="pset-account">
+            <div class="pf-row"><div><b>İstifadəçi adı</b><small id="psetUsername">@</small></div></div>
+            <div class="pf-row"><div><b>Profil məlumatları</b><small>Ad, açıqlama və link</small></div><button type="button" class="secondary" data-open-edit>Redaktə</button></div>
+            <label class="pf-row"><div><b>Dil</b><small>Tətbiq dili</small></div>
+              <select id="talkLanguage">
+                <option value="az">Azərbaycan dili</option>
+                <option value="tr">Türkçe</option>
+                <option value="en">English</option>
+                <option value="ru">Русский</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="pf-pane" id="pset-privacy" hidden>
+            <label class="pf-row"><div><b>Onlayn status</b><small>Kimlər onlayn olduğunu görə bilər</small></div>
+              <select id="onlineVisibility" data-autosave><option value="everyone">Hamı</option><option value="friends">Yalnız dostlar</option><option value="nobody">Heç kim</option></select></label>
+            <label class="pf-row"><div><b>Son görülmə</b><small>Kimlər son görülməni görə bilər</small></div>
+              <select id="lastSeenVisibility" data-autosave><option value="everyone">Hamı</option><option value="friends">Yalnız dostlar</option><option value="nobody">Heç kim</option></select></label>
+            <label class="pf-row"><div><b>Profil</b><small>Profili kimlər görə bilər</small></div>
+              <select id="privacyProfile" data-autosave><option value="everyone">Hamı</option><option value="followers">İzləyicilər</option><option value="friends">Dostlar</option><option value="nobody">Heç kim</option></select></label>
+            <label class="pf-row"><div><b>Post və Reels</b><small>Kimlər görə bilər</small></div>
+              <select id="privacyPosts" data-autosave><option value="everyone">Hamı</option><option value="followers">İzləyicilər</option><option value="friends">Dostlar</option><option value="nobody">Heç kim</option></select></label>
+            <label class="pf-row"><div><b>Story-lər</b><small>Kimlər görə bilər</small></div>
+              <select id="privacyStories" data-autosave><option value="everyone">Hamı</option><option value="followers">İzləyicilər</option><option value="friends">Dostlar</option><option value="nobody">Heç kim</option></select></label>
+            <label class="pf-row"><div><b>Mesaj sorğuları</b><small>Kimlər göndərə bilər</small></div>
+              <select id="privacyMessages" data-autosave><option value="everyone">Hamı</option><option value="followers">İzləyicilərim</option><option value="friends">Dostlar</option><option value="nobody">Heç kim</option></select></label>
+            <label class="pf-row"><div><b>Dostluq sorğuları</b><small>Kimlər göndərə bilər</small></div>
+              <select id="privacyFriends" data-autosave><option value="everyone">Hamı</option><option value="followers">İzləyicilərim</option><option value="friends">Dostlar</option><option value="nobody">Heç kim</option></select></label>
+          </div>
+
+          <div class="pf-pane" id="pset-notifications" hidden>
+            <label class="pf-row"><div><b>İzləyicilər</b><small>Yeni izləyici bildirişləri</small></div><span class="pf-switch"><input type="checkbox" data-pref="notifFollow"><i></i></span></label>
+            <label class="pf-row"><div><b>Bəyənmələr</b><small>Paylaşımların bəyənilməsi</small></div><span class="pf-switch"><input type="checkbox" data-pref="notifLike"><i></i></span></label>
+            <label class="pf-row"><div><b>Şərhlər</b><small>Paylaşımlara yeni şərhlər</small></div><span class="pf-switch"><input type="checkbox" data-pref="notifComment"><i></i></span></label>
+            <label class="pf-row"><div><b>Mesajlar</b><small>Yeni mesaj bildirişləri</small></div><span class="pf-switch"><input type="checkbox" data-pref="notifMessage"><i></i></span></label>
+            <p class="pf-note">Bu seçimlər Bildirişlər siyahısında bu cihazda tətbiq olunur.</p>
+          </div>
+
+          <div class="pf-pane" id="pset-appearance" hidden>
+            <label class="pf-row"><div><b>Profil mövzusu</b><small>Profil kartının rəng tonu</small></div>
+              <select id="profileTheme" data-autosave><option value="violet">Bənövşəyi</option><option value="ocean">Okean</option><option value="sunset">Gün batımı</option><option value="forest">Meşə</option></select></label>
+            <label class="pf-row"><div><b>Vurğu rəngi</b><small>Profil üçün əsas rəng</small></div>
+              <input id="profileColor" type="color" value="#8257ff" data-autosave aria-label="Profil vurğu rəngi"></label>
+            <label class="pf-row"><div><b>Kompakt görünüş</b><small>Daha sıx boşluqlar</small></div><span class="pf-switch"><input type="checkbox" data-pref="compact"><i></i></span></label>
+            <label class="pf-row"><div><b>Animasiyaları azalt</b><small>Hərəkət effektlərini söndür</small></div><span class="pf-switch"><input type="checkbox" data-pref="reduceMotion"><i></i></span></label>
+          </div>
+
+          <div class="pf-pane" id="pset-security" hidden>
+            <div class="pf-row"><div><b>Sessiya</b><small>Hesabınız təhlükəsiz sessiya ilə qorunur</small></div></div>
+            <div class="pf-row"><div><b>Bu cihazın tənzimləmələri</b><small>Bildiriş və görünüş seçimlərini sıfırla</small></div><button id="pfResetPrefs" type="button" class="secondary">Sıfırla</button></div>
+            <button id="logoutButton" class="secondary full pf-logout" type="button">Çıxış</button>
+          </div>
+        </div>
+
+        <dialog id="editProfileDialog" class="pf-dialog" aria-label="Profili redaktə et">
+          <div class="pf-dialog-head"><h2>Profili redaktə et</h2><button id="editProfileClose" class="secondary" type="button" aria-label="Bağla">✕</button></div>
+          <label class="file-label pf-file">Profil şəklini dəyiş<input id="avatarFile" type="file" accept="image/*"></label>
           <label class="profile-field-label" for="myDisplayName">Ad</label>
           <input id="myDisplayName" maxlength="50" placeholder="Adını daxil et">
-          <label class="profile-field-label" for="myBio">Açıqlama</label>
+          <label class="profile-field-label" for="myBio">Açıqlama <small id="myBioCount" class="pf-count">0/160</small></label>
           <textarea id="myBio" maxlength="160" placeholder="Özün haqqında yaz..."></textarea>
-          <label class="profile-field-label" for="myLink">Link əlavə et</label>
+          <label class="profile-field-label" for="myLink">Link</label>
           <input id="myLink" type="url" maxlength="200" placeholder="https://...">
-          <label class="profile-field-label" for="profileTheme">Profil mövzusu</label>
-          <select id="profileTheme">
-            <option value="violet">Bənövşəyi</option>
-            <option value="ocean">Okean</option>
-            <option value="sunset">Gün batımı</option>
-            <option value="forest">Meşə</option>
-          </select>
-          <label class="profile-field-label" for="profileColor">Vurğu rəngi</label>
-          <input id="profileColor" type="color" value="#8257ff" aria-label="Profil vurğu rəngi">
-          <label class="profile-field-label" for="onlineVisibility">Kimlər onlayn olduğunu görə bilər?</label>
-          <select id="onlineVisibility">
-            <option value="everyone">Hamı</option>
-            <option value="friends">Yalnız dostlar</option>
-            <option value="nobody">Heç kim</option>
-          </select>
-          <label class="profile-field-label" for="lastSeenVisibility">Kimlər son görülməni görə bilər?</label>
-          <select id="lastSeenVisibility">
-            <option value="everyone">Hamı</option>
-            <option value="friends">Yalnız dostlar</option>
-            <option value="nobody">Heç kim</option>
-          </select>
-          <label class="profile-field-label" for="privacyProfile">Profili kimlər görə bilər?</label>
-          <select id="privacyProfile">
-            <option value="everyone">Hamı</option>
-            <option value="followers">İzləyicilər</option>
-            <option value="friends">Dostlar</option>
-            <option value="nobody">Heç kim</option>
-          </select>
-          <label class="profile-field-label" for="privacyPosts">Post və Reels-i kimlər görə bilər?</label>
-          <select id="privacyPosts">
-            <option value="everyone">Hamı</option>
-            <option value="followers">İzləyicilər</option>
-            <option value="friends">Dostlar</option>
-            <option value="nobody">Heç kim</option>
-          </select>
-          <label class="profile-field-label" for="privacyStories">Story-ləri kimlər görə bilər?</label>
-          <select id="privacyStories">
-            <option value="everyone">Hamı</option>
-            <option value="followers">İzləyicilər</option>
-            <option value="friends">Dostlar</option>
-            <option value="nobody">Heç kim</option>
-          </select>
-          <label class="profile-field-label" for="privacyMessages">Kimlər mesaj sorğusu göndərə bilər?</label>
-          <select id="privacyMessages">
-            <option value="everyone">Hamı</option>
-            <option value="followers">İzləyicilərim</option>
-            <option value="friends">Dostlar</option>
-            <option value="nobody">Heç kim</option>
-          </select>
-          <label class="profile-field-label" for="privacyFriends">Kimlər dostluq sorğusu göndərə bilər?</label>
-          <select id="privacyFriends">
-            <option value="everyone">Hamı</option>
-            <option value="followers">İzləyicilərim</option>
-            <option value="friends">Dostlar</option>
-            <option value="nobody">Heç kim</option>
-          </select>
-          <button id="saveBio" class="primary full">Profili yadda saxla</button>
-          <p id="profileStatus" class="status"></p>
-          <button id="logoutButton" class="secondary full">Çıxış</button>
-        </div>
-        <section class="profile-posts-section">
-          <h2>Paylaşımlarım</h2>
-          <div id="myPosts" class="feed"></div>
-        </section>
-        <section class="tc-collections-section" aria-labelledby="savedCollectionsTitle">
-          <div class="tc-collections-heading"><div><span class="eyebrow">ŞƏXSİ KİTABI</span><h2 id="savedCollectionsTitle">Yadda saxlanmış kolleksiyalar</h2></div></div>
-          <form id="savedCollectionCreateForm" class="tc-collection-create">
-            <label class="sr-only" for="savedCollectionName">Kolleksiya adı</label>
-            <input id="savedCollectionName" maxlength="60" placeholder="Məsələn, Sonra oxu" required>
-            <button class="primary" type="submit">Kolleksiya yarat</button>
-          </form>
-          <p id="savedCollectionsStatus" class="status" aria-live="polite"></p>
-          <div id="savedCollectionsList" class="tc-collections-list" aria-live="polite"></div>
-        </section>
+          <button id="saveBio" class="primary full" type="button">Yadda saxla</button>
+        </dialog>
       </section>
 
       <section id="publicProfilePage" class="page" hidden>
@@ -798,7 +824,8 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="talkchat-2027.js?v=1"></script>
   <script src="profile-frames.js?v=1"></script>
-  <script src="app.js?v=20261114fix"></script>
+  <script src="profile-v2.js?v=1"></script>
+  <script src="app.js?v=20261115p"></script>
   <script src="ai-assistant.js?v=2"></script>
   <script src="chat-themes.js?v=2"></script>
   <script src="social.js?v=1"></script>

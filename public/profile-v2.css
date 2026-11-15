@@ -1,0 +1,102 @@
+/* TalkChat Profile v2 — yalnız Profil bölməsi */
+#app #profilePage { width: min(760px, 100%); margin: 0 auto; }
+#app #profilePage .pf-hero { max-width: none; margin: 8px 0 14px; padding: 0 16px 16px !important; text-align: left; border-radius: 22px; overflow: hidden; }
+#app #profilePage .pf-hero .profile-cover { height: 92px; margin: 0 -16px !important; }
+#app #profilePage .pf-top { display: flex; align-items: flex-end; gap: 14px; margin-top: -40px; position: relative; z-index: 2; }
+#app #profilePage .pf-hero .avatar-wrap { flex: none; width: 84px; height: 84px; margin: 0 !important; padding: 3px; border-width: 3px; }
+#app #profilePage .pf-id { min-width: 0; padding-bottom: 4px; }
+#app #profilePage .pf-name { margin: 0 !important; font-size: 19px; line-height: 1.2; overflow-wrap: anywhere; }
+#app #profilePage .pf-handle { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+#app #profilePage #myUsername { margin: 0 !important; font-size: 13px; font-weight: 600; }
+#app #profilePage .pf-badges { display: inline-flex; align-items: center; gap: 4px; }
+#app #profilePage .pf-bio { margin: 12px 0 0; font-size: 14px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; white-space: pre-wrap; }
+#app #profilePage .pf-link { display: inline-block; margin-top: 6px; font-size: 13px; font-weight: 600; word-break: break-all; }
+#app #profilePage .pf-stats { display: grid !important; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 14px 0 12px; padding: 10px 6px; text-align: center; }
+#app #profilePage .pf-stats div { display: grid; gap: 1px; }
+#app #profilePage .pf-stats b { font-size: 18px; color: var(--text); }
+#app #profilePage .pf-stats span { font-size: 12px; font-weight: 500; color: var(--muted); }
+#app #profilePage .pf-actions { display: flex; gap: 8px; }
+#app #profilePage .pf-actions .primary { flex: 1; }
+#app #profilePage .pf-actions .primary, #app #profilePage .pf-actions .secondary { min-height: 42px; padding: 8px 14px; font-size: 14px; }
+#app #profilePage .pf-icon-btn { width: 44px; padding: 0 !important; display: grid; place-items: center; }
+#app #profilePage .pf-icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#app #profilePage .pf-hero .status { margin: 8px 0 0; min-height: 0; }
+#app #profilePage .pf-hero .status:empty { display: none; }
+
+#app #profilePage .pf-posts { max-width: none; margin: 8px 0 18px; }
+#app #profilePage .pf-posts-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+#app #profilePage .pf-posts-head h2 { margin: 0; font-size: 17px; }
+#app #profilePage .pf-view { display: flex; gap: 2px; padding: 3px; border-radius: 11px; background: rgba(255,255,255,.06); }
+#app #profilePage .pf-view button { display: grid; place-items: center; width: 34px; height: 30px; border-radius: 8px; background: transparent; color: var(--muted); }
+#app #profilePage .pf-view button.active { background: rgba(130,87,255,.35); color: #fff; }
+#app #profilePage .pf-view svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+#app #profilePage .pf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+#app #profilePage .pf-grid[hidden] { display: none; }
+#app #profilePage .pf-grid > .tc-empty-state { grid-column: 1 / -1; margin: 14px auto; }
+#app #profilePage .pf-tile { position: relative; aspect-ratio: 1; padding: 0; overflow: hidden; border-radius: 6px; background: var(--panel2); color: var(--text); }
+#app #profilePage .pf-tile img, #app #profilePage .pf-tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+#app #profilePage .pf-tile-badge { position: absolute; top: 6px; right: 6px; font-style: normal; font-size: 11px; padding: 2px 6px; border-radius: 8px; background: rgba(0,0,0,.55); }
+#app #profilePage .pf-tile-text { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; padding: 10px; font-size: 12px; line-height: 1.35; text-align: left; background: linear-gradient(135deg, rgba(130,87,255,.28), rgba(54,197,255,.14)); height: 100%; width: 100%; }
+
+/* Ayarlar */
+#app #profilePage .pf-set-head { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; }
+#app #profilePage .pf-set-head h1 { margin: 0; font-size: 22px; }
+#app #profilePage .pf-back { width: 38px; height: 38px; border-radius: 12px; background: rgba(255,255,255,.07); color: var(--text); font-size: 20px; }
+#app #profilePage .pf-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+#app #profilePage .pf-tabs::-webkit-scrollbar { display: none; }
+#app #profilePage .pf-tabs button { flex: none; padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.06); color: var(--muted); font-size: 13px; font-weight: 600; }
+#app #profilePage .pf-tabs button.active { background: linear-gradient(110deg, #8b5cf6, #7137bd); color: #fff; }
+#app #profilePage #psetStatus { margin: 6px 2px; min-height: 16px; }
+#app #profilePage .pf-pane { border: 1px solid var(--line); border-radius: 18px; background: var(--panel); overflow: hidden; }
+#app #profilePage .pf-pane[hidden] { display: none; }
+#app #profilePage .pf-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 10px 14px; border-top: 1px solid var(--line); margin: 0; }
+#app #profilePage .pf-row:first-child { border-top: 0; }
+#app #profilePage .pf-row > div { min-width: 0; }
+#app #profilePage .pf-row b { display: block; font-size: 14px; }
+#app #profilePage .pf-row small { display: block; margin-top: 1px; color: var(--muted); font-size: 12px; }
+#app #profilePage .pf-row select { width: auto; max-width: 150px; margin: 0; padding: 8px 10px; border-radius: 10px; font-size: 13px; background: #171322; color: #fff; border: 1px solid var(--line); }
+#app #profilePage .pf-row input[type="color"] { width: 44px; height: 36px; min-height: 0; margin: 0; padding: 2px; cursor: pointer; }
+#app #profilePage .pf-row .secondary { padding: 8px 14px; font-size: 13px; flex: none; }
+#app #profilePage .pf-note { padding: 10px 14px; margin: 0; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); }
+#app #profilePage .pf-logout { margin: 0; border-radius: 0; background: rgba(255,72,102,.1); color: #ffb3c0; }
+#app #profilePage .pf-switch { position: relative; flex: none; width: 46px; height: 28px; }
+#app #profilePage .pf-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
+#app #profilePage .pf-switch i { position: absolute; inset: 0; border-radius: 999px; background: #3a2d50; transition: background .2s; }
+#app #profilePage .pf-switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; }
+#app #profilePage .pf-switch input:checked + i { background: #8b5cf6; }
+#app #profilePage .pf-switch input:checked + i::after { transform: translateX(18px); }
+#app #profilePage .pf-switch input:focus-visible + i { outline: 2px solid #cfc2ff; outline-offset: 2px; }
+
+/* Redaktə dialoqu */
+.pf-dialog { width: min(440px, calc(100vw - 24px)); max-height: 92dvh; margin: auto; padding: 16px; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); color: var(--text); overflow-y: auto; }
+.pf-dialog::backdrop { background: rgba(5,4,12,.65); backdrop-filter: blur(4px); }
+.pf-dialog-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.pf-dialog-head h2 { margin: 0; font-size: 18px; }
+.pf-dialog-head .secondary { width: 36px; height: 36px; padding: 0; }
+.pf-dialog .profile-field-label { display: flex; justify-content: space-between; margin: 10px 2px 4px; font-size: 12px; color: var(--muted); }
+.pf-dialog input, .pf-dialog textarea { margin-bottom: 4px; }
+.pf-dialog textarea { min-height: 84px; text-align: left; }
+.pf-dialog .pf-file { display: block; min-height: 42px; margin-bottom: 4px; padding: 10px; text-align: center; border: 1px dashed var(--line); border-radius: 12px; font-size: 13px; cursor: pointer; }
+.pf-dialog .pf-file input { display: none; }
+.pf-dialog .primary { margin-top: 14px; }
+
+/* Cihaz seçimləri */
+body.tc-compact #app main { padding-top: 10px; padding-bottom: 10px; }
+body.tc-compact #app .post-card, body.tc-compact #app .notification { padding: 10px; margin-bottom: 8px; }
+body.tc-reduce-motion *, body.tc-reduce-motion *::before, body.tc-reduce-motion *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+
+@media (min-width: 900px) {
+  #app #profilePage .pf-hero { padding: 0 24px 20px !important; }
+  #app #profilePage .pf-hero .profile-cover { height: 120px; margin: 0 -24px !important; }
+  #app #profilePage .pf-top { margin-top: -48px; gap: 18px; }
+  #app #profilePage .pf-hero .avatar-wrap { width: 104px; height: 104px; }
+  #app #profilePage .pf-name { font-size: 24px; }
+  #app #profilePage .pf-stats { max-width: 420px; }
+  #app #profilePage .pf-actions { max-width: 420px; }
+  #app #profilePage .pf-grid { gap: 6px; }
+  #app #profilePage .pf-tile { border-radius: 10px; }
+}
+@media (max-width: 380px) {
+  #app #profilePage .pf-row { flex-wrap: wrap; }
+  #app #profilePage .pf-row select { max-width: 100%; }
+}

@@ -246,7 +246,9 @@ async function loadMyProfile(){
     const u=await api("/api/profile");
     window.talkChatRole=u.role||"member";
     window.TalkChatAdmin?.syncRole(window.talkChatRole);
-    $("myUsername").innerHTML="@"+esc(u.username)+(u.verified?verifiedBadge():"");
+    $("myUsername").textContent="@"+u.username;
+    $("myBadges").innerHTML=(u.verified?verifiedBadge():"")+roleBadge(u.role);
+    if($("psetUsername"))$("psetUsername").textContent="@"+u.username;
     $("profileTheme").value=profileThemeNames.has(u.profileTheme)?u.profileTheme:"violet";
     $("profileColor").value=/^#[0-9a-fA-F]{6}$/.test(String(u.profileColor||""))?u.profileColor:"#8257ff";
     $("onlineVisibility").value=["everyone","friends","nobody"].includes(u.onlineVisibility)?u.onlineVisibility:"everyone";
@@ -265,7 +267,10 @@ async function loadMyProfile(){
     $("myProfileLink").textContent=u.link?u.link.replace(/^https?:\/\//i,""):"";
     $("myProfileLink").hidden=!u.link;
     $("myBio").value=u.bio||"";
-    $("myStats").textContent=`${u.followersCount} izləyici · ${u.followingCount} izlənilən`;
+    $("myStats").innerHTML=`<div><b id="statPosts">${window.talkPostsCount??"–"}</b><span>Paylaşım</span></div><div><b>${u.followersCount}</b><span>İzləyici</span></div><div><b>${u.followingCount}</b><span>İzlənilən</span></div>`;
+    $("myBioText").textContent=u.bio||"";
+    $("myBioText").hidden=!u.bio;
+    $("myBio").dispatchEvent(new Event("input"));
     $("avatarFallback").textContent=u.username[0].toUpperCase();
     $("myAvatar").src=u.avatar||"";
     $("myAvatar").style.display=u.avatar?"block":"none";
@@ -280,6 +285,8 @@ async function loadMyPosts(){
   if(!$("myPosts"))return;
   try{
     const list=await api("/api/profile/posts");
+    window.talkPostsCount=list.length;if($("statPosts"))$("statPosts").textContent=list.length;
+    window.TalkChatProfileV2?.renderGrid(list);
     $("myPosts").innerHTML=list.length?list.map(postHTML).join(""):"<div class='tc-empty-state'><span aria-hidden='true'>✦</span><b>Hələ paylaşım yoxdur</b><p>İlk postunu və ya Reels videonu paylaş.</p><button class='share-action share-post' type='button' data-open-share='post'>Post Paylaş</button></div>";
   }catch(e){$("myPosts").textContent=e.message;}
 }
@@ -287,6 +294,7 @@ $("saveBio").onclick=async()=>{
   try{
     const u=await api("/api/profile",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({displayName:$("myDisplayName").value,bio:$("myBio").value,link:$("myLink").value,profileTheme:$("profileTheme").value,profileColor:$("profileColor").value,onlineVisibility:$("onlineVisibility").value,lastSeenVisibility:$("lastSeenVisibility").value,privacySettings:{profile:$("privacyProfile").value,posts:$("privacyPosts").value,stories:$("privacyStories").value,messageRequests:$("privacyMessages").value,friendRequests:$("privacyFriends").value}})});
     $("profileStatus").textContent="Profil yadda saxlanıldı!";
+    $("editProfileDialog")?.close();loadMyProfile();
     applyProfileCustomization(document.querySelector("#profilePage .profile-card"),u);
     $("myDisplayNameValue").textContent=u.displayName||u.username;
     $("myProfileLink").href=u.link||"";
@@ -347,7 +355,7 @@ async function openPublicProfile(name){
 $("backFromPublic").onclick=()=>showPage("discover");
 async function loadNotifications(){
   try{
-    const list=await api("/api/notifications");
+    const list=(await api("/api/notifications")).filter(n=>window.TalkChatProfileV2?.notifAllowed(n.type)!==false);
     const types = {
       follow: {icon:"↗", label:"səni izləməyə başladı."},
       like: {icon:"♥", label:"paylaşımını bəyəndi."},
