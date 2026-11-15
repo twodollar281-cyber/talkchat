@@ -1704,23 +1704,60 @@ async function loadConversations() {
   }
 }
 
+const igPinKey = () => "tc-pinned-chats:" + (typeof me === "string" ? me : "");
+function igPinned() {
+  try { const v = JSON.parse(localStorage.getItem(igPinKey()) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+function igTogglePin(id) {
+  const set = new Set(igPinned());
+  if (set.has(id)) set.delete(id); else set.add(id);
+  try { localStorage.setItem(igPinKey(), JSON.stringify([...set])); } catch {}
+  igRenderList();
+}
+function igListTime(ts) {
+  const d = new Date(ts);
+  if (!ts || !Number.isFinite(d.getTime())) return "";
+  const now = new Date(), y = new Date(now);
+  y.setDate(now.getDate() - 1);
+  if (d.toDateString() === now.toDateString()) return igTime(ts);
+  if (d.toDateString() === y.toDateString()) return "Dünən";
+  return d.toLocaleDateString("az-AZ", { day: "numeric", month: "short" });
+}
 function igRenderList() {
   const q = (igEl("dmSearch").value || "").trim().toLowerCase();
-  const list = conversationsCache.filter(c => !q || String(c.name || "").toLowerCase().includes(q));
+  const pins = new Set(igPinned());
+  const filter = IG.filter || "all";
+  const unreadTotal = conversationsCache.reduce((n, c) => n + (c.unread || 0), 0);
+  const chips = igEl("igFilters");
+  if (chips) {
+    chips.querySelectorAll("[data-filter]").forEach(chip => chip.classList.toggle("on", chip.dataset.filter === filter));
+    const count = igEl("igFilterCount");
+    if (count) { count.textContent = unreadTotal > 99 ? "99+" : String(unreadTotal); count.hidden = !unreadTotal; }
+  }
+  const list = conversationsCache
+    .filter(c => !q || String(c.name || "").toLowerCase().includes(q))
+    .filter(c => filter === "pinned" ? pins.has(c.id) : filter === "groups" ? c.type === "group" : true)
+    .map((c, index) => ({ c, index }))
+    .sort((x, y) => (pins.has(y.c.id) - pins.has(x.c.id)) || (x.index - y.index))
+    .map(item => item.c);
   igEl("conversationList").innerHTML = list.length
     ? list.map(c => {
         const group = c.type === "group";
         const name = group ? (c.name || "Qrup") : (c.name || "");
         const p = group ? null : IG.profiles.get(c.name);
         const on = !group && igIsOnline(c.name);
+        const pinned = pins.has(c.id);
         const prev = c.lastMessage ? (c.lastFrom === me ? "Sən: " : "") + c.lastMessage : (group ? "Qrup söhbəti" : "Söhbətə başla");
-        return `<button type="button" class="ig-item${c.unread ? " unread" : ""}${c.id === activeConversation ? " on" : ""}" data-convo="${esc(c.id)}">
-          <span class="ig-avw">${group ? igAv("Q") : igAv(name, p && p.avatar)}${on ? '<i class="ig-dot"></i>' : ""}</span>
-          <span class="ig-mid"><span class="ig-name">${esc(name)}${!group && p?.verified ? verifiedBadge() : ""}</span><span class="ig-prev">${esc(prev)}</span></span>
-          ${c.unread ? `<span class="ig-badge">${c.unread > 99 ? "99+" : c.unread}</span>` : ""}
-        </button>`;
+        return `<div class="ig-item-wrap${pinned ? " pinned" : ""}">
+          <button type="button" class="ig-item${c.unread ? " unread" : ""}${c.id === activeConversation ? " on" : ""}" data-convo="${esc(c.id)}">
+            <span class="ig-avw">${group ? igAv("Q") : igAv(name, p && p.avatar)}${on ? '<i class="ig-dot"></i>' : ""}</span>
+            <span class="ig-mid"><span class="ig-name">${esc(name)}${!group && p?.verified ? verifiedBadge() : ""}</span><span class="ig-prev">${esc(prev)}</span></span>
+            <span class="ig-meta"><time class="ig-list-time">${esc(igListTime(c.lastMessageAt))}</time>${c.unread ? `<span class="ig-badge">${c.unread > 99 ? "99+" : c.unread}</span>` : ""}</span>
+          </button>
+          <button type="button" class="ig-pin-btn${pinned ? " on" : ""}" data-pin="${esc(c.id)}" aria-pressed="${pinned}" aria-label="${pinned ? "Pini sil" : "Söhbəti pinlə"}" title="${pinned ? "Pini sil" : "Pinlə"}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3z"/></svg></button>
+        </div>`;
       }).join("")
-    : `<p class="ig-none">${q ? "Nəticə tapılmadı" : "Hələ söhbət yoxdur"}</p>`;
+    : `<p class="ig-none">${q ? "Nəticə tapılmadı" : filter === "pinned" ? "Pinlənmiş söhbət yoxdur" : filter === "groups" ? "Qrup söhbəti yoxdur" : "Hələ söhbət yoxdur"}</p>`;
 }
 
 /* ---------- söhbət başlığı ---------- */
@@ -1824,6 +1861,16 @@ function igReactionMarkup(message) {
   ).join("")}</span>`;
 }
 
+function igVoiceMarkup(m) {
+  const seed = String(m.id || m.attachment || "v");
+  let h = 0; for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  const bars = Array.from({ length: 32 }, (_, i) => { h = (h * 1664525 + 1013904223) >>> 0; return 5 + Math.round(((h >>> 8) % 100) / 100 * 17 * (0.55 + 0.45 * Math.sin(i / 4 + 1))); });
+  return '<span class="tc-voice" data-voice><audio class="ig-audio" preload="metadata" src="' + esc(m.attachment) + '" aria-label="Səsli mesaj"></audio>'
+    + '<button type="button" class="tc-voice-play" data-voice-play aria-label="Oxut"><svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>'
+    + '<span class="tc-voice-main"><span class="tc-voice-wave" data-voice-seek role="slider" tabindex="0" aria-label="Səs mövqeyi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">'
+    + bars.map(v => '<i style="height:' + v + 'px"></i>').join("")
+    + '</span><span class="tc-voice-row"><span class="tc-voice-time" data-voice-time>0:00</span><button type="button" class="tc-voice-speed" data-voice-speed aria-label="Sürət">1x</button></span></span></span>';
+}
 function igBubble(m, byId) {
   const time = `<time class="ig-message-time"${m.createdAt ? ` datetime="${esc(m.createdAt)}"` : ""}>${esc(igTime(m.createdAt))}</time>`;
   if (m.deleted) return `<span class="ig-bub del"><i class="ig-del">Mesaj silindi</i>${time}</span>`;
@@ -1848,7 +1895,7 @@ function igBubble(m, byId) {
       body += isImg
         ? '<a class="ig-image-message" href="' + esc(m.attachment) + '" target="_blank" rel="noopener"><img src="' + esc(m.attachment) + '" alt="Şəkil" loading="lazy" decoding="async"></a>'
         : isAudio
-          ? '<audio class="ig-audio" controls preload="metadata" src="' + esc(m.attachment) + '" aria-label="Səsli mesaj"></audio>'
+          ? igVoiceMarkup(m)
           : isVideo
             ? '<video class="ig-video-message" controls playsinline preload="metadata" src="' + esc(m.attachment) + '" aria-label="Video mesajı"></video>'
           : '<a class="ig-file" href="' + esc(m.attachment) + '" target="_blank" rel="noopener">📎 ' + esc(m.attachmentName || "Fayl") + '</a>';
@@ -2270,6 +2317,58 @@ async function igStartWith(username) {
 
 /* ---------- hadisələr ---------- */
 (function igBind() {
+  /* inbox filtrləri və pin */
+  igEl("igFilters")?.addEventListener("click", e => {
+    const chip = e.target.closest("[data-filter]");
+    if (!chip) return;
+    IG.filter = chip.dataset.filter;
+    igRenderList();
+  });
+  igEl("conversationList").addEventListener("click", e => {
+    const pin = e.target.closest("[data-pin]");
+    if (pin) { e.stopPropagation(); igTogglePin(pin.dataset.pin); }
+  });
+  /* səsli mesaj player-i */
+  const fmt = t => { t = Number.isFinite(t) ? Math.max(0, Math.floor(t)) : 0; return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+  const speeds = [1, 1.5, 2];
+  const voiceUI = (box, audio) => {
+    const d = audio.duration, t = audio.currentTime || 0, ratio = Number.isFinite(d) && d > 0 ? Math.min(1, t / d) : 0;
+    const bars = box.querySelectorAll(".tc-voice-wave i"), lit = Math.round(ratio * bars.length);
+    bars.forEach((bar, i) => bar.classList.toggle("on", i < lit));
+    const playing = !audio.paused && !audio.ended;
+    box.classList.toggle("playing", playing);
+    const btn = box.querySelector("[data-voice-play]"); if (btn) btn.setAttribute("aria-label", playing ? "Dayandır" : "Oxut");
+    box.querySelector("[data-voice-seek]")?.setAttribute("aria-valuenow", String(Math.round(ratio * 100)));
+    const label = box.querySelector("[data-voice-time]");
+    if (label) label.textContent = playing || t > 0 ? fmt(t) : (Number.isFinite(d) ? fmt(d) : "0:00");
+  };
+  const box = igEl("chatMessages");
+  box.addEventListener("click", e => {
+    const wrap = e.target.closest("[data-voice]"); if (!wrap) return;
+    const audio = wrap.querySelector("audio"); if (!audio) return;
+    if (e.target.closest("[data-voice-play]")) {
+      if (audio.paused) {
+        box.querySelectorAll("[data-voice] audio").forEach(other => { if (other !== audio) other.pause(); });
+        audio.play().catch(() => {});
+      } else audio.pause();
+    } else if (e.target.closest("[data-voice-speed]")) {
+      const next = speeds[(speeds.indexOf(audio.playbackRate) + 1) % speeds.length] || 1;
+      audio.playbackRate = next;
+      e.target.closest("[data-voice-speed]").textContent = next + "x";
+    } else if (e.target.closest("[data-voice-seek]")) {
+      const r = e.target.closest("[data-voice-seek]").getBoundingClientRect();
+      if (Number.isFinite(audio.duration) && audio.duration > 0) { audio.currentTime = audio.duration * Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); voiceUI(wrap, audio); }
+    }
+  });
+  box.addEventListener("keydown", e => {
+    const seek = e.target.closest?.("[data-voice-seek]"); if (!seek || !["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+    const audio = seek.closest("[data-voice]")?.querySelector("audio"); if (!audio) return;
+    e.preventDefault(); e.stopPropagation();
+    audio.currentTime = Math.max(0, Math.min(audio.duration || 0, audio.currentTime + (e.key === "ArrowRight" ? 5 : -5)));
+  });
+  ["timeupdate", "play", "pause", "ended", "loadedmetadata", "durationchange"].forEach(type => box.addEventListener(type, e => {
+    if (e.target instanceof HTMLAudioElement) { const wrap = e.target.closest("[data-voice]"); if (wrap) voiceUI(wrap, e.target); }
+  }, true));
   igEl("conversationList").addEventListener("click", e => {
     const b = e.target.closest("[data-convo]");
     if (b) openConversation(b.dataset.convo);
