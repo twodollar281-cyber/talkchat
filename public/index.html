@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="chat-themes.css?v=3">
   <link rel="stylesheet" href="ai-assistant.css?v=3">
   <link rel="stylesheet" href="talkchat-messaging.css?v=2">
-  <link rel="stylesheet" href="talkplayer.css?v=2">
+  <link rel="stylesheet" href="talkplayer.css?v=7">
   <link rel="stylesheet" href="talkstore.css?v=3">
   <link rel="stylesheet" href="profile-frames.css?v=2">
   <link rel="stylesheet" href="profile-v2.css?v=1">
@@ -426,8 +426,14 @@
 
       <section id="playerPage" class="page tc-player-page" hidden aria-label="TalkPlayer">
         <header class="tp-top">
-          <div class="tp-top-text"><span class="eyebrow">MUSİQİ</span><h1>TalkPlayer</h1></div>
-          <button id="tcPlayerAdd" class="tc-player-add" type="button"><span class="tp-add-ico" data-icon="plus" aria-hidden="true"></span><span>Mahnı əlavə et</span></button>
+          <div class="tp-brand">
+            <span class="tp-logo" aria-hidden="true"><svg viewBox="0 0 48 40"><path d="M3 15v10M8 10v20M13 17v6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M33 3H21a8 8 0 0 0-8 8v14a8 8 0 0 0 8 8h2v5l7-5h3a8 8 0 0 0 8-8V11a8 8 0 0 0-8-8z" fill="currentColor"/><path d="M23 13v10M28 10v16M33 15v6" fill="none" stroke="#0c0c10" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+            <h1 class="tp-wordmark"><span>Talk</span><b>Player</b></h1>
+          </div>
+          <div class="tp-me" id="tcPlayerMe" hidden>
+            <span class="tp-me-text"><b id="tcPlayerMeName"></b><small><i aria-hidden="true"></i>online</small></span>
+            <span class="tp-me-av" id="tcPlayerMeAv" aria-hidden="true"></span>
+          </div>
         </header>
         <label class="tp-search" for="tcPlayerSearch"><span data-icon="search" aria-hidden="true"></span><input id="tcPlayerSearch" class="tp-player-search" type="search" placeholder="Mahnı və ya ifaçı axtar..." autocomplete="off" aria-label="Mahnı axtar"></label>
         <div id="tcPlayerTabs" class="tp-tabs" role="tablist" hidden>
@@ -437,8 +443,9 @@
         <div id="tcPlayerHome" class="tp-home"></div>
         <div id="tcPlayerListHead" class="tc-player-head" hidden>
           <button id="tcPlayerBack" class="tp-back" type="button" aria-label="Geri"><span data-icon="back" aria-hidden="true"></span></button>
-          <h2 id="tcPlayerListTitle">Siyahı</h2>
+          <h2 id="tcPlayerListTitle">Your Daily Mixtape</h2>
           <button id="tcPlayerClear" class="tc-player-clear" type="button" hidden>Hamısını sil</button>
+          <button id="tcPlayerAdd" class="tc-player-add tp-add-round" type="button" aria-label="Mahnı əlavə et"><span class="tp-add-ico" data-icon="plus" aria-hidden="true"></span></button>
         </div>
         <input id="tcPlayerFile" type="file" accept="audio/*" multiple hidden>
         <ul id="tcPlayerList" class="tc-player-list" hidden></ul>
@@ -816,6 +823,7 @@
   </div>
   <div id="tcMiniPlayer" class="tc-mini-player" hidden>
     <button id="tcMiniOpen" class="tc-mini-open" type="button" aria-label="TalkPlayer-i aç"><span class="tc-mini-cover" aria-hidden="true">♪</span><span id="tcMiniTitle" class="tc-mini-title">TalkPlayer</span><span id="tcMiniArtist" class="tc-mini-artist"></span></button>
+    <button id="tcMiniPrev" class="tc-mini-btn" type="button" aria-label="Əvvəlki"><span data-icon="prev" aria-hidden="true"></span></button>
     <button id="tcMiniPlay" class="tc-mini-btn" type="button" aria-label="Oxut"><span data-icon="play" aria-hidden="true"></span></button>
     <button id="tcMiniNext" class="tc-mini-btn" type="button" aria-label="Növbəti"><span data-icon="next" aria-hidden="true"></span></button>
     <span id="tcMiniBar" class="tc-mini-bar" aria-hidden="true"></span>
@@ -842,7 +850,7 @@
   <script src="calls.js?v=6"></script>
   <script src="group-calls.js?v=4"></script>
   <script src="live-streams.js?v=1"></script>
-  <script src="talkplayer.js?v=3"></script>
+  <script src="talkplayer.js?v=5"></script>
   <script src="talkstore.js?v=4"></script>
 </body>
 </html>

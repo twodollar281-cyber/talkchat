@@ -56,11 +56,63 @@
   const delSong = id => tx("readwrite", s => idbReq(s.delete(id)));
   const clearAll = () => tx("readwrite", s => idbReq(s.clear()));
 
+  /* ---------- ID3 etiketləri (ad, ifaçı, cover) ---------- */
+  async function readTags(file) {
+    const out = {};
+    try {
+      const head = new Uint8Array(await file.slice(0, 10).arrayBuffer());
+      if (head[0] !== 0x49 || head[1] !== 0x44 || head[2] !== 0x33 || head[3] < 3) return out;
+      const ver = head[3], size = ((head[6] & 127) << 21) | ((head[7] & 127) << 14) | ((head[8] & 127) << 7) | (head[9] & 127);
+      const buf = new Uint8Array(await file.slice(10, 10 + Math.min(size, 8 * 1024 * 1024)).arrayBuffer());
+      const dec = (b, enc) => { try { return new TextDecoder(enc === 1 ? "utf-16" : enc === 2 ? "utf-16be" : enc === 3 ? "utf-8" : "windows-1252").decode(b).split("\0").map(x => x.trim()).filter(Boolean).join(", "); } catch { return ""; } };
+      let p = 0;
+      while (p + 10 <= buf.length) {
+        const id = String.fromCharCode(buf[p], buf[p + 1], buf[p + 2], buf[p + 3]);
+        if (!/^[A-Z0-9]{4}$/.test(id)) break;
+        const fs = ver === 4 ? ((buf[p + 4] & 127) << 21) | ((buf[p + 5] & 127) << 14) | ((buf[p + 6] & 127) << 7) | (buf[p + 7] & 127) : buf[p + 4] * 16777216 + (buf[p + 5] << 16) + (buf[p + 6] << 8) + buf[p + 7];
+        if (fs <= 0 || p + 10 + fs > buf.length) break;
+        const body = buf.subarray(p + 10, p + 10 + fs);
+        if (id === "TIT2") out.title = dec(body.subarray(1), body[0]);
+        else if (id === "TPE1") out.artist = dec(body.subarray(1), body[0]);
+        else if (id === "APIC" && !out.cover) {
+          const enc = body[0]; let q = 1; while (q < body.length && body[q] !== 0) q++;
+          const mime = String.fromCharCode(...body.subarray(1, q)); q += 2;
+          if (enc === 1 || enc === 2) { while (q + 1 < body.length && !(body[q] === 0 && body[q + 1] === 0)) q += 2; q += 2; }
+          else { while (q < body.length && body[q] !== 0) q++; q++; }
+          const img = body.subarray(q);
+          if (img.length > 200) out.cover = new Blob([img], { type: /^image\//.test(mime) ? mime : (img[0] === 0x89 ? "image/png" : "image/jpeg") });
+        }
+        p += 10 + fs;
+      }
+    } catch {}
+    return out;
+  }
+  function splitName(name) {
+    const m = String(name).match(/^(.{2,60}?)\s+[-–—]\s+(.+)$/);
+    return m ? { artist: m[1].trim(), title: m[2].trim() } : { artist: "", title: name };
+  }
+  const putSong = rec => tx("readwrite", s => idbReq(s.put(rec)));
+  let backfilling = false;
+  async function backfill() {
+    if (backfilling) return; backfilling = true;
+    try {
+      for (const song of songs.filter(x => !x.tagged && x.blob)) {
+        const t = await readTags(song.blob), f = splitName(song.title);
+        if (t.title) song.title = t.title; else if (f.artist && /^Naməlum/i.test(song.artist || "")) song.title = f.title;
+        if (t.artist) song.artist = t.artist; else if (f.artist && /^Naməlum/i.test(song.artist || "")) song.artist = f.artist;
+        if (t.cover) song.cover = t.cover;
+        song.tagged = true;
+        try { await putSong(song); } catch {}
+      }
+    } finally { backfilling = false; }
+    render(true);
+  }
+
   /* ---------- state ---------- */
   const audio = new Audio(); audio.preload = "metadata";
-  let songs = [], query = "", index = -1, shuffle = false, repeat = "off", urlCache = new Map(), sleepTimer = null;
+  let songs = [], mix = null, coverCache = new Map(), miniCoverKey = null, query = "", index = -1, shuffle = false, repeat = "off", urlCache = new Map(), sleepTimer = null;
 
-  const visible = () => { const q = query.trim().toLowerCase(); return q ? songs.filter(s => (s.title + " " + s.artist).toLowerCase().includes(q)) : songs; };
+  const visible = () => { const q = query.trim().toLowerCase(); const base = mix ? songs.filter(mix.fn) : songs; return q ? base.filter(s => (s.title + " " + s.artist).toLowerCase().includes(q)) : base; };
   const current = () => songs[index] || null;
   const urlFor = song => { if (!urlCache.has(song.id)) urlCache.set(song.id, URL.createObjectURL(song.blob)); return urlCache.get(song.id); };
 
@@ -77,7 +129,8 @@
       try {
         // Android file picker bəzən boş type qaytarır — audio/mpeg kimi qəbul edirik
         const blob = file.type ? file : file.slice(0, file.size, "audio/mpeg");
-        await addSong({ title: readableName(file), artist: "Naməlum ifaçı", blob, size: file.size, addedAt: Date.now() });
+        const t = await readTags(file), f = splitName(readableName(file));
+        await addSong({ title: t.title || f.title, artist: t.artist || f.artist || "Naməlum ifaçı", cover: t.cover || null, tagged: true, blob, size: file.size, addedAt: Date.now() });
         ok++;
       } catch (e) {
         bad++;
@@ -94,7 +147,9 @@
     try { songs = (await getAll()).sort((a, b) => a.addedAt - b.addedAt); }
     catch (e) { songs = []; toast(e.message); }
     if (index >= songs.length) index = -1;
+    if (mix && !songs.some(mix.fn)) mix = null;
     render();
+    backfill();
   }
 
   /* ---------- playback ---------- */
@@ -139,6 +194,7 @@
     const s = current(), playing = !audio.paused && !audio.ended;
     document.body.classList.toggle("tc-player-playing", playing);
     const mini = $("tcMiniPlayer"); if (mini) mini.hidden = !s;
+    paintMiniCover(s);
     if ($("tcMiniTitle")) $("tcMiniTitle").textContent = s ? s.title : "TalkPlayer";
     if ($("tcMiniArtist")) $("tcMiniArtist").textContent = s ? s.artist : "";
     if ($("tcPlayerTitle")) $("tcPlayerTitle").textContent = s ? s.title : "Mahnı seçilməyib";
@@ -163,26 +219,108 @@
     } catch {}
   }
 
+  /* ---------- song cover ---------- */
+  const COVER_GRADS = [["#3b2a14", "#c99342"], ["#0ea5e9", "#4f46e5"], ["#f43f5e", "#f59e0b"], ["#059669", "#0ea5e9"], ["#7c3aed", "#ec4899"], ["#f97316", "#b91c1c"]];
+  const gradFor = str => { const h = Array.from(String(str || "")).reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7), g = COVER_GRADS[h % COVER_GRADS.length]; return "linear-gradient(135deg," + g[0] + "," + g[1] + ")"; };
+  function coverSrc(song) {
+    if (!song) return "";
+    const c = song.cover || song.coverUrl;
+    if (c instanceof Blob) { const k = "b" + song.id; if (!coverCache.has(k)) coverCache.set(k, URL.createObjectURL(c)); return coverCache.get(k); }
+    return typeof c === "string" && /^(https?:\/\/|\/|data:image\/|blob:)/.test(c) && !/default-cover/.test(c) ? c : "";
+  }
+  function fillCover(c, song) {
+    c.textContent = ""; c.style.background = gradFor(song && song.title);
+    const letter = (String((song && song.title) || "").trim().match(/[\p{L}\p{N}]/u) || ["♪"])[0].toUpperCase();
+    const src = coverSrc(song);
+    if (!src) { c.textContent = letter; return c; }
+    const img = document.createElement("img"); img.alt = ""; img.loading = "lazy"; img.decoding = "async"; img.draggable = false;
+    img.onerror = () => { img.remove(); c.textContent = letter; };
+    img.src = src; c.appendChild(img); return c;
+  }
+  function makeCover(song) { const c = document.createElement("span"); c.className = "tp-cover tp-song-cover"; return fillCover(c, song); }
+  function paintMiniCover(s) {
+    const c = document.querySelector("#tcMiniOpen .tc-mini-cover"), key = s ? s.id + ":" + (s.cover ? 1 : 0) : "none";
+    if (!c || key === miniCoverKey) return; miniCoverKey = key;
+    if (s) fillCover(c, s); else { c.textContent = "♪"; c.style.background = ""; }
+  }
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  /* ---------- profil (yalnız header üçün) ---------- */
+  async function loadMe() {
+    try {
+      const r = await fetch("/api/me", { credentials: "same-origin" }); if (!r.ok) return;
+      const d = await r.json(), box = $("tcPlayerMe"), nm = $("tcPlayerMeName"), av = $("tcPlayerMeAv"); if (!box || !d || !d.username) return;
+      nm.textContent = d.displayName || d.username; av.textContent = "";
+      if (d.avatar) { const im = document.createElement("img"); im.alt = ""; im.src = d.avatar; im.onerror = () => { im.remove(); av.textContent = d.username[0].toUpperCase(); }; av.appendChild(im); }
+      else av.textContent = d.username[0].toUpperCase();
+      box.hidden = false;
+    } catch {}
+  }
+  window.addEventListener("talkchat:entered", loadMe);
+
+  /* ---------- home: Featured + Trending Mixes ---------- */
+  function buildMixes() {
+    const list = [{ id: "all", name: "Hamısı", sub: songs.length + " mahnı", fn: () => true, ref: songs[songs.length - 1] }];
+    const newest = new Set(songs.slice().sort((a, b) => b.addedAt - a.addedAt).slice(0, 10).map(x => x.id));
+    if (songs.length > 3) list.push({ id: "new", name: "Son əlavələr", sub: "Yeni gələnlər", fn: x => newest.has(x.id), ref: songs[songs.length - 1] });
+    const counts = new Map();
+    songs.forEach(x => { const a = (x.artist || "").trim(); if (a && !/^Naməlum/i.test(a)) counts.set(a, (counts.get(a) || 0) + 1); });
+    Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4).forEach(([a, n]) => list.push({ id: "a:" + a, name: a, sub: n + " mahnı", fn: x => (x.artist || "").trim() === a, ref: songs.find(x => (x.artist || "").trim() === a) }));
+    if (songs.some(x => x.duration >= 240)) list.push({ id: "long", name: "Uzun mahnılar", sub: "4 dəq+", fn: x => x.duration >= 240, ref: songs.find(x => x.duration >= 240) });
+    return list.slice(0, 6);
+  }
+  function renderHome() {
+    const home = $("tcPlayerHome"); if (!home) return;
+    const scroller = home.querySelector(".tp-mixes"), keep = scroller ? scroller.scrollLeft : 0;
+    const show = songs.length > 0 && !query.trim();
+    home.hidden = !show; home.textContent = ""; if (!show) return;
+    const playing = !audio.paused;
+    const fi = index >= 0 ? index : songs.length - 1, fs = songs[fi];
+
+    const sec1 = el("section", "tp-section"); sec1.appendChild(el("div", "tp-sechead")).appendChild(el("h2", "", "Featured Section"));
+    const feat = el("button", "tp-feat"); feat.type = "button"; feat.setAttribute("aria-label", fs.title + " — " + fs.artist);
+    const fc = el("span", "tp-feat-cover"); fillCover(fc, fs);
+    const fp = el("span", "tp-feat-play"); fp.setAttribute("aria-hidden", "true"); fp.innerHTML = svg(fi === index && playing ? "pause" : "play"); fc.appendChild(fp);
+    const fi2 = el("span", "tp-feat-info"); fi2.append(el("span", "tp-chip", "Featured"), el("b", "tp-feat-title", fs.title), el("span", "tp-feat-artist", fs.artist));
+    feat.append(fc, fi2); feat.onclick = () => { if (fi === index) toggle(); else playSong(fi); };
+    sec1.appendChild(feat);
+
+    const sec2 = el("section", "tp-section"); sec2.appendChild(el("div", "tp-sechead")).appendChild(el("h2", "", "Trending Mixes"));
+    const row = el("div", "tp-mixes");
+    buildMixes().forEach(m => {
+      const b = el("button", "tp-mix" + (mix && mix.id === m.id ? " on" : "")); b.type = "button";
+      const cv = el("span", "tp-mix-cover"); fillCover(cv, m.ref || { title: m.name, id: m.id });
+      cv.style.background = gradFor(m.name); if (m.ref && coverSrc(m.ref)) fillCover(cv, m.ref);
+      cv.appendChild(el("span", "tp-mix-label", m.name));
+      b.append(cv, el("b", "tp-mix-name", m.name), el("small", "tp-mix-sub", m.sub));
+      b.onclick = () => { mix = mix && mix.id === m.id ? null : (m.id === "all" ? null : m); render(true); const h = $("tcPlayerListHead"); if (h) h.scrollIntoView({ behavior: "smooth", block: "start" }); };
+      row.appendChild(b);
+    });
+    sec2.appendChild(row); home.append(sec1, sec2); row.scrollLeft = keep;
+  }
+
   /* ---------- rendering ---------- */
   function render(soft) {
     const list = visible(), ul = $("tcPlayerList"), empty = $("tcPlayerEmpty"), head = $("tcPlayerListHead");
     if (!ul) return;
     const has = songs.length > 0;
     ul.hidden = !has; if (empty) empty.hidden = has;
-    if (head) { head.hidden = !has; $("tcPlayerBack") && ($("tcPlayerBack").hidden = true); const t = $("tcPlayerListTitle"); if (t) t.textContent = "Kitabxana (" + songs.length + ")"; const c = $("tcPlayerClear"); if (c) c.hidden = !has; }
+    if (head) { head.hidden = !has; $("tcPlayerBack") && ($("tcPlayerBack").hidden = !mix); const t = $("tcPlayerListTitle"); if (t) t.textContent = mix ? mix.name + " (" + list.length + ")" : "Your Daily Mixtape"; const c = $("tcPlayerClear"); if (c) c.hidden = !has; }
     const playing = !audio.paused;
     ul.textContent = "";
     list.forEach(song => {
       const i = songs.indexOf(song), isCur = i === index;
       const li = document.createElement("li"); li.className = "tc-player-item" + (isCur ? " current" : "") + (isCur && playing ? " playing" : "");
       const main = document.createElement("button"); main.type = "button"; main.className = "tc-player-item-main";
-      const cover = document.createElement("span"); cover.className = "tc-mini-cover"; cover.textContent = "♪";
-      const info = document.createElement("span"); info.style.minWidth = "0"; info.style.display = "grid";
-      const name = document.createElement("span"); name.className = "tc-player-item-name"; name.textContent = song.title;
-      const sub = document.createElement("small"); sub.textContent = song.artist;
+      const cover = makeCover(song);
+      const info = document.createElement("span"); info.className = "tp-song-info";
+      const name = document.createElement("span"); name.className = "tc-player-item-name"; name.textContent = song.title; name.title = song.title;
+      const sub = document.createElement("small"); sub.className = "tp-song-artist"; sub.textContent = song.artist; sub.title = song.artist;
       info.append(name, sub);
       const dur = document.createElement("span"); dur.className = "tc-player-item-dur"; dur.textContent = song.duration ? fmt(song.duration) : "";
-      main.append(cover, info, dur); main.onclick = () => playSong(i);
+      const go = document.createElement("span"); go.className = "tp-song-go"; go.setAttribute("aria-hidden", "true"); go.innerHTML = svg(isCur && playing ? "pause" : "play");
+      main.setAttribute("aria-label", song.title + " — " + song.artist);
+      main.append(cover, info, dur, go); main.onclick = () => playSong(i);
       const del = document.createElement("button"); del.type = "button"; del.className = "tc-player-item-menu"; del.setAttribute("aria-label", "Sil"); del.innerHTML = svg("trash");
       del.onclick = async e => {
         e.stopPropagation();
@@ -195,6 +333,7 @@
       li.append(main, del); ul.appendChild(li);
     });
     if (!list.length && has) { const li = document.createElement("li"); li.className = "tc-player-empty"; li.textContent = "Heç nə tapılmadı."; ul.appendChild(li); }
+    renderHome();
     paintIcons(document.getElementById("playerPage"));
     if (!soft) updateMeta();
   }
@@ -218,6 +357,8 @@
   $("tcPlayerNPClose")?.addEventListener("click", closeNP);
   $("tcMiniPlay")?.addEventListener("click", toggle);
   $("tcMiniNext")?.addEventListener("click", next);
+  $("tcMiniPrev")?.addEventListener("click", prev);
+  $("tcPlayerBack")?.addEventListener("click", () => { mix = null; render(true); });
   $("tcPlayerPlay")?.addEventListener("click", toggle);
   $("tcPlayerNext")?.addEventListener("click", next);
   $("tcPlayerPrev")?.addEventListener("click", prev);
@@ -234,6 +375,7 @@
   audio.volume = 0.8;
 
   paintIcons(document);
+  loadMe();
   window.TalkChatPlayer = { load: refresh, add: addFiles };
   window.TalkPlayer = window.TalkChatPlayer;
   refresh();
