@@ -38,4 +38,4 @@ body.tc-app-themed .notification,
 body.tc-app-themed .tc-store-card,
 body.tc-app-themed #messagesPage.ig-dm,
 body.tc-app-themed #messagesPage.ig-dm .ig-side { background: var(--panel) !important; color: var(--text) !important; }
-body.tc-app-themed .primary { background: var(--purple) !important; }
+body.tc-app-themed .primary { background: var(--purple) !important; color: var(--tc-out-text) !important; }

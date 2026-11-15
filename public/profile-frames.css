@@ -3,6 +3,14 @@
 [data-frame="item-frame-galaxy"] { --f1:#c04dff; --f2:#36c5ff; }
 [data-frame="item-frame-royal"]  { --f1:#ffd45e; --f2:#c8901a; }
 [data-frame="item-frame-cyber"]  { --f1:#36c5ff; --f2:#7c3aed; }
+[data-frame="item-frame-aurora"]  { --f1:#34d399; --f2:#22d3ee; }
+[data-frame="item-frame-inferno"] { --f1:#ff512f; --f2:#f9a825; }
+[data-frame="item-frame-diamond"] { --f1:#e0f2fe; --f2:#7dd3fc; }
+[data-frame="item-frame-aurora"], [data-frame="item-frame-inferno"], [data-frame="item-frame-diamond"] { animation: tc-frame-glow 2.6s ease-in-out infinite; }
+@keyframes tc-frame-glow { 50% { filter: brightness(1.18) drop-shadow(0 0 6px var(--f2)); } }
+.avatar-wrap[data-frame="item-frame-aurora"]::after  { content: "✨"; position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 20px; z-index: 3; }
+.avatar-wrap[data-frame="item-frame-inferno"]::after { content: "🔥"; position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 20px; z-index: 3; }
+.avatar-wrap[data-frame="item-frame-diamond"]::after { content: "💎"; position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 20px; z-index: 3; }
 [data-frame^="item-frame-"] {
   border-radius: 50%;
   box-shadow: 0 0 0 2px #11111d, 0 0 0 4px var(--f1), 0 0 0 6px var(--f2), 0 0 14px 5px var(--f2) !important;

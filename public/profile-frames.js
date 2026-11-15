@@ -4,8 +4,13 @@
     "item-frame-neon": "Neon Çərçivə",
     "item-frame-galaxy": "Qalaktika",
     "item-frame-royal": "Şahzadə Çərçivəsi",
-    "item-frame-cyber": "Kiber Çərçivə"
+    "item-frame-cyber": "Kiber Çərçivə",
+    "item-frame-aurora": "Aurora Çərçivəsi",
+    "item-frame-inferno": "İnferno Çərçivəsi",
+    "item-frame-diamond": "Almaz Çərçivəsi"
   };
+  const PREMIUM = new Set(["item-frame-aurora", "item-frame-inferno", "item-frame-diamond"]);
+  let serverOwned = [];
   const valid = id => Object.prototype.hasOwnProperty.call(NAMES, id);
   const attr = id => (valid(id) ? ` data-frame="${id}"` : "");
   const set = (el, id) => { if (!el) return; if (valid(id)) el.setAttribute("data-frame", id); else el.removeAttribute("data-frame"); };
@@ -13,7 +18,7 @@
   function owned() {
     let list = [];
     try { list = JSON.parse(localStorage.getItem("tcStoreCollected") || "[]"); } catch {}
-    return Array.isArray(list) ? list.filter(valid) : [];
+    return (Array.isArray(list) ? list.filter(id => valid(id) && !PREMIUM.has(id)) : []).concat(serverOwned.filter(valid));
   }
 
   let current = "";
@@ -61,7 +66,8 @@
     }
     mine.forEach(id => grid.appendChild(option(id, NAMES[id], (document.getElementById("myUsername")?.textContent || "?").replace("@", "").charAt(0).toUpperCase() || "?")));
   }
-  function openDialog() {
+  async function openDialog() {
+    try { const r = await fetch("/api/gems", { credentials: "same-origin" }); if (r.ok) serverOwned = ((await r.json()).owned || []).filter(id => PREMIUM.has(id)); } catch {}
     const dlg = document.getElementById("tcFrameDialog"); if (!dlg) return;
     const status = document.getElementById("tcFrameStatus"); if (status) status.textContent = "";
     renderOptions();
