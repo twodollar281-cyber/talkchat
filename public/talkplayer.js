@@ -57,6 +57,7 @@
   const clearAll = () => tx("readwrite", s => idbReq(s.clear()));
 
   /* ---------- ID3 etiketləri (ad, ifaçı, cover) ---------- */
+  const isBad = x => /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\ufffd]/.test(x || "");
   async function readTags(file) {
     const out = {};
     try {
@@ -64,7 +65,20 @@
       if (head[0] !== 0x49 || head[1] !== 0x44 || head[2] !== 0x33 || head[3] < 3) return out;
       const ver = head[3], size = ((head[6] & 127) << 21) | ((head[7] & 127) << 14) | ((head[8] & 127) << 7) | (head[9] & 127);
       const buf = new Uint8Array(await file.slice(10, 10 + Math.min(size, 8 * 1024 * 1024)).arrayBuffer());
-      const dec = (b, enc) => { try { return new TextDecoder(enc === 1 ? "utf-16" : enc === 2 ? "utf-16be" : enc === 3 ? "utf-8" : "windows-1252").decode(b).split("\0").map(x => x.trim()).filter(Boolean).join(", "); } catch { return ""; } };
+      const dec = (b, enc) => {
+        let t = "";
+        try {
+          if (enc === 1 || enc === 2) {
+            let le = enc !== 2, bytes = b;
+            if (b[0] === 0xFF && b[1] === 0xFE) { le = true; bytes = b.subarray(2); }
+            else if (b[0] === 0xFE && b[1] === 0xFF) { le = false; bytes = b.subarray(2); }
+            t = new TextDecoder(le ? "utf-16le" : "utf-16be").decode(bytes);
+            if (isBad(t)) { const alt = new TextDecoder(le ? "utf-16be" : "utf-16le").decode(bytes); if (!isBad(alt)) t = alt; }
+          } else if (enc === 3) t = new TextDecoder("utf-8").decode(b);
+          else { try { t = new TextDecoder("utf-8", { fatal: true }).decode(b); } catch { t = new TextDecoder("windows-1252").decode(b); } }
+        } catch { return ""; }
+        return t.split("\0").map(x => x.trim()).filter(Boolean).join(", ");
+      };
       let p = 0;
       while (p + 10 <= buf.length) {
         const id = String.fromCharCode(buf[p], buf[p + 1], buf[p + 2], buf[p + 3]);
@@ -85,6 +99,8 @@
         p += 10 + fs;
       }
     } catch {}
+    if (isBad(out.title)) delete out.title;
+    if (isBad(out.artist)) delete out.artist;
     return out;
   }
   function splitName(name) {
@@ -96,16 +112,17 @@
   async function backfill() {
     if (backfilling) return; backfilling = true;
     try {
-      for (const song of songs.filter(x => !x.tagged && x.blob)) {
-        const t = await readTags(song.blob), f = splitName(song.title);
-        if (t.title) song.title = t.title; else if (f.artist && /^Naməlum/i.test(song.artist || "")) song.title = f.title;
-        if (t.artist) song.artist = t.artist; else if (f.artist && /^Naməlum/i.test(song.artist || "")) song.artist = f.artist;
+      for (const song of songs.filter(x => x.tagged !== 2 && x.blob)) {
+        const t = await readTags(song.blob), fname = song.blob.name ? splitName(readableName(song.blob)) : null;
+        const oldTitle = isBad(song.title) ? "" : song.title, oldArtist = isBad(song.artist) ? "" : song.artist;
+        song.title = t.title || (fname && fname.title) || oldTitle || "Naməlum mahnı";
+        song.artist = t.artist || (fname && fname.artist) || oldArtist || "Naməlum ifaçı";
         if (t.cover) song.cover = t.cover;
-        song.tagged = true;
+        song.tagged = 2;
         try { await putSong(song); } catch {}
       }
     } finally { backfilling = false; }
-    render(true);
+    render(true); updateMeta();
   }
 
   /* ---------- state ---------- */
@@ -130,7 +147,7 @@
         // Android file picker bəzən boş type qaytarır — audio/mpeg kimi qəbul edirik
         const blob = file.type ? file : file.slice(0, file.size, "audio/mpeg");
         const t = await readTags(file), f = splitName(readableName(file));
-        await addSong({ title: t.title || f.title, artist: t.artist || f.artist || "Naməlum ifaçı", cover: t.cover || null, tagged: true, blob, size: file.size, addedAt: Date.now() });
+        await addSong({ title: t.title || f.title, artist: t.artist || f.artist || "Naməlum ifaçı", cover: t.cover || null, tagged: 2, blob, size: file.size, addedAt: Date.now() });
         ok++;
       } catch (e) {
         bad++;
