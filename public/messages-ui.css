@@ -1,156 +1,650 @@
-/* TalkChat Messages UI — compact iMessage + Instagram DM layer. Yalnız #messagesPage. */
-#app #messagesPage.ig-dm {
-  --mu-bg: #0e0f1a; --mu-side: #11121f; --mu-line: rgba(160,150,230,.13);
-  --mu-muted: #8f8fae; --mu-accent: #7c5cff; --mu-accent2: #5b8cff;
-  --mu-in: #20213a; --mu-out: linear-gradient(135deg,#7c5cff,#6a5cf0);
-  border-radius: 20px; background: var(--mu-bg); border: 1px solid var(--mu-line);
-}
-#app #messagesPage.ig-dm .ig-side { width: 330px; flex-basis: 330px; background: var(--mu-side); }
+/* =====================================================================
+   TalkChat — MESSAGES FULL REDESIGN (premium dark-violet, iOS / Instagram DM)
+   Yalnız #messagesPage.ig-dm. JS, API, id və class adları dəyişmir.
+   index.html-də ƏN SON yüklənir.
+   ===================================================================== */
 
-/* ---- inbox ---- */
-#app #messagesPage.ig-dm .ig-side-head { min-height: 52px; padding: 10px 14px 4px; gap: 8px; }
-#app #messagesPage.ig-dm .ig-side-head b { font-size: 20px; font-weight: 800; letter-spacing: -.04em; margin-right: auto; }
-#app #messagesPage.ig-dm .ig-search { min-height: 38px; margin: 6px 12px 8px; border-radius: 14px; background: rgba(255,255,255,.05); border-color: var(--mu-line); }
-#app #messagesPage.ig-dm .ig-filters { display: flex; gap: 6px; padding: 0 12px 8px; overflow-x: auto; scrollbar-width: none; }
+/* ---------- 1. dizayn tokenləri ---------- */
+#app #messagesPage.ig-dm {
+  --mu-bg: #0c0a22;
+  --mu-bg-2: #120f33;
+  --mu-surface: #1c1842;
+  --mu-surface-2: #262057;
+  --mu-in: #272153;
+  --mu-line: rgba(160, 140, 255, .13);
+  --mu-line-soft: rgba(160, 140, 255, .08);
+  --mu-text: #f7f5ff;
+  --mu-muted: #8f8bb8;
+  --mu-soft: #c9c4ee;
+  --mu-accent: #7b4dff;
+  --mu-accent-2: #6a3df0;
+  --mu-accent-text: #b9a6ff;
+  --mu-green: #2fd98a;
+  --mu-red: #ff5d73;
+  --mu-grad: linear-gradient(135deg, #8d62ff 0%, #6c3ff2 100%);
+  --mu-shadow: 0 24px 70px rgba(5, 3, 26, .55);
+  --mu-ease: cubic-bezier(.22, .8, .24, 1);
+
+  --ig-bg: var(--mu-bg);
+  --ig-line: var(--mu-line);
+  --ig-muted: var(--mu-muted);
+  --ig-txt: var(--mu-text);
+  --ig-blue: var(--mu-accent);
+  --ig-gray: var(--mu-surface);
+  --ig-hover: rgba(123, 77, 255, .1);
+
+  position: relative;
+  width: 100%;
+  max-width: 1240px;
+  height: min(840px, calc(100dvh - 150px));
+  min-height: 520px;
+  margin: 0 auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--mu-text);
+  border: 1px solid var(--mu-line);
+  border-radius: 28px;
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(123, 77, 255, .16), transparent 55%),
+    radial-gradient(90% 50% at 100% 100%, rgba(66, 90, 255, .10), transparent 60%),
+    var(--mu-bg) !important;
+  box-shadow: var(--mu-shadow);
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+#app #messagesPage.ig-dm .ig-body {
+  flex: 1 1 auto; min-height: 0; display: flex; overflow: hidden;
+  border: 0; border-radius: 0; background: none; box-shadow: none;
+}
+#app #messagesPage.ig-dm svg { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ortaq düymə sıfırlaması — style.css-dəki button reset-i yalnız bu element qruplarında aşırıq */
+#app #messagesPage.ig-dm .ig-hbtn,
+#app #messagesPage.ig-dm .ig-ibtn,
+#app #messagesPage.ig-dm #igGifButton,
+#app #messagesPage.ig-dm #igStickerButton {
+  display: inline-grid !important; place-items: center; flex: 0 0 auto;
+  width: 40px; height: 40px; min-width: 40px; min-height: 40px; padding: 0 !important;
+  border: 0 !important; border-radius: 14px !important;
+  color: var(--mu-soft); background: rgba(255, 255, 255, .05) !important;
+  font-size: 18px; line-height: 1; cursor: pointer;
+  transition: background .18s var(--mu-ease), color .18s var(--mu-ease), transform .15s var(--mu-ease);
+}
+#app #messagesPage.ig-dm .ig-hbtn:hover,
+#app #messagesPage.ig-dm .ig-ibtn:hover,
+#app #messagesPage.ig-dm #igGifButton:hover,
+#app #messagesPage.ig-dm #igStickerButton:hover { background: rgba(123, 77, 255, .22) !important; color: #fff; }
+#app #messagesPage.ig-dm .ig-hbtn:active,
+#app #messagesPage.ig-dm .ig-ibtn:active,
+#app #messagesPage.ig-dm #igGifButton:active,
+#app #messagesPage.ig-dm #igStickerButton:active { transform: scale(.92) !important; }
+#app #messagesPage.ig-dm .ig-hbtn svg,
+#app #messagesPage.ig-dm .ig-ibtn svg { width: 21px; height: 21px; }
+#app #messagesPage.ig-dm :is(button, a, [role="slider"], summary, label):focus-visible,
+#app #messagesPage.ig-dm .ig-row:focus-visible .ig-bub { outline: 2px solid #b9a6ff; outline-offset: 2px; }
+
+/* ---------- 2. sol panel (inbox) ---------- */
+#app #messagesPage.ig-dm .ig-side {
+  position: relative; width: 392px; flex: 0 0 392px; min-height: 0;
+  display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain;
+  border-right: 1px solid var(--mu-line); background: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0));
+  scrollbar-width: thin; scrollbar-color: rgba(160,140,255,.25) transparent;
+}
+#app #messagesPage.ig-dm .ig-side-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  min-height: 0; padding: 20px 18px 6px; border: 0; background: none !important;
+}
+#app #messagesPage.ig-dm .ig-side-head b {
+  margin-right: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--mu-text); font-size: 24px; font-weight: 800; letter-spacing: -.04em; line-height: 1.1;
+}
+#app #messagesPage.ig-dm .tc-ai-shortcut {
+  display: inline-flex !important; align-items: center; gap: 6px; height: 40px; padding: 0 14px !important;
+  border: 1px solid rgba(160,140,255,.28) !important; border-radius: 99px !important;
+  background: linear-gradient(135deg, rgba(141,98,255,.24), rgba(70,100,255,.12)) !important;
+  color: #e2d9ff; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer;
+  transition: transform .15s var(--mu-ease), border-color .18s;
+}
+#app #messagesPage.ig-dm .tc-ai-shortcut:hover { border-color: rgba(185,166,255,.55) !important; }
+#app #messagesPage.ig-dm .tc-ai-shortcut:active { transform: scale(.96) !important; }
+#app #messagesPage.ig-dm .tc-ai-shortcut span:first-child { color: #c7b5ff; font-size: 15px; }
+#app #messagesPage.ig-dm #igNewBtn {
+  width: 44px; height: 44px; min-width: 44px; border-radius: 15px !important;
+  background: var(--mu-grad) !important; color: #fff; box-shadow: 0 8px 22px rgba(108, 63, 242, .42) !important;
+}
+#app #messagesPage.ig-dm #igNewBtn:hover { background: var(--mu-grad) !important; filter: brightness(1.1); }
+
+#app #messagesPage.ig-dm .ig-search {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 12px; min-height: 50px; margin: 10px 18px 12px; padding: 0 16px;
+  border: 1px solid var(--mu-line); border-radius: 18px; background: rgba(255,255,255,.05); color: var(--mu-muted);
+  transition: border-color .2s, background .2s, box-shadow .2s;
+}
+#app #messagesPage.ig-dm .ig-search:focus-within { border-color: rgba(141,98,255,.65); background: rgba(123,77,255,.09); box-shadow: 0 0 0 4px rgba(123,77,255,.13); }
+#app #messagesPage.ig-dm .ig-search svg { width: 21px; height: 21px; flex: 0 0 21px; }
+#app #messagesPage.ig-dm .ig-search input { flex: 1; min-width: 0; min-height: 48px; color: var(--mu-text) !important; font-size: 16px; }
+#app #messagesPage.ig-dm .ig-search input::placeholder { color: var(--mu-muted); opacity: 1; }
+
+/* filtr pill-ləri */
+#app #messagesPage.ig-dm .ig-filters {
+  flex: 0 0 auto; display: flex; gap: 8px; padding: 0 18px 12px; overflow-x: auto; scrollbar-width: none;
+}
 #app #messagesPage.ig-dm .ig-filters::-webkit-scrollbar { display: none; }
 #app #messagesPage.ig-dm .ig-filters button {
-  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
-  border: 1px solid var(--mu-line); border-radius: 99px; background: rgba(255,255,255,.04);
-  color: #c9c9e0; font-size: 12px; font-weight: 600; cursor: pointer;
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 18px !important;
+  border: 1px solid var(--mu-line) !important; border-radius: 99px !important;
+  background: rgba(255,255,255,.05) !important; color: var(--mu-soft); font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background .2s var(--mu-ease), color .2s, transform .15s var(--mu-ease), box-shadow .2s;
 }
-#app #messagesPage.ig-dm .ig-filters button.on { border-color: transparent; background: linear-gradient(135deg,#8a63ff,#6a5cf0); color: #fff; }
-#app #messagesPage.ig-dm .ig-filters b { min-width: 18px; padding: 1px 5px; border-radius: 99px; background: rgba(255,255,255,.22); font-size: 10px; line-height: 14px; text-align: center; }
+#app #messagesPage.ig-dm .ig-filters button:hover { background: rgba(123,77,255,.16) !important; color: #fff; }
+#app #messagesPage.ig-dm .ig-filters button:active { transform: scale(.95) !important; }
+#app #messagesPage.ig-dm .ig-filters button.on {
+  border-color: transparent !important; background: var(--mu-grad) !important; color: #fff; box-shadow: 0 6px 18px rgba(108,63,242,.4) !important;
+}
+#app #messagesPage.ig-dm .ig-filters b {
+  min-width: 22px; padding: 2px 7px; border-radius: 99px; background: rgba(255,255,255,.22); color: #fff;
+  font-size: 12px; font-weight: 700; line-height: 17px; text-align: center;
+}
 #app #messagesPage.ig-dm .ig-filters b[hidden] { display: none; }
 #app #messagesPage.ig-dm .ig-lbl { display: none; }
-#app #messagesPage.ig-dm .ig-stories { padding: 4px 0; }
-#app #messagesPage.ig-dm .ig-list { padding: 2px 6px 10px !important; }
+
+/* yeni söhbət / qrup formu */
+#app #messagesPage.ig-dm .ig-results:empty { display: none; }
+#app #messagesPage.ig-dm .ig-results { flex: 0 0 auto; padding: 0 12px 8px; }
+#app #messagesPage.ig-dm .ig-res {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 10px !important; border-radius: 16px !important; text-align: left;
+}
+#app #messagesPage.ig-dm .ig-res:hover { background: rgba(123,77,255,.14) !important; }
+#app #messagesPage.ig-dm .ig-newchat {
+  flex: 0 0 auto; display: grid; gap: 10px; margin: 0 18px 12px; padding: 14px;
+  border: 1px solid var(--mu-line); border-radius: 20px; background: var(--mu-surface);
+}
+#app #messagesPage.ig-dm .ig-newchat[hidden] { display: none !important; }
+#app #messagesPage.ig-dm .ig-newchat input,
+#app #messagesPage.ig-dm .ig-group input {
+  width: 100% !important; min-height: 46px; padding: 0 14px !important; border: 1px solid var(--mu-line) !important;
+  border-radius: 14px !important; background: rgba(0,0,0,.25) !important; color: var(--mu-text) !important; font-size: 15px;
+}
+#app #messagesPage.ig-dm .ig-newchat input:focus,
+#app #messagesPage.ig-dm .ig-group input:focus { border-color: rgba(141,98,255,.7) !important; box-shadow: 0 0 0 3px rgba(123,77,255,.15) !important; }
+#app #messagesPage.ig-dm .ig-newchat > button,
+#app #messagesPage.ig-dm .ig-group button {
+  width: 100%; min-height: 46px; padding: 0 14px !important; border-radius: 14px !important;
+  background: var(--mu-grad) !important; color: #fff; font-weight: 700; font-size: 15px;
+}
+#app #messagesPage.ig-dm .ig-group { display: grid; gap: 10px; }
+#app #messagesPage.ig-dm .ig-group summary { padding: 4px 2px; color: var(--mu-accent-text); font-size: 14px; font-weight: 600; cursor: pointer; }
+
+/* hekayə lenti */
+#app #messagesPage.ig-dm .ig-stories { flex: 0 0 auto; padding: 0 18px; border: 0; }
+#app #messagesPage.ig-dm #directStoryRail {
+  display: flex !important; gap: 14px; margin: 0 !important; padding: 2px 0 12px !important; overflow-x: auto;
+  background: none !important; border: 0 !important; scrollbar-width: none;
+}
+#app #messagesPage.ig-dm #directStoryRail::-webkit-scrollbar { display: none; }
+#app #messagesPage.ig-dm #directStoryRail:empty { display: none !important; }
+#app #messagesPage.ig-dm .direct-story-item { flex: 0 0 66px; display: flex !important; flex-direction: column; align-items: center; gap: 6px; }
+#app #messagesPage.ig-dm .direct-story-ring {
+  display: grid; place-items: center; width: 62px !important; height: 62px !important; padding: 2.5px !important; border-radius: 50% !important;
+  background: linear-gradient(135deg, #a27cff, #6c3ff2 55%, #4aa8ff) !important;
+}
+#app #messagesPage.ig-dm .direct-story-ring img,
+#app #messagesPage.ig-dm .direct-story-ring .avatar { width: 100% !important; height: 100% !important; border: 3px solid var(--mu-bg) !important; border-radius: 50% !important; object-fit: cover; }
+#app #messagesPage.ig-dm .direct-story-item small { max-width: 66px; overflow: hidden; color: var(--mu-soft) !important; font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+#app #messagesPage.ig-dm .direct-story-loading { padding: 8px 0 12px; color: var(--mu-muted); font-size: 13px; animation: mu-pulse 1.4s ease-in-out infinite; }
+@keyframes mu-pulse { 50% { opacity: .45; } }
+
+/* istəklər (hekayə və mesaj istəkləri) */
+#app #messagesPage.ig-dm .ig-extras {
+  flex: 0 0 auto; margin: 0 18px 8px; padding: 0 14px; border: 1px solid var(--mu-line); border-radius: 18px; background: rgba(255,255,255,.03);
+}
+#app #messagesPage.ig-dm .ig-extras:has(#tcExtrasSlot:empty) { display: none; }
+#app #messagesPage.ig-dm .ig-extras summary { padding: 11px 0; color: var(--mu-accent-text); font-size: 13px; font-weight: 700; cursor: pointer; list-style-position: inside; }
+#app #messagesPage.ig-dm .ig-extras[open] > #tcExtrasSlot { max-height: 220px; overflow-y: auto; padding-bottom: 10px; scrollbar-width: thin; }
+#app #messagesPage.ig-dm .ig-extras .tc-extra-card {
+  margin: 6px 0; padding: 12px !important; border: 1px solid var(--mu-line) !important; border-radius: 14px !important; background: rgba(0,0,0,.22) !important;
+}
+#app #messagesPage.ig-dm .ig-extras .tc-extra-card h3 { margin: 0 0 8px; color: var(--mu-text); font-size: 13px; }
+#app #messagesPage.ig-dm .ig-extras .tc-extra-card input { width: 100%; min-height: 40px; padding: 0 12px !important; border: 1px solid var(--mu-line) !important; border-radius: 12px !important; background: rgba(0,0,0,.3) !important; color: var(--mu-text) !important; }
+#app #messagesPage.ig-dm .ig-extras .tc-extra-card button { padding: 8px 14px !important; border-radius: 12px !important; background: var(--mu-grad) !important; color: #fff; font-weight: 700; }
+#app #messagesPage.ig-dm .ig-extras .tc-request { padding: 8px 0 !important; border-bottom: 1px solid var(--mu-line-soft) !important; color: var(--mu-soft); font-size: 13px; }
+#app #messagesPage.ig-dm .ig-extras .tc-request button { padding: 6px 10px !important; border-radius: 10px !important; background: rgba(123,77,255,.18) !important; color: #d6caff !important; font-weight: 600; }
+
+/* söhbət siyahısı */
+#app #messagesPage.ig-dm #conversationList {
+  display: block !important; flex: 1 1 auto; min-height: 180px; padding: 2px 10px 16px !important;
+  background: none !important; border: 0 !important; border-radius: 0 !important; overflow: visible;
+}
 #app #messagesPage.ig-dm .ig-item-wrap { position: relative; }
+#app #messagesPage.ig-dm .ig-item-wrap::after {
+  content: ""; position: absolute; right: 12px; bottom: 0; left: 82px; height: 1px; background: var(--mu-line-soft); pointer-events: none;
+}
+#app #messagesPage.ig-dm .ig-item-wrap:last-child::after,
+#app #messagesPage.ig-dm .ig-item-wrap:has(.ig-item.on)::after,
+#app #messagesPage.ig-dm .ig-item-wrap:has(+ .ig-item-wrap .ig-item.on)::after { opacity: 0; }
 #app #messagesPage.ig-dm .ig-item {
-  width: 100%; min-height: 60px; margin: 1px 0; padding: 7px 8px; gap: 11px; align-items: center;
-  border: 0; border-radius: 14px; text-align: left;
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 78px; margin: 0; padding: 10px 12px !important;
+  border: 0 !important; border-radius: 20px !important; background: transparent !important; color: var(--mu-text); text-align: left;
+  transition: background .18s var(--mu-ease), transform .15s var(--mu-ease);
 }
-#app #messagesPage.ig-dm .ig-item-wrap.pinned .ig-item { background: rgba(124,92,255,.06) !important; }
-#app #messagesPage.ig-dm .ig-item:hover, #app #messagesPage.ig-dm .ig-item.on { background: rgba(124,92,255,.14) !important; }
+#app #messagesPage.ig-dm .ig-item:hover { background: rgba(123,77,255,.09) !important; }
+#app #messagesPage.ig-dm .ig-item:active { transform: scale(.985) !important; }
+#app #messagesPage.ig-dm .ig-item.on { background: linear-gradient(135deg, rgba(123,77,255,.26), rgba(90,70,240,.14)) !important; box-shadow: inset 0 0 0 1px rgba(160,140,255,.25) !important; }
+#app #messagesPage.ig-dm .ig-item-wrap.pinned .ig-item:not(.on) { background: rgba(123,77,255,.06) !important; }
 #app #messagesPage.ig-dm .ig-avw { position: relative; flex: 0 0 auto; }
-#app #messagesPage.ig-dm .ig-avw .ig-av { width: 46px; height: 46px; }
-#app #messagesPage.ig-dm .ig-name { font-size: 14px; font-weight: 650; }
-#app #messagesPage.ig-dm .ig-prev { font-size: 12.5px; color: var(--mu-muted); }
-#app #messagesPage.ig-dm .ig-item.unread .ig-prev { color: #e6e6f5; }
-#app #messagesPage.ig-dm .ig-dot { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; border: 2px solid var(--mu-side); background: #34d17b; }
-#app #messagesPage.ig-dm .ig-meta { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 5px; min-width: 34px; }
-#app #messagesPage.ig-dm .ig-list-time { color: var(--mu-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-#app #messagesPage.ig-dm .ig-item.unread .ig-list-time { color: #b9a8ff; }
-#app #messagesPage.ig-dm .ig-badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; background: linear-gradient(135deg,#8a63ff,#6a5cf0); color: #fff; font-size: 11px; font-weight: 700; line-height: 20px; text-align: center; }
-#app #messagesPage.ig-dm .ig-pin-btn {
-  position: absolute; right: 52px; top: 9px; display: grid; width: 20px; height: 20px; place-items: center;
-  padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--mu-muted); opacity: 0; cursor: pointer; transition: opacity .15s;
+#app #messagesPage.ig-dm .ig-avw .ig-av { width: 56px; height: 56px; }
+#app #messagesPage.ig-dm .ig-av {
+  display: grid; place-items: center; overflow: hidden; border: 0; border-radius: 50%;
+  background: linear-gradient(140deg, #8d62ff, #4d2fc2); box-shadow: 0 0 0 2px rgba(160,140,255,.18);
 }
-#app #messagesPage.ig-dm .ig-pin-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#app #messagesPage.ig-dm .ig-av b { color: #fff; font-size: 21px; font-weight: 700; }
+#app #messagesPage.ig-dm .ig-av img { width: 100%; height: 100%; object-fit: cover; }
+#app #messagesPage.ig-dm .ig-av.sm { width: 44px; height: 44px; }
+#app #messagesPage.ig-dm .ig-av.sm b { font-size: 17px; }
+#app #messagesPage.ig-dm .ig-dot {
+  position: absolute; right: 1px; bottom: 1px; width: 15px; height: 15px; border: 3px solid var(--mu-bg-2); border-radius: 50%;
+  background: var(--mu-green); box-shadow: 0 0 10px rgba(47,217,138,.55);
+}
+#app #messagesPage.ig-dm .ig-mid { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 4px; }
+#app #messagesPage.ig-dm .ig-name {
+  display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; color: var(--mu-text);
+  font-size: 17px; font-weight: 700; letter-spacing: -.02em; text-overflow: ellipsis; white-space: nowrap;
+}
+#app #messagesPage.ig-dm .ig-name svg { flex: 0 0 auto; width: 17px; height: 17px; }
+#app #messagesPage.ig-dm .ig-prev { overflow: hidden; color: var(--mu-muted); font-size: 14.5px; text-overflow: ellipsis; white-space: nowrap; }
+#app #messagesPage.ig-dm .ig-item.unread .ig-name { font-weight: 800; }
+#app #messagesPage.ig-dm .ig-item.unread .ig-prev { color: #ddd8ff; font-weight: 500; }
+#app #messagesPage.ig-dm .ig-meta { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; justify-content: center; gap: 7px; min-width: 40px; }
+#app #messagesPage.ig-dm .ig-list-time { color: var(--mu-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+#app #messagesPage.ig-dm .ig-item.unread .ig-list-time { color: var(--mu-accent-text); font-weight: 600; }
+#app #messagesPage.ig-dm .ig-badge {
+  display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 99px;
+  background: var(--mu-grad); box-shadow: 0 4px 12px rgba(108,63,242,.45); color: #fff; font-size: 12.5px; font-weight: 700; line-height: 1;
+}
+#app #messagesPage.ig-dm .ig-none { padding: 40px 20px; text-align: center; color: var(--mu-muted); font-size: 14px; }
+
+/* pin düyməsi */
+#app #messagesPage.ig-dm .ig-pin-btn {
+  position: absolute; right: 14px; bottom: 10px; display: grid; place-items: center; width: 26px; height: 26px; padding: 0 !important;
+  border: 0 !important; border-radius: 9px !important; background: transparent !important; color: var(--mu-muted); opacity: 0; cursor: pointer;
+  transition: opacity .15s, background .15s, color .15s;
+}
+#app #messagesPage.ig-dm .ig-pin-btn svg { width: 15px; height: 15px; }
 #app #messagesPage.ig-dm .ig-item-wrap:hover .ig-pin-btn,
 #app #messagesPage.ig-dm .ig-pin-btn:focus-visible { opacity: 1; }
-#app #messagesPage.ig-dm .ig-pin-btn.on { opacity: 1; color: #b9a8ff; }
+#app #messagesPage.ig-dm .ig-pin-btn:hover { background: rgba(123,77,255,.22) !important; color: #fff; }
+#app #messagesPage.ig-dm .ig-pin-btn.on { opacity: 1; color: var(--mu-accent-text); }
 #app #messagesPage.ig-dm .ig-pin-btn.on svg { fill: currentColor; }
-@media (hover: none) { #app #messagesPage.ig-dm .ig-pin-btn { opacity: .75; } }
+#app #messagesPage.ig-dm .ig-item-wrap:has(.ig-badge) .ig-pin-btn { right: 52px; bottom: 14px; }
+@media (hover: none) { #app #messagesPage.ig-dm .ig-pin-btn { opacity: .7; } }
 
-/* ---- chat header ---- */
-#app #messagesPage.ig-dm .ig-main { background: radial-gradient(ellipse at 60% 0, rgba(124,92,255,.10), transparent 50%), var(--mu-bg); }
-#app #messagesPage.ig-dm .ig-head { min-height: 58px; padding: 8px 14px; background: rgba(17,18,31,.94); }
-#app #messagesPage.ig-dm .ig-hbtn { width: 36px; height: 36px; min-width: 36px; flex-basis: 36px; border-radius: 12px !important; }
-#app #messagesPage.ig-dm #chatTitle { font-size: 15px; font-weight: 700; }
+/* ---------- 3. sağ panel / boş vəziyyət ---------- */
+#app #messagesPage.ig-dm .ig-main {
+  position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column;
+  background: radial-gradient(80% 50% at 70% 0%, rgba(123,77,255,.13), transparent 60%), var(--mu-bg-2);
+}
+#app #messagesPage.ig-dm .ig-empty { flex: 1 1 auto; align-items: center; justify-content: center; gap: 8px; padding: 32px; text-align: center; color: var(--mu-muted); }
+#app #messagesPage.ig-dm .ig-empty-ic {
+  display: grid; place-items: center; width: 104px; height: 104px; margin-bottom: 10px; color: #cbbcff;
+  border: 1px solid rgba(160,140,255,.28); border-radius: 34px;
+  background: linear-gradient(145deg, rgba(141,98,255,.28), rgba(70,100,255,.1)); box-shadow: 0 20px 50px rgba(80,50,200,.28);
+}
+#app #messagesPage.ig-dm .ig-empty-ic svg { width: 46px; height: 46px; stroke-width: 1.7; }
+#app #messagesPage.ig-dm .ig-empty h2 { margin: 6px 0 2px; color: var(--mu-text); font-size: 24px; font-weight: 800; letter-spacing: -.04em; }
+#app #messagesPage.ig-dm .ig-empty p { max-width: 320px; margin: 0 0 14px; font-size: 15px; line-height: 1.55; }
+#app #messagesPage.ig-dm #igEmptyNew {
+  min-height: 48px; padding: 0 26px !important; border-radius: 16px !important; background: var(--mu-grad) !important; color: #fff;
+  font-size: 15px; font-weight: 700; box-shadow: 0 10px 26px rgba(108,63,242,.42) !important; cursor: pointer;
+}
+#app #messagesPage.ig-dm:not(.tc-chat-open) .ig-empty { display: flex; }
+#app #messagesPage.ig-dm .ig-chat { flex: 1 1 auto; min-height: 0; display: none; flex-direction: column; background: none; }
+#app #messagesPage.ig-dm.tc-chat-open .ig-chat { display: flex; }
+#app #messagesPage.ig-dm.tc-chat-open .ig-empty { display: none; }
 
-/* ---- messages ---- */
-#app #messagesPage.ig-dm .ig-msgs { padding: 10px 16px 8px !important; }
+/* ---------- 4. söhbət başlığı ---------- */
+#app #messagesPage.ig-dm .ig-head {
+  position: relative; z-index: 4; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; min-height: 72px; padding: 10px 16px;
+  border: 0; border-bottom: 1px solid var(--mu-line); background: rgba(18, 15, 51, .82); backdrop-filter: blur(18px) saturate(1.4); -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+#app #messagesPage.ig-dm .ig-back { display: none !important; color: var(--mu-accent-text); background: transparent !important; width: 38px; min-width: 38px; }
+#app #messagesPage.ig-dm .ig-back svg { width: 26px; height: 26px; stroke-width: 2.3; }
+#app #messagesPage.ig-dm .ig-headinfo {
+  display: flex; align-items: center; flex: 1 1 0; gap: 12px; min-width: 0; padding: 0 !important; text-align: left; cursor: pointer;
+}
+#app #messagesPage.ig-dm #chatAv { position: relative; display: block; flex: 0 0 auto; }
+#app #messagesPage.ig-dm .ig-hmid { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+#app #messagesPage.ig-dm #chatTitle {
+  display: flex; align-items: center; gap: 6px; overflow: hidden; color: var(--mu-text); font-size: 18px; font-weight: 750; letter-spacing: -.02em; text-overflow: ellipsis; white-space: nowrap;
+}
+#app #messagesPage.ig-dm #chatTitle svg { flex: 0 0 auto; width: 18px; height: 18px; }
+#app #messagesPage.ig-dm #chatSub { overflow: hidden; color: var(--mu-muted); font-size: 13.5px; text-overflow: ellipsis; white-space: nowrap; }
+#app #messagesPage.ig-dm #chatSub.on { color: var(--mu-green); font-weight: 600; }
+#app #messagesPage.ig-dm .ig-hacts { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+#app #messagesPage.ig-dm .ig-hacts .ig-hbtn { background: transparent !important; color: #d8d0ff; }
+#app #messagesPage.ig-dm .ig-hacts .ig-hbtn:hover { background: rgba(123,77,255,.2) !important; }
+#app #messagesPage.ig-dm #tcCallBtn,
+#app #messagesPage.ig-dm #tcVideoCallBtn { color: #fff; background: rgba(123,77,255,.2) !important; }
+
+/* mesaj axtarışı paneli */
+#app #messagesPage.ig-dm .tc-msg-search { flex: 0 0 auto; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--mu-line); background: rgba(18,15,51,.9); }
+#app #messagesPage.ig-dm .tc-msg-search[hidden] { display: none !important; }
+#app #messagesPage.ig-dm .tc-msg-search-toolbar input { height: 42px; padding: 0 16px !important; border: 1px solid var(--mu-line) !important; border-radius: 21px !important; background: rgba(255,255,255,.06) !important; color: var(--mu-text) !important; }
+#app #messagesPage.ig-dm .tc-msg-search-result { padding: 11px 14px !important; border: 1px solid var(--mu-line) !important; border-radius: 16px !important; background: rgba(255,255,255,.04) !important; color: var(--mu-text); }
+#app #messagesPage.ig-dm .tc-msg-search-result:hover { border-color: rgba(160,140,255,.4) !important; background: rgba(123,77,255,.12) !important; }
+
+/* ---------- 5. mesaj sahəsi ---------- */
+#app #messagesPage.ig-dm #chatMessages {
+  position: relative; flex: 1 1 auto; min-height: 0 !important; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; overscroll-behavior: contain;
+  padding: 18px clamp(14px, 3.4vw, 40px) 12px !important; border: 0 !important; border-radius: 0 !important; background-color: transparent;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220' fill='none' stroke='%23a99bff' stroke-opacity='.07' stroke-width='1.6' stroke-linejoin='round'><path d='M22 38 52 24 44 52 36 42z'/><path d='M150 30l5 11 12 1-9 8 3 12-11-6-11 6 3-12-9-8 12-1z'/><path d='M120 150l30-14-8 28-8-10z'/><path d='M40 150l4 9 10 1-8 6 2 10-8-5-9 5 2-10-8-6 10-1z'/><circle cx='190' cy='120' r='3'/><circle cx='90' cy='88' r='2.5'/></svg>");
+  background-size: 220px 220px; scrollbar-width: thin; scrollbar-color: rgba(160,140,255,.25) transparent;
+}
+#app #messagesPage.ig-dm #chatMessages[data-loading-older="true"]::before { color: var(--mu-muted); }
 #app #messagesPage.ig-dm .ig-day {
-  align-self: center; margin: 12px auto 6px; padding: 4px 12px; border-radius: 99px;
-  background: rgba(124,92,255,.16); color: #cfc6ff; font-size: 11px; font-weight: 600;
+  align-self: center; margin: 14px auto 8px; padding: 6px 16px; border: 1px solid var(--mu-line); border-radius: 99px;
+  background: rgba(34, 28, 82, .85); backdrop-filter: blur(8px); color: var(--mu-soft); font-size: 12.5px; font-weight: 600; letter-spacing: .01em;
 }
-#app #messagesPage.ig-dm .ig-row { margin-top: 6px; }
+#app #messagesPage.ig-dm .ig-row { display: flex; width: 100%; margin-top: 7px; }
 #app #messagesPage.ig-dm .ig-row.cont { margin-top: 2px; }
-#app #messagesPage.ig-dm .ig-bub {
-  position: relative; max-width: min(74%, 520px); padding: 8px 12px 6px; border: 0; border-radius: 18px 18px 18px 5px;
-  background: var(--mu-in); box-shadow: none; font-size: 14.5px; line-height: 1.4; color: #eeeefa;
-}
-#app #messagesPage.ig-dm .ig-row.me .ig-bub { border-radius: 18px 18px 5px 18px; background: var(--mu-out); color: #fff; box-shadow: 0 4px 14px rgba(98,78,230,.22); }
-#app #messagesPage.ig-dm .ig-row.cont .ig-bub { border-top-left-radius: 8px; }
-#app #messagesPage.ig-dm .ig-row.me.cont .ig-bub { border-top-left-radius: 18px; border-top-right-radius: 8px; }
-#app #messagesPage.ig-dm .ig-bub .ig-message-time { margin-top: 3px; font-size: 10px; opacity: .75; }
-#app #messagesPage.ig-dm .ig-bub.img { padding: 0; background: none !important; box-shadow: none; }
-#app #messagesPage.ig-dm .ig-bub.img .ig-message-time { position: absolute; right: 8px; bottom: 8px; margin: 0; padding: 2px 8px; border-radius: 99px; background: rgba(8,8,18,.55); color: #fff; }
-#app #messagesPage.ig-dm .ig-image-message img { max-width: min(100%, 300px); max-height: 340px; border-radius: 16px; object-fit: cover; }
-#app #messagesPage.ig-dm .ig-video-message { width: min(100%, 320px); max-height: 320px; border-radius: 14px; }
-#app #messagesPage.ig-dm .ig-file { min-height: 40px; padding: 8px 12px; border-radius: 12px; background: rgba(0,0,0,.2); color: inherit; font-size: 13px; text-decoration: none; }
-#app #messagesPage.ig-dm .ig-quote { margin-bottom: 5px; padding: 3px 8px; border-left: 3px solid #a99bff; border-radius: 6px; background: rgba(0,0,0,.18); font-size: 12px; }
-#app #messagesPage.ig-dm .ig-rcpt { padding: 2px 4px 0; color: var(--mu-muted); font-size: 11px; }
+#app #messagesPage.ig-dm .ig-row.me { justify-content: flex-end; }
 
-/* ---- voice player ---- */
-#app #messagesPage.ig-dm .tc-voice { display: flex; align-items: center; gap: 10px; width: min(260px, 64vw); padding: 2px 0; }
+/* mesaj balonları */
+#app #messagesPage.ig-dm .ig-bub {
+  position: relative; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 2px 10px;
+  max-width: min(74%, 560px); min-width: 0; padding: 10px 14px 8px; border: 0;
+  border-radius: 20px 20px 20px 6px; background: var(--mu-in); color: #f1eeff;
+  box-shadow: 0 2px 10px rgba(6, 3, 30, .22); font-size: 16px; line-height: 1.42; word-break: break-word;
+}
+#app #messagesPage.ig-dm .ig-row.me .ig-bub {
+  border-radius: 20px 20px 6px 20px; background: var(--mu-grad); color: #fff; box-shadow: 0 6px 20px rgba(108,63,242,.34);
+}
+#app #messagesPage.ig-dm .ig-row.cont .ig-bub { border-top-left-radius: 8px; }
+#app #messagesPage.ig-dm .ig-row.me.cont .ig-bub { border-top-left-radius: 20px; border-top-right-radius: 8px; }
+#app #messagesPage.ig-dm .ig-bub a { color: inherit; text-decoration: none; }
+#app #messagesPage.ig-dm .ig-bub > * { min-width: 0; }
+#app #messagesPage.ig-dm .ig-bub > :not(.ig-t):not(.ig-message-time):not(.ig-edited) { flex: 0 0 100%; }
+#app #messagesPage.ig-dm .ig-t { flex: 0 1 auto; overflow-wrap: anywhere; }
+#app #messagesPage.ig-dm .ig-bub .ig-message-time,
+#app #messagesPage.ig-dm .ig-row.me .ig-message-time {
+  margin: 0 0 0 auto; padding-top: 2px; color: rgba(255,255,255,.58); font-size: 11.5px; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap;
+}
+#app #messagesPage.ig-dm .ig-bub .ig-edited { color: rgba(255,255,255,.55); font-size: 11px; }
+#app #messagesPage.ig-dm .ig-bub.del { background: transparent !important; box-shadow: none; border: 1px dashed rgba(160,140,255,.3); color: var(--mu-muted); }
+#app #messagesPage.ig-dm .ig-del { font-size: 14px; }
+#app #messagesPage.ig-dm .ig-forwarded { display: block; margin-bottom: 3px; color: rgba(255,255,255,.65); font-size: 12px; font-style: italic; }
+#app #messagesPage.ig-dm .ig-quote {
+  display: flex; flex-direction: column; gap: 1px; margin: 0 0 6px; padding: 6px 10px; border-left: 3px solid #cbbcff; border-radius: 4px 10px 10px 4px;
+  background: rgba(0,0,0,.2); color: rgba(255,255,255,.85); font-size: 13.5px; line-height: 1.35; overflow: hidden;
+}
+#app #messagesPage.ig-dm .ig-quote b { color: #fff; font-size: 12.5px; }
+#app #messagesPage.ig-dm .ig-row.ig-selected .ig-bub { outline: 2px solid rgba(185,166,255,.75); outline-offset: 2px; }
+#app #messagesPage.ig-dm .ig-rcpt { align-self: flex-end; padding: 3px 6px 0; color: var(--mu-muted); font-size: 12px; }
+
+/* şəkil, GIF, video, fayl, sticker, paylaşılan post */
+#app #messagesPage.ig-dm .ig-bub.img { max-width: min(66%, 340px); padding: 0; overflow: hidden; background: transparent !important; box-shadow: none; }
+#app #messagesPage.ig-dm .ig-image-message { display: block; overflow: hidden; border-radius: 20px; box-shadow: 0 8px 24px rgba(5,3,26,.4); }
+#app #messagesPage.ig-dm .ig-image-message img { display: block; width: 100%; max-width: 100%; max-height: 380px; border-radius: 20px; object-fit: cover; }
+#app #messagesPage.ig-dm .ig-bub.img .ig-message-time {
+  position: absolute; right: 10px; bottom: 10px; margin: 0; padding: 3px 9px; border-radius: 99px; background: rgba(8,6,28,.6); color: #fff; backdrop-filter: blur(6px);
+}
+#app #messagesPage.ig-dm .ig-gif-message { display: block; overflow: hidden; border-radius: 16px; }
+#app #messagesPage.ig-dm .ig-gif-message img { display: block; width: 100%; max-width: 280px; border-radius: 16px; }
+#app #messagesPage.ig-dm .ig-gif-tag { align-self: flex-start; padding: 2px 8px; border-radius: 99px; background: rgba(0,0,0,.35); color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .06em; }
+#app #messagesPage.ig-dm .ig-video-message { display: block; width: min(100%, 340px); max-height: 340px; border-radius: 16px; background: #05041a; }
+#app #messagesPage.ig-dm .ig-file {
+  display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 10px 14px; border-radius: 14px; background: rgba(0,0,0,.22);
+  color: inherit; font-size: 14.5px; font-weight: 600; overflow-wrap: anywhere;
+}
+#app #messagesPage.ig-dm .ig-file:hover { background: rgba(0,0,0,.32); }
+#app #messagesPage.ig-dm .tc-sticker-message { display: grid; justify-items: center; gap: 4px; }
+#app #messagesPage.ig-dm .ig-shared-post { display: grid; gap: 6px; padding: 10px; border-radius: 14px; background: rgba(0,0,0,.2); }
+#app #messagesPage.ig-dm .ig-shared-media img,
+#app #messagesPage.ig-dm .ig-shared-media video { width: 100%; max-height: 260px; border-radius: 12px; object-fit: cover; }
+
+/* reaksiyalar */
+#app #messagesPage.ig-dm .ig-reactions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+#app #messagesPage.ig-dm .ig-reaction {
+  display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px !important; border: 1px solid var(--mu-line) !important; border-radius: 99px !important;
+  background: rgba(10,8,34,.55) !important; font-size: 14px; cursor: pointer;
+}
+#app #messagesPage.ig-dm .ig-reaction small { color: var(--mu-soft); font-size: 11.5px; }
+#app #messagesPage.ig-dm .ig-reaction.mine { border-color: rgba(185,166,255,.7) !important; background: rgba(123,77,255,.35) !important; }
+
+/* şikayət düyməsi: yalnız hover/fokus zamanı görünür */
+#app #messagesPage.ig-dm .ig-report-message {
+  align-self: flex-start; padding: 2px 0 !important; border: 0 !important; background: none !important; color: var(--mu-muted); font-size: 11.5px; text-decoration: underline; opacity: 0; transition: opacity .15s; cursor: pointer;
+}
+#app #messagesPage.ig-dm .ig-row:hover .ig-report-message,
+#app #messagesPage.ig-dm .ig-row:focus-within .ig-report-message { opacity: .85; }
+@media (hover: none) { #app #messagesPage.ig-dm .ig-report-message { opacity: .5; } }
+
+/* ---------- 6. səsli mesaj ---------- */
+#app #messagesPage.ig-dm .ig-bub:has(.tc-voice) { width: min(300px, 82%); padding: 10px 14px 8px; }
+#app #messagesPage.ig-dm .tc-voice { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; padding: 0; }
 #app #messagesPage.ig-dm .tc-voice audio { display: none !important; }
 #app #messagesPage.ig-dm .tc-voice-play {
-  display: grid; flex: 0 0 38px; width: 38px; height: 38px; place-items: center; padding: 0; border: 0; border-radius: 50%;
-  background: linear-gradient(135deg,#8a63ff,#6a5cf0); color: #fff; cursor: pointer; box-shadow: 0 3px 10px rgba(98,78,230,.4);
+  display: grid; flex: 0 0 48px; place-items: center; width: 48px; height: 48px; padding: 0 !important; border: 0 !important; border-radius: 50% !important;
+  background: var(--mu-grad) !important; color: #fff; box-shadow: 0 6px 16px rgba(108,63,242,.5) !important; cursor: pointer;
+  transition: transform .15s var(--mu-ease);
 }
-#app #messagesPage.ig-dm .ig-row.me .tc-voice-play { background: #fff; color: #6a5cf0; box-shadow: none; }
-#app #messagesPage.ig-dm .tc-voice-play svg { width: 18px; height: 18px; fill: currentColor; }
-#app #messagesPage.ig-dm .tc-voice-play .i-pause, #app #messagesPage.ig-dm .tc-voice.playing .i-play { display: none; }
+#app #messagesPage.ig-dm .tc-voice-play:active { transform: scale(.92) !important; }
+#app #messagesPage.ig-dm .ig-row.me .tc-voice-play { background: #fff !important; color: #6a3df0; box-shadow: 0 6px 16px rgba(20,10,80,.3) !important; }
+#app #messagesPage.ig-dm .tc-voice-play svg { width: 22px; height: 22px; fill: currentColor; stroke: none; }
+#app #messagesPage.ig-dm .tc-voice-play .i-pause,
+#app #messagesPage.ig-dm .tc-voice.playing .i-play { display: none; }
 #app #messagesPage.ig-dm .tc-voice.playing .i-pause { display: block; }
-#app #messagesPage.ig-dm .tc-voice-main { display: flex; min-width: 0; flex: 1 1 auto; flex-direction: column; gap: 3px; }
-#app #messagesPage.ig-dm .tc-voice-wave { display: flex; height: 24px; align-items: center; gap: 2px; cursor: pointer; }
-#app #messagesPage.ig-dm .tc-voice-wave i { flex: 1 1 0; min-width: 2px; border-radius: 2px; background: currentColor; opacity: .35; transition: opacity .1s; }
+#app #messagesPage.ig-dm .tc-voice-main { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 4px; }
+#app #messagesPage.ig-dm .tc-voice-wave { display: flex; align-items: center; gap: 2px; height: 28px; cursor: pointer; color: #cbbcff; }
+#app #messagesPage.ig-dm .ig-row.me .tc-voice-wave { color: #fff; }
+#app #messagesPage.ig-dm .tc-voice-wave i { flex: 1 1 0; min-width: 2px; border-radius: 3px; background: currentColor; opacity: .35; transition: opacity .1s; }
 #app #messagesPage.ig-dm .tc-voice-wave i.on { opacity: 1; }
-#app #messagesPage.ig-dm .tc-voice-wave:focus-visible { outline: 2px solid #c9bdff; outline-offset: 2px; border-radius: 4px; }
-#app #messagesPage.ig-dm .tc-voice-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-variant-numeric: tabular-nums; }
-#app #messagesPage.ig-dm .tc-voice-speed { min-width: 32px; height: 20px; padding: 0 7px; border: 0; border-radius: 99px; background: rgba(255,255,255,.14); color: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
-
-/* ---- composer ---- */
-#app #messagesPage.ig-dm #dmForm {
-  grid-template-rows: auto 44px; gap: 6px; padding: 8px 12px max(10px, env(safe-area-inset-bottom)) !important; background: rgba(17,18,31,.97) !important;
+#app #messagesPage.ig-dm .tc-voice-row { display: flex; align-items: center; justify-content: space-between; color: rgba(255,255,255,.75); font-size: 12px; font-variant-numeric: tabular-nums; }
+#app #messagesPage.ig-dm .tc-voice-speed {
+  min-width: 36px; height: 22px; padding: 0 8px !important; border: 0 !important; border-radius: 99px !important; background: rgba(255,255,255,.16) !important; color: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
 }
-#app #messagesPage.ig-dm .ig-compose-tools { gap: 4px; }
+
+/* ---------- 7. cavab / gözləyən fayl / blok bildirişi ---------- */
+#app #messagesPage.ig-dm .ig-reply,
+#app #messagesPage.ig-dm .ig-pending {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px; margin: 0 14px 6px; padding: 8px 8px 8px 14px;
+  border: 0; border-left: 3px solid var(--mu-accent); border-radius: 6px 14px 14px 6px; background: rgba(123,77,255,.14); color: var(--mu-soft); font-size: 13.5px;
+}
+#app #messagesPage.ig-dm .ig-reply[hidden],
+#app #messagesPage.ig-dm .ig-pending[hidden] { display: none !important; }
+#app #messagesPage.ig-dm .ig-reply > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#app #messagesPage.ig-dm .ig-reply b { color: #fff; }
+#app #messagesPage.ig-dm .ig-reply .ig-hbtn { width: 30px; height: 30px; min-width: 30px; min-height: 30px; border-radius: 10px !important; }
+#app #messagesPage.ig-dm .ig-block-notice { margin: 8px 14px; padding: 10px 14px; border-radius: 14px; background: rgba(255,93,115,.12); color: #ffb3bf; font-size: 13px; text-align: center; }
+#app #messagesPage.ig-dm .ig-block-notice[hidden] { display: none !important; }
+
+/* ---------- 8. yazma paneli ---------- */
+#app #messagesPage.ig-dm #dmForm {
+  position: relative !important; flex: 0 0 auto; display: grid !important; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  margin: 0 !important; padding: 12px 16px max(14px, env(safe-area-inset-bottom)) !important; border: 0 !important; border-top: 1px solid var(--mu-line) !important; border-radius: 0 !important;
+  background: rgba(14, 11, 40, .92) !important; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+}
+#app #messagesPage.ig-dm .ig-compose-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
 #app #messagesPage.ig-dm .ig-compose-tools > .ig-ibtn,
 #app #messagesPage.ig-dm .ig-compose-tools > #igGifButton,
-#app #messagesPage.ig-dm .ig-compose-tools > #igStickerButton { flex-basis: 34px; width: 34px; min-width: 34px; height: 34px; min-height: 34px; border-radius: 50% !important; background: rgba(124,92,255,.12) !important; border-color: transparent !important; }
-#app #messagesPage.ig-dm #dmText { min-height: 44px; height: 44px; padding: 0 56px 0 16px !important; border-radius: 22px !important; background: rgba(255,255,255,.06) !important; border-color: var(--mu-line) !important; }
+#app #messagesPage.ig-dm .ig-compose-tools > #igStickerButton {
+  width: 40px; height: 40px; min-width: 40px; min-height: 40px; flex: 0 0 40px; border-radius: 50% !important; background: rgba(123,77,255,.14) !important; color: #cdbfff;
+}
+#app #messagesPage.ig-dm #igGifButton { font-size: 11px; font-weight: 800; letter-spacing: .03em; }
+#app #messagesPage.ig-dm .ig-ibtn { cursor: pointer; }
+#app #messagesPage.ig-dm .tc-voice-record { padding: 0 !important; }
+#app #messagesPage.ig-dm .tc-voice-record.recording { background: rgba(255,93,115,.22) !important; color: #ff8fa0 !important; animation: mu-rec 1.2s ease-in-out infinite; }
+@keyframes mu-rec { 50% { box-shadow: 0 0 0 7px rgba(255,93,115,.14); } }
+#app #messagesPage.ig-dm #dmText {
+  flex: 1 1 auto !important; width: 100% !important; min-width: 0; height: 48px; min-height: 48px; padding: 0 18px !important;
+  border: 1px solid var(--mu-line) !important; border-radius: 24px !important; background: rgba(255,255,255,.06) !important; color: var(--mu-text) !important; font-size: 16px;
+  transition: border-color .2s, box-shadow .2s, background .2s;
+}
+#app #messagesPage.ig-dm #dmText:focus { border-color: rgba(141,98,255,.7) !important; background: rgba(123,77,255,.08) !important; box-shadow: 0 0 0 4px rgba(123,77,255,.13) !important; }
+#app #messagesPage.ig-dm #dmText::placeholder { color: var(--mu-muted); opacity: 1; }
 #app #messagesPage.ig-dm #dmSend {
-  display: grid; width: 38px; min-width: 38px; height: 38px; min-height: 38px; margin-right: 3px; padding: 0 !important; place-items: center;
-  border-radius: 50% !important; background: linear-gradient(135deg,#8a63ff,#6a5cf0) !important;
+  display: grid; place-items: center; width: 48px; height: 48px; min-width: 48px; padding: 0 !important; border: 0 !important; border-radius: 50% !important;
+  background: var(--mu-grad) !important; color: #fff !important; box-shadow: 0 8px 22px rgba(108,63,242,.48) !important; cursor: pointer;
+  transition: transform .15s var(--mu-ease), filter .2s;
 }
-#app #messagesPage.ig-dm #dmSend svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#app #messagesPage.ig-dm #dmSend:hover { filter: brightness(1.12); }
+#app #messagesPage.ig-dm #dmSend:active { transform: scale(.92) !important; }
+#app #messagesPage.ig-dm #dmSend:disabled { opacity: .45; box-shadow: none !important; }
+#app #messagesPage.ig-dm #dmSend svg { width: 21px; height: 21px; stroke: #fff; stroke-width: 2.1; }
 
-/* ---- mobile ---- */
-@media (max-width: 760px) {
-  #app #messagesPage.ig-dm { border-radius: 0; border-left: 0; border-right: 0; }
-  #app #messagesPage.ig-dm .ig-side { width: 100%; flex-basis: 100%; }
-  #app #messagesPage.ig-dm .ig-bub { max-width: 82%; }
-  #app #messagesPage.ig-dm .ig-msgs { padding: 8px 10px 6px !important; }
+/* emoji paneli */
+#app #messagesPage.ig-dm .ig-emoji-picker {
+  position: absolute; z-index: 35; bottom: calc(100% + 8px); left: 16px; display: grid; grid-template-columns: repeat(8, 40px); gap: 4px; width: max-content; max-width: calc(100vw - 28px); padding: 10px;
+  border: 1px solid var(--mu-line); border-radius: 22px; background: rgba(28, 24, 66, .97); box-shadow: 0 24px 60px rgba(4,2,24,.65); backdrop-filter: blur(16px);
+}
+#app #messagesPage.ig-dm .ig-emoji-picker[hidden] { display: none !important; }
+#app #messagesPage.ig-dm .ig-emoji-picker button { display: grid; place-items: center; width: 40px; height: 40px; padding: 0 !important; border-radius: 12px !important; font-size: 22px; cursor: pointer; }
+#app #messagesPage.ig-dm .ig-emoji-picker button:hover { background: rgba(123,77,255,.25) !important; }
+
+/* ---------- 9. əməliyyat menyusu və dialoqlar ---------- */
+#app #messagesPage.ig-dm .ig-sheet { position: fixed; inset: 0; z-index: 300; display: flex; align-items: flex-end; justify-content: center; background: rgba(5,3,26,.66); backdrop-filter: blur(8px); }
+#app #messagesPage.ig-dm .ig-sheet[hidden] { display: none !important; }
+#app #messagesPage.ig-dm .ig-sheet-box {
+  width: min(480px, 100%); max-height: 86dvh; overflow-y: auto; padding: 8px 0 calc(10px + env(safe-area-inset-bottom)); border: 1px solid var(--mu-line); border-bottom: 0;
+  border-radius: 28px 28px 0 0; background: #1a1640; box-shadow: 0 -20px 60px rgba(4,2,24,.6);
+}
+#app #messagesPage.ig-dm .ig-sheet-box::before { content: ""; display: block; width: 40px; height: 4px; margin: 6px auto 8px; border-radius: 4px; background: rgba(255,255,255,.2); }
+#app #messagesPage.ig-dm .ig-sheet-btn {
+  display: block; width: 100%; padding: 16px !important; border: 0 !important; border-top: 1px solid var(--mu-line-soft) !important; background: transparent !important;
+  color: var(--mu-text) !important; font-size: 16px !important; text-align: center !important; cursor: pointer;
+}
+#app #messagesPage.ig-dm .ig-sheet-btn:hover { background: rgba(123,77,255,.14) !important; }
+#app #messagesPage.ig-dm .ig-sheet-btn.danger { color: var(--mu-red) !important; }
+#app #messagesPage.ig-dm .ig-sheet-btn.cancel { font-weight: 700; }
+#app #messagesPage.ig-dm .ig-sheet-box textarea { width: 100%; min-height: 96px; padding: 12px 14px; border: 1px solid var(--mu-line); border-radius: 16px; background: rgba(0,0,0,.28); color: var(--mu-text); font: inherit; }
+.tc-shared-files-dialog { border: 1px solid rgba(160,140,255,.2) !important; border-radius: 28px !important; background: #17133a !important; box-shadow: 0 30px 90px rgba(4,2,24,.7) !important; }
+.tc-shared-files-dialog::backdrop { background: rgba(5,3,26,.7); backdrop-filter: blur(6px); }
+
+/* ---------- 10. alt naviqasiya (yalnız Mesajlar açıq olanda) ---------- */
+#app .bottom-nav .nav-item { position: relative; }
+
+/* ---------- 11. planşet / kiçik desktop ---------- */
+@media (max-width: 1050px) {
+  #app #messagesPage.ig-dm .ig-side { width: 340px; flex-basis: 340px; }
+  #app #messagesPage.ig-dm .ig-bub { max-width: min(80%, 520px); }
 }
 
-/* style.css "button { ... !important }" sıfırlamasını yalnız yeni elementlər üçün aşır */
-#app #messagesPage.ig-dm .ig-filters button {
-  height: 30px; padding: 0 12px !important; border: 1px solid var(--mu-line) !important; border-radius: 99px !important;
-  background: rgba(255,255,255,.05) !important; color: #c9c9e0;
-}
-#app #messagesPage.ig-dm .ig-filters button.on { border-color: transparent !important; background: linear-gradient(135deg,#8a63ff,#6a5cf0) !important; color: #fff; }
-#app #messagesPage.ig-dm .tc-voice-play {
-  padding: 0 !important; border-radius: 50% !important; background: linear-gradient(135deg,#8a63ff,#6a5cf0) !important; color: #fff; box-shadow: 0 3px 10px rgba(98,78,230,.4) !important;
-}
-#app #messagesPage.ig-dm .ig-row.me .tc-voice-play { background: #fff !important; color: #6a5cf0; box-shadow: none !important; }
-#app #messagesPage.ig-dm .tc-voice-speed { padding: 0 7px !important; border-radius: 99px !important; background: rgba(255,255,255,.14) !important; }
-#app #messagesPage.ig-dm .ig-pin-btn { padding: 0 !important; border-radius: 7px !important; }
-#app #messagesPage.ig-dm .ig-item { border-radius: 14px !important; padding: 7px 8px !important; }
-#app #messagesPage.ig-dm .ig-item-wrap.pinned .ig-item { background: rgba(124,92,255,.07) !important; }
-#app #messagesPage.ig-dm .ig-item:hover, #app #messagesPage.ig-dm .ig-item.on { background: rgba(124,92,255,.15) !important; }
-#app #messagesPage.ig-dm .ig-bub:has(.tc-voice) { width: min(250px, 100%); max-width: 82%; box-sizing: border-box; }
-#app #messagesPage.ig-dm .tc-voice { width: 100%; min-width: 0; }
+/* ---------- 12. MOBİL: tam ekran, yan boşluqsuz ---------- */
 @media (max-width: 760px) {
-  #app #messagesPage.ig-dm .ig-head { flex-wrap: nowrap !important; gap: 4px !important; padding: 6px 8px !important; min-height: 52px; }
-  #app #messagesPage.ig-dm .ig-head .ig-hbtn { width: 31px !important; min-width: 31px !important; height: 31px !important; min-height: 31px !important; flex: 0 0 31px !important; border-radius: 10px !important; }
-  #app #messagesPage.ig-dm .ig-headinfo { flex: 1 1 0 !important; min-width: 0 !important; width: auto !important; }
-  #app #messagesPage.ig-dm .ig-hacts { flex: 0 0 auto !important; width: auto !important; gap: 3px !important; }
-  #app #messagesPage.ig-dm .ig-hmid strong, #app #messagesPage.ig-dm .ig-hmid small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* main-in yan boşluqları Messages-də sıfırlanır — kənarlarda boşluq qalmır */
+  #app .app-main-shell > main:has(#messagesPage:not([hidden])) { padding: 0 !important; }
+  #app:has(#messagesPage:not([hidden])) .topbar {
+    position: static; height: 58px; padding: 0 16px; border: 0 !important; background: transparent !important; backdrop-filter: none; box-shadow: none;
+    display: flex; align-items: center; justify-content: flex-start; gap: 6px;
+  }
+  #app:has(#messagesPage:not([hidden])) .topbar .brand.small { order: 1; flex: 1 1 auto; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -.04em; }
+  #app:has(#messagesPage:not([hidden])) .topbar .tc-logo-mark { width: 42px; height: 42px; }
+  #app:has(#messagesPage:not([hidden])) .topbar .topbar-actions { order: 2; }
+  #app:has(#messagesPage:not([hidden])) .topbar .menu-button { order: 3; }
+  #app:has(#messagesPage:not([hidden])) .topbar .icon-button { color: #e8e2ff; }
+
+  #app #messagesPage.ig-dm {
+    max-width: none; width: 100%; height: calc(var(--tc-vv-height, 100dvh) - 58px - 64px - env(safe-area-inset-bottom, 0px)); min-height: 0; margin: 0 !important;
+    border: 0; border-radius: 0; box-shadow: none; background: var(--mu-bg) !important;
+  }
+  #app #messagesPage.ig-dm .ig-side { width: 100%; flex: 1 1 100%; border-right: 0; background: none; }
+  #app #messagesPage.ig-dm:not(.tc-chat-open) .ig-main { display: none; }
+  #app #messagesPage.ig-dm.tc-chat-open .ig-side { display: none; }
+  #app #messagesPage.ig-dm.tc-chat-open .ig-back { display: grid !important; }
+  #app #messagesPage.ig-dm .ig-side-head { padding: 4px 16px 4px; }
+  #app #messagesPage.ig-dm .ig-side-head b { font-size: 21px; }
+  #app #messagesPage.ig-dm .ig-search { margin: 8px 16px 12px; }
+  #app #messagesPage.ig-dm .ig-filters { padding: 0 16px 12px; }
+  #app #messagesPage.ig-dm .ig-stories { padding: 0 16px; }
+  #app #messagesPage.ig-dm .ig-extras { margin: 0 16px 8px; }
+  #app #messagesPage.ig-dm #conversationList { padding: 0 8px 20px !important; }
+  #app #messagesPage.ig-dm .ig-item-wrap::after { left: 86px; right: 16px; }
+
+  /* alt menyu: tam enli, yastı, Mesajlar səhifəsində ekranın dibinə oturur */
+  #app:has(#messagesPage:not([hidden])) .bottom-nav {
+    left: 0 !important; right: 0 !important; bottom: 0 !important; width: 100% !important; height: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 6px 6px env(safe-area-inset-bottom, 0px) !important; border: 0 !important; border-top: 1px solid var(--mu-line) !important; border-radius: 0 !important;
+    background: rgba(12, 10, 34, .96) !important; box-shadow: none !important;
+  }
+  #app:has(#messagesPage:not([hidden])) .bottom-nav .nav-item.active { color: #b9a6ff; background: transparent !important; }
+
+  /* açıq söhbət: tam ekran, topbar və alt menyu gizlənir (geri düyməsi inbox-a qaytarır) */
+  #app:has(#messagesPage.tc-chat-open:not([hidden])) .topbar,
+  #app:has(#messagesPage.tc-chat-open:not([hidden])) .bottom-nav { display: none !important; }
+  #app:has(#messagesPage.tc-chat-open:not([hidden])) { padding-bottom: 0 !important; }
+  #app #messagesPage.ig-dm.tc-chat-open { height: var(--tc-vv-height, 100dvh); }
+
+  #app #messagesPage.ig-dm .ig-head { min-height: 62px; gap: 6px; padding: max(8px, env(safe-area-inset-top, 0px)) 10px 8px 6px; flex-wrap: nowrap; }
+  #app #messagesPage.ig-dm .ig-head .ig-hbtn { width: 34px !important; min-width: 34px !important; height: 34px !important; min-height: 34px !important; flex: 0 0 34px !important; border-radius: 12px !important; }
+  #app #messagesPage.ig-dm .ig-head .ig-back { width: 34px !important; }
+  #app #messagesPage.ig-dm .ig-headinfo { gap: 10px; }
+  #app #messagesPage.ig-dm .ig-hacts { gap: 2px; }
+  #app #messagesPage.ig-dm #chatTitle { font-size: 17px; }
+  #app #messagesPage.ig-dm #chatMessages { padding: 12px 12px 10px !important; }
+  #app #messagesPage.ig-dm .ig-bub { max-width: 82%; font-size: 16px; }
+  #app #messagesPage.ig-dm .ig-bub.img { max-width: 76%; }
+  #app #messagesPage.ig-dm .ig-bub:has(.tc-voice) { width: min(290px, 84%); }
+
+  /* yazma paneli: alətlər yuxarıda üfüqi sıra, altında yazı + göndər */
+  #app #messagesPage.ig-dm #dmForm { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "tools tools" "text send"; gap: 8px 10px; padding: 8px 12px max(12px, env(safe-area-inset-bottom)) !important; }
+  #app #messagesPage.ig-dm .ig-compose-tools { grid-area: tools; overflow-x: auto; scrollbar-width: none; }
+  #app #messagesPage.ig-dm .ig-compose-tools::-webkit-scrollbar { display: none; }
+  #app #messagesPage.ig-dm #dmText { grid-area: text; }
+  #app #messagesPage.ig-dm #dmSend { grid-area: send; }
+  #app #messagesPage.ig-dm .ig-emoji-picker { left: 12px; grid-template-columns: repeat(6, 40px); }
 }
+
+/* çox kiçik ekranlar */
+@media (max-width: 380px) {
+  #app #messagesPage.ig-dm .tc-ai-shortcut span:last-child { display: none; }
+  #app #messagesPage.ig-dm .tc-ai-shortcut { padding: 0 12px !important; }
+  #app #messagesPage.ig-dm .ig-avw .ig-av { width: 52px; height: 52px; }
+  #app #messagesPage.ig-dm .ig-name { font-size: 16px; }
+}
+
+/* ---------- 13. köhnə qatlara qarşı sərtləşdirmə ---------- */
+/* <main class="ig-main"> ümumi "main { padding }" qaydasını almasın */
+#app #messagesPage.ig-dm .ig-main { padding: 0 !important; margin: 0 !important; border: 0 !important; overflow: hidden; }
+#app #messagesPage.ig-dm .ig-head { display: flex; grid-template-columns: none; grid-template-rows: none; }
+#app #messagesPage.ig-dm .ig-headinfo { width: auto; }
+#app #messagesPage.ig-dm .ig-hacts { width: auto; min-width: 0; overflow: visible; grid-column: auto; grid-row: auto; }
+#app #messagesPage.ig-dm .ig-back { grid-column: auto; grid-row: auto; }
+#app #messagesPage.ig-dm #chatMessages { overflow-x: hidden; width: 100%; margin: 0; }
+#app #messagesPage.ig-dm .ig-bub .ig-report-message { flex: 0 0 100%; margin: 2px 0 0; padding: 0 !important; font-size: 11px; line-height: 1.2; }
+#app #messagesPage.ig-dm .ig-bub .ig-t { font-size: inherit; }
+@media (hover: none) { #app #messagesPage.ig-dm .ig-pin-btn:not(.on) { opacity: .38; } }
 @media (max-width: 760px) {
-  #app #messagesPage.ig-dm .ig-head { display: grid !important; grid-template-columns: 31px minmax(0, 1fr) auto !important; grid-template-rows: auto !important; align-items: center; }
-  #app #messagesPage.ig-dm .ig-head > .ig-back { grid-column: 1 !important; grid-row: 1 !important; }
-  #app #messagesPage.ig-dm .ig-head > .ig-headinfo { grid-column: 2 !important; grid-row: 1 !important; }
-  #app #messagesPage.ig-dm .ig-head > .ig-hacts { grid-column: 3 !important; grid-row: 1 !important; justify-self: end; display: flex; }
+  #app #messagesPage.ig-dm,
+  #app #messagesPage.ig-dm.tc-keyboard-open {
+    width: 100% !important; max-width: none !important; margin: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important;
+  }
+  #app #messagesPage.ig-dm.tc-chat-open,
+  #app #messagesPage.ig-dm.tc-chat-open.tc-keyboard-open { height: var(--tc-vv-height, 100dvh) !important; }
+  #app #messagesPage.ig-dm .ig-head { display: flex; min-height: 62px; padding: max(8px, env(safe-area-inset-top, 0px)) 8px 8px 4px; gap: 6px; }
+  #app #messagesPage.ig-dm .ig-hacts { flex: 0 0 auto; gap: 2px; }
+  #app #messagesPage.ig-dm .ig-hmid { min-width: 0; overflow: hidden; }
+  #app #messagesPage.ig-dm #chatTitle,
+  #app #messagesPage.ig-dm #chatSub { display: block; }
+  #app #messagesPage.ig-dm #chatTitle { display: flex; }
+  #app #messagesPage.ig-dm .ig-bub { padding: 9px 13px 7px; font-size: 16px; }
+  #app #messagesPage.ig-dm .ig-bub.img { padding: 0; }
+  #app #messagesPage.ig-dm #dmText { height: 48px; min-height: 48px; font-size: 16px; padding: 0 18px !important; }
+  #app #messagesPage.ig-dm .ig-compose-tools > .ig-ibtn,
+  #app #messagesPage.ig-dm .ig-compose-tools > #igGifButton,
+  #app #messagesPage.ig-dm .ig-compose-tools > #igStickerButton { flex-basis: 40px; width: 40px; min-width: 40px; height: 40px; min-height: 40px; }
+}
+
+/* ---------- 14. desktop yazma paneli: tək sıra (alətlər | yazı | göndər) ---------- */
+#app #messagesPage.ig-dm #dmForm { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; grid-template-areas: "tools tools" "text send"; gap: 10px 12px; }
+#app #messagesPage.ig-dm .ig-compose-tools { grid-area: tools; overflow-x: auto; scrollbar-width: none; }
+#app #messagesPage.ig-dm .ig-compose-tools::-webkit-scrollbar { display: none; }
+#app #messagesPage.ig-dm #dmText { grid-area: text; }
+#app #messagesPage.ig-dm #dmSend { grid-area: send; }
+#app #messagesPage.ig-dm #dmSend { position: static !important; margin: 0 !important; transform: none; }
+#app #messagesPage.ig-dm #tcChatThemeButton,
+#app #messagesPage.ig-dm #tcMessageSearchToggle { font-size: 21px; }
+
+/* hərəkəti azaltmaq istəyənlər üçün */
+@media (prefers-reduced-motion: reduce) {
+  #app #messagesPage.ig-dm *, #app #messagesPage.ig-dm *::before { animation: none !important; transition: none !important; }
 }
