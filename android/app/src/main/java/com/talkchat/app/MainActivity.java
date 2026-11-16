@@ -17,6 +17,10 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Lokal Capacitor plaginləri super.onCreate-dən ƏVVƏL qeydiyyatdan keçməlidir,
+        // əks halda window.Capacitor.Plugins.CallService (overlay, screen share) mövcud olmur.
+        registerPlugin(CallServicePlugin.class);
+        registerPlugin(TalkMediaPlugin.class);
         super.onCreate(savedInstanceState);
 
         // WebView-in fayl seçicini dəstəkləməsi üçün:
