@@ -1,4 +1,581 @@
-<!doctype html>
-<html lang="az"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#080b16"><title>TalkChat — Məxfilik</title><link rel="stylesheet" href="assets/styles.css"></head>
-<body><header class="site-header"><a class="brand" href="index.html"><span class="brand-mark">T<span>.</span></span><span>TalkChat</span></a><a class="button button-small button-outline" href="index.html">Ana səhifə</a></header>
-<main class="section-shell" style="padding-top:90px;padding-bottom:100px;min-height:70vh"><span class="section-kicker">TALKCHAT</span><h1 style="font:700 clamp(38px,6vw,64px) 'Space Grotesk';margin:18px 0">Məxfilik siyasəti</h1><p style="color:#aab4c8;line-height:1.9;max-width:760px">Bu səhifə hazırda ilkin şablondur. TalkChat-in faktiki məlumat toplama, istifadə, saxlama, paylaşma və silmə qaydaları təsdiqləndikdən sonra burada tam və dəqiq məxfilik siyasəti dərc edilməlidir. Saytı ictimai yayıma verməzdən əvvəl bu mətni real siyasətlə əvəz edin.</p><p style="color:#aab4c8;line-height:1.9;max-width:760px">Məxfiliklə bağlı suallar üçün tətbiq sahibinin təsdiqlənmiş rəsmi əlaqə ünvanını əlavə edin.</p></main></body></html>
+
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#080b16">
+  <meta name="description" content="TalkChat Məxfilik Siyasəti. TalkChat istifadəçilərinin məlumatlarının emalı və qorunması haqqında məlumat.">
+  <title>Məxfilik Siyasəti — TalkChat</title>
+
+  <style>
+    :root {
+      --bg: #080b16;
+      --panel: #11172a;
+      --panel2: #151d34;
+      --text: #f3f6ff;
+      --muted: #a3aec8;
+      --accent: #7c83ff;
+      --accent2: #39d9e8;
+      --border: rgba(255,255,255,.09);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background:
+        radial-gradient(ellipse at 15% 0%, rgba(94,82,255,.17), transparent 38%),
+        radial-gradient(ellipse at 95% 25%, rgba(38,204,222,.10), transparent 35%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, sans-serif;
+      line-height: 1.75;
+    }
+
+    a {
+      color: var(--accent2);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .container {
+      width: min(1080px, 92%);
+      margin: auto;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(8,11,22,.85);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav {
+      min-height: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 15px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      font-size: 21px;
+      font-weight: 850;
+      letter-spacing: -.6px;
+    }
+
+    .logo {
+      width: 39px;
+      height: 39px;
+      border-radius: 13px;
+      display: grid;
+      place-items: center;
+      color: white;
+      background: linear-gradient(135deg, #777bff, #25d7e5);
+      box-shadow: 0 5px 25px rgba(91,117,255,.35);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .nav a.home {
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      padding: 10px 15px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+    }
+
+    .hero {
+      padding: 76px 0 42px;
+      text-align: center;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 7px 13px;
+      border: 1px solid rgba(124,131,255,.3);
+      background: rgba(124,131,255,.10);
+      color: #b9bdff;
+      border-radius: 30px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 20px 0 12px;
+      font-size: clamp(35px, 7vw, 60px);
+      line-height: 1.12;
+      letter-spacing: -2px;
+    }
+
+    .gradient {
+      background: linear-gradient(100deg, #999cff, #42d9e9);
+      color: transparent;
+      background-clip: text;
+      -webkit-background-clip: text;
+    }
+
+    .hero p {
+      max-width: 650px;
+      margin: auto;
+      color: var(--muted);
+    }
+
+    .updated {
+      margin-top: 22px;
+      color: #8d9bb8;
+      font-size: 13px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 245px minmax(0,1fr);
+      gap: 24px;
+      align-items: start;
+      padding-bottom: 75px;
+    }
+
+    aside {
+      position: sticky;
+      top: 98px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      background: rgba(17,23,42,.85);
+      border-radius: 19px;
+    }
+
+    aside h3 {
+      font-size: 13px;
+      margin-bottom: 13px;
+      color: #c5caff;
+    }
+
+    aside a {
+      display: block;
+      padding: 8px 10px;
+      margin: 3px 0;
+      border-radius: 9px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    aside a:hover {
+      background: rgba(124,131,255,.12);
+      color: white;
+      text-decoration: none;
+    }
+
+    main {
+      display: grid;
+      gap: 15px;
+    }
+
+    .section {
+      scroll-margin-top: 100px;
+      padding: 25px;
+      border: 1px solid var(--border);
+      background: linear-gradient(145deg, rgba(21,29,52,.95), rgba(14,19,35,.95));
+      border-radius: 19px;
+      transition: border-color .2s, transform .2s;
+    }
+
+    .section:hover {
+      border-color: rgba(124,131,255,.35);
+      transform: translateY(-2px);
+    }
+
+    .section h2 {
+      font-size: 19px;
+      margin-bottom: 12px;
+      letter-spacing: -.3px;
+    }
+
+    .section p {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .section ul {
+      padding-left: 22px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .section li {
+      margin: 5px 0;
+    }
+
+    .contact {
+      text-align: center;
+      padding: 35px 25px;
+      border: 1px solid rgba(90,160,255,.22);
+      border-radius: 22px;
+      background: linear-gradient(130deg, rgba(92,90,255,.15), rgba(38,205,222,.09));
+    }
+
+    .contact h2 {
+      font-size: 24px;
+      margin-bottom: 9px;
+    }
+
+    .contact p {
+      color: var(--muted);
+      margin-bottom: 17px;
+      font-size: 14px;
+    }
+
+    .contact a {
+      display: inline-block;
+      padding: 12px 20px;
+      color: white;
+      font-weight: 800;
+      border-radius: 12px;
+      background: linear-gradient(110deg, #777bff, #20cddd);
+    }
+
+    footer {
+      padding: 28px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: #8792ad;
+      font-size: 12px;
+    }
+
+    footer a {
+      margin: 0 8px;
+    }
+
+    @media(max-width: 760px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        position: static;
+      }
+
+      aside nav {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0,1fr));
+        gap: 2px;
+      }
+
+      .hero {
+        padding: 55px 0 32px;
+      }
+
+      .section {
+        padding: 20px;
+      }
+
+      .nav a.home {
+        display: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <div class="container nav">
+    <a class="brand" href="./index.html" style="color:white">
+      <span class="logo">T</span>
+      TalkChat
+    </a>
+
+    <div class="nav-actions">
+      <a class="home" href="./index.html" data-i18n="home">Ana səhifə</a>
+      <button id="languageButton" type="button" aria-label="Change language">EN</button>
+    </div>
+  </div>
+</header>
+
+<section class="hero container">
+  <span class="eyebrow">TALKCHAT · PRIVACY</span>
+  <h1 data-i18n="title">Sənin məxfiliyin,<br><span class="gradient">bizim üçün önəmlidir.</span></h1>
+  <p data-i18n="intro">
+    Bu sənəd TalkChat platformasında məlumatların necə emal edildiyini
+    və istifadəçilərin məxfilik hüquqlarını izah edir.
+  </p>
+  <div class="updated" data-i18n="updated">Son yenilənmə: 18 noyabr 2026</div>
+</section>
+
+<div class="container layout">
+
+  <aside>
+    <h3 data-i18n="contents">MƏZMUN</h3>
+    <nav>
+      <a href="#information" data-i18n="nav1">01. Məlumatlar</a>
+      <a href="#usage" data-i18n="nav2">02. İstifadə məqsədi</a>
+      <a href="#messages" data-i18n="nav3">03. Mesajlar</a>
+      <a href="#storage" data-i18n="nav4">04. Fayllar</a>
+      <a href="#services" data-i18n="nav5">05. Xarici xidmətlər</a>
+      <a href="#stories" data-i18n="nav6">06. Stories</a>
+      <a href="#deletion" data-i18n="nav7">07. Məlumatların silinməsi</a>
+      <a href="#security" data-i18n="nav8">08. Təhlükəsizlik</a>
+      <a href="#children" data-i18n="nav9">09. Yetkinlik yaşına çatmayanlar</a>
+      <a href="#changes" data-i18n="nav10">10. Dəyişikliklər</a>
+      <a href="#contact" data-i18n="nav11">11. Əlaqə</a>
+    </nav>
+  </aside>
+
+  <main>
+
+    <section class="section" id="information">
+      <h2 data-i18n="h1">01. Toplanan məlumatlar</h2>
+      <p data-i18n="p1">TalkChat funksiyalarından istifadə etdikdə aşağıdakı məlumatlar emal oluna bilər:</p>
+      <ul>
+        <li data-i18n="l1">İstifadəçi adı və hesab məlumatları.</li>
+        <li data-i18n="l2">Şifrənin hash edilmiş forması.</li>
+        <li data-i18n="l3">Profil şəkli, bioqrafiya və profil məlumatları.</li>
+        <li data-i18n="l4">Mesajlar, söhbətlər və göndərilən fayllar.</li>
+        <li data-i18n="l5">Posts, Stories, Reels və digər paylaşımlar.</li>
+        <li data-i18n="l6">Bəyənmələr, şərhlər və izləmə məlumatları.</li>
+        <li data-i18n="l7">Bildiriş və cihaz tokenləri.</li>
+        <li data-i18n="l8">Onlayn status və son aktivlik məlumatları.</li>
+        <li data-i18n="l9">Zənglərə aid texniki məlumatlar.</li>
+      </ul>
+      <p data-i18n="p1b">Hansı məlumatların emal olunması istifadə etdiyin funksiyalardan asılıdır.</p>
+    </section>
+
+    <section class="section" id="usage">
+      <h2 data-i18n="h2">02. Məlumatlardan istifadə</h2>
+      <p data-i18n="p2">Məlumatlardan platformanın işləməsi və xidmətlərin göstərilməsi üçün istifadə oluna bilər:</p>
+      <ul>
+        <li data-i18n="l10">Hesab və profil funksiyalarının təmin edilməsi.</li>
+        <li data-i18n="l11">Mesajlaşma və sosial funksiyaların işləməsi.</li>
+        <li data-i18n="l12">Paylaşımların və bildirişlərin göstərilməsi.</li>
+        <li data-i18n="l13">Səsli və video zənglərin texniki təminatı.</li>
+        <li data-i18n="l14">Təhlükəsizlik və texniki problemlərin araşdırılması.</li>
+      </ul>
+    </section>
+
+    <section class="section" id="messages">
+      <h2 data-i18n="h3">03. Mesajlar və şifrələmə</h2>
+      <p data-i18n="p3">TalkChat mesajlaşma funksiyası təqdim edir. Mesajlar serverdə saxlanıla bilər.</p>
+      <p data-i18n="p4">Hazırkı versiyada mesajların ucdan-uca şifrələnməsi (End-to-End Encryption) təsdiqlənməyib. Buna görə TalkChat bu xüsusiyyətə dair zəmanət vermir.</p>
+    </section>
+
+    <section class="section" id="storage">
+      <h2 data-i18n="h4">04. Faylların saxlanması</h2>
+      <p data-i18n="p5">Şəkillər, videolar və digər yüklənən fayllar platformanın istifadə etdiyi saxlama xidmətlərində yerləşdirilə bilər.</p>
+      <p data-i18n="p6">Bəzi fayllara giriş müddətli, imzalanmış bağlantılar vasitəsilə təmin edilə bilər. Bu, faylların bütün hallarda tam məxfi olmasına zəmanət vermir.</p>
+    </section>
+
+    <section class="section" id="services">
+      <h2 data-i18n="h5">05. Xarici xidmətlər</h2>
+      <p data-i18n="p7">TalkChat bəzi funksiyaları təmin etmək üçün üçüncü tərəf texnologiyalarından istifadə edir:</p>
+      <ul>
+        <li><strong>Supabase</strong> — <span data-i18n="s1">verilənlər bazası və faylların saxlanması.</span></li>
+        <li><strong>Firebase Cloud Messaging</strong> — <span data-i18n="s2">push bildirişləri.</span></li>
+        <li><strong>GIPHY</strong> — <span data-i18n="s3">GIF axtarışı.</span></li>
+        <li><strong>TURN/ICE infrastrukturu</strong> — <span data-i18n="s4">səsli və video zəng bağlantıları.</span></li>
+      </ul>
+      <p data-i18n="p8">Bu xidmətlər öz məxfilik qaydalarına uyğun olaraq məlumatları emal edə bilər.</p>
+    </section>
+
+    <section class="section" id="stories">
+      <h2 data-i18n="h6">06. Stories və paylaşımlar</h2>
+      <p data-i18n="p9">TalkChat Stories funksiyası 24 saatlıq istifadə müddəti üçün nəzərdə tutulub.</p>
+      <p data-i18n="p10">Müddətin bitməsi bütün ehtiyat nüsxələrin və texniki qeydlərin dərhal silinməsi demək olmaya bilər. İstifadəçilər paylaşdıqları məlumatlara diqqət yetirməlidirlər.</p>
+    </section>
+
+    <section class="section" id="deletion">
+      <h2 data-i18n="h7">07. Hesab və məlumatların silinməsi</h2>
+      <p data-i18n="p11">Hazırkı TalkChat versiyasında istifadəçinin hesabını tətbiqin daxilindən tamamilə silən avtomatik funksiya mövcud deyil.</p>
+      <p data-i18n="p12">Hesab və şəxsi məlumatlarla bağlı silinmə müraciəti üçün TalkChat Support ilə e-poçt vasitəsilə əlaqə saxlamaq olar. Müraciət əl ilə nəzərdən keçiriləcək. Silinmənin mümkünlüyü və proseduru müraciət əsasında dəqiqləşdiriləcək.</p>
+    </section>
+
+    <section class="section" id="security">
+      <h2 data-i18n="h8">08. Məlumatların təhlükəsizliyi</h2>
+      <p data-i18n="p13">TalkChat hesabların və məlumatların qorunması üçün texniki tədbirlərdən istifadə edir. Bununla belə, internet üzərindən məlumat ötürülməsinin tam təhlükəsizliyinə zəmanət verilə bilməz.</p>
+      <p data-i18n="p14">İstifadəçilər şifrələrini başqaları ilə paylaşmamalı və hesablarını qorumaq üçün diqqətli olmalıdırlar.</p>
+    </section>
+
+    <section class="section" id="children">
+      <h2 data-i18n="h9">09. Yetkinlik yaşına çatmayanlar</h2>
+      <p data-i18n="p15">TalkChat istifadəçilərin təhlükəsizliyinə və məxfiliyinə əhəmiyyət verir. Yetkinlik yaşına çatmayan şəxslər platformadan valideyn və ya qanuni nümayəndələrinin nəzarəti ilə istifadə etməlidirlər.</p>
+    </section>
+
+    <section class="section" id="changes">
+      <h2 data-i18n="h10">10. Siyasətdə dəyişikliklər</h2>
+      <p data-i18n="p16">TalkChat bu Məxfilik Siyasətini funksiyalar və məlumat emalı qaydaları dəyişdikcə yeniləyə bilər. Yenilənmiş sənəd rəsmi saytda dərc ediləcək.</p>
+    </section>
+
+    <section class="contact" id="contact">
+      <h2 data-i18n="h11">Məxfiliklə bağlı sualın var?</h2>
+      <p data-i18n="p17">TalkChat Support komandası ilə əlaqə saxla.</p>
+      <a href="mailto:talkchatsupport@gmail.com">talkchatsupport@gmail.com</a>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <div class="container">
+    <p>© 2026 TalkChat. <span data-i18n="rights">Bütün hüquqlar qorunur.</span></p>
+    <p style="margin-top:9px">
+      <a href="./index.html" data-i18n="home">Ana səhifə</a>
+      <a href="mailto:talkchatsupport@gmail.com">Support</a>
+    </p>
+  </div>
+</footer>
+
+<script>
+  const translations = {
+    az: {
+      home:"Ana səhifə",
+      title:'Sənin məxfiliyin,<br><span class="gradient">bizim üçün önəmlidir.</span>',
+      intro:"Bu sənəd TalkChat platformasında məlumatların necə emal edildiyini və istifadəçilərin məxfilik hüquqlarını izah edir.",
+      updated:"Son yenilənmə: 18 noyabr 2026",
+      contents:"MƏZMUN",
+      nav1:"01. Məlumatlar",nav2:"02. İstifadə məqsədi",nav3:"03. Mesajlar",nav4:"04. Fayllar",
+      nav5:"05. Xarici xidmətlər",nav6:"06. Stories",nav7:"07. Məlumatların silinməsi",
+      nav8:"08. Təhlükəsizlik",nav9:"09. Yetkinlik yaşına çatmayanlar",
+      nav10:"10. Dəyişikliklər",nav11:"11. Əlaqə",
+      h1:"01. Toplanan məlumatlar",
+      p1:"TalkChat funksiyalarından istifadə etdikdə aşağıdakı məlumatlar emal oluna bilər:",
+      l1:"İstifadəçi adı və hesab məlumatları.",l2:"Şifrənin hash edilmiş forması.",
+      l3:"Profil şəkli, bioqrafiya və profil məlumatları.",l4:"Mesajlar, söhbətlər və göndərilən fayllar.",
+      l5:"Posts, Stories, Reels və digər paylaşımlar.",l6:"Bəyənmələr, şərhlər və izləmə məlumatları.",
+      l7:"Bildiriş və cihaz tokenləri.",l8:"Onlayn status və son aktivlik məlumatları.",
+      l9:"Zənglərə aid texniki məlumatlar.",
+      p1b:"Hansı məlumatların emal olunması istifadə etdiyin funksiyalardan asılıdır.",
+      h2:"02. Məlumatlardan istifadə",
+      p2:"Məlumatlardan platformanın işləməsi və xidmətlərin göstərilməsi üçün istifadə oluna bilər:",
+      l10:"Hesab və profil funksiyalarının təmin edilməsi.",l11:"Mesajlaşma və sosial funksiyaların işləməsi.",
+      l12:"Paylaşımların və bildirişlərin göstərilməsi.",l13:"Səsli və video zənglərin texniki təminatı.",
+      l14:"Təhlükəsizlik və texniki problemlərin araşdırılması.",
+      h3:"03. Mesajlar və şifrələmə",
+      p3:"TalkChat mesajlaşma funksiyası təqdim edir. Mesajlar serverdə saxlanıla bilər.",
+      p4:"Hazırkı versiyada mesajların ucdan-uca şifrələnməsi (End-to-End Encryption) təsdiqlənməyib. Buna görə TalkChat bu xüsusiyyətə dair zəmanət vermir.",
+      h4:"04. Faylların saxlanması",
+      p5:"Şəkillər, videolar və digər yüklənən fayllar platformanın istifadə etdiyi saxlama xidmətlərində yerləşdirilə bilər.",
+      p6:"Bəzi fayllara giriş müddətli, imzalanmış bağlantılar vasitəsilə təmin edilə bilər. Bu, faylların bütün hallarda tam məxfi olmasına zəmanət vermir.",
+      h5:"05. Xarici xidmətlər",p7:"TalkChat bəzi funksiyaları təmin etmək üçün üçüncü tərəf texnologiyalarından istifadə edir:",
+      s1:"verilənlər bazası və faylların saxlanması.",s2:"push bildirişləri.",s3:"GIF axtarışı.",s4:"səsli və video zəng bağlantıları.",
+      p8:"Bu xidmətlər öz məxfilik qaydalarına uyğun olaraq məlumatları emal edə bilər.",
+      h6:"06. Stories və paylaşımlar",
+      p9:"TalkChat Stories funksiyası 24 saatlıq istifadə müddəti üçün nəzərdə tutulub.",
+      p10:"Müddətin bitməsi bütün ehtiyat nüsxələrin və texniki qeydlərin dərhal silinməsi demək olmaya bilər. İstifadəçilər paylaşdıqları məlumatlara diqqət yetirməlidirlər.",
+      h7:"07. Hesab və məlumatların silinməsi",
+      p11:"Hazırkı TalkChat versiyasında istifadəçinin hesabını tətbiqin daxilindən tamamilə silən avtomatik funksiya mövcud deyil.",
+      p12:"Hesab və şəxsi məlumatlarla bağlı silinmə müraciəti üçün TalkChat Support ilə e-poçt vasitəsilə əlaqə saxlamaq olar. Müraciət əl ilə nəzərdən keçiriləcək. Silinmənin mümkünlüyü və proseduru müraciət əsasında dəqiqləşdiriləcək.",
+      h8:"08. Məlumatların təhlükəsizliyi",
+      p13:"TalkChat hesabların və məlumatların qorunması üçün texniki tədbirlərdən istifadə edir. Bununla belə, internet üzərindən məlumat ötürülməsinin tam təhlükəsizliyinə zəmanət verilə bilməz.",
+      p14:"İstifadəçilər şifrələrini başqaları ilə paylaşmamalı və hesablarını qorumaq üçün diqqətli olmalıdırlar.",
+      h9:"09. Yetkinlik yaşına çatmayanlar",
+      p15:"TalkChat istifadəçilərin təhlükəsizliyinə və məxfiliyinə əhəmiyyət verir. Yetkinlik yaşına çatmayan şəxslər platformadan valideyn və ya qanuni nümayəndələrinin nəzarəti ilə istifadə etməlidirlər.",
+      h10:"10. Siyasətdə dəyişikliklər",
+      p16:"TalkChat bu Məxfilik Siyasətini funksiyalar və məlumat emalı qaydaları dəyişdikcə yeniləyə bilər. Yenilənmiş sənəd rəsmi saytda dərc ediləcək.",
+      h11:"Məxfiliklə bağlı sualın var?",
+      p17:"TalkChat Support komandası ilə əlaqə saxla.",
+      rights:"Bütün hüquqlar qorunur."
+    },
+    en: {
+      home:"Home",
+      title:'Your privacy,<br><span class="gradient">matters to us.</span>',
+      intro:"This document explains how information is processed on TalkChat and describes users' privacy.",
+      updated:"Last updated: November 18, 2026",
+      contents:"CONTENTS",
+      nav1:"01. Information",nav2:"02. How we use it",nav3:"03. Messages",nav4:"04. Files",
+      nav5:"05. Third-party services",nav6:"06. Stories",nav7:"07. Data deletion",
+      nav8:"08. Security",nav9:"09. Minors",nav10:"10. Changes",nav11:"11. Contact",
+      h1:"01. Information we process",
+      p1:"When you use TalkChat, the following information may be processed:",
+      l1:"Username and account information.",l2:"Hashed password representation.",
+      l3:"Profile picture, bio and profile information.",l4:"Messages, conversations and uploaded files.",
+      l5:"Posts, Stories, Reels and other content.",l6:"Likes, comments and follow information.",
+      l7:"Notification and device tokens.",l8:"Online status and last activity information.",
+      l9:"Technical information related to calls.",
+      p1b:"The information processed depends on the features you use.",
+      h2:"02. How information is used",
+      p2:"Information may be used to operate the platform and provide its services:",
+      l10:"Providing account and profile features.",l11:"Operating messaging and social features.",
+      l12:"Displaying posts and notifications.",l13:"Supporting voice and video calls.",
+      l14:"Investigating security and technical issues.",
+      h3:"03. Messages and encryption",
+      p3:"TalkChat provides messaging features. Messages may be stored on the server.",
+      p4:"End-to-End Encryption has not been confirmed for the current version. TalkChat therefore does not promise this feature.",
+      h4:"04. File storage",
+      p5:"Images, videos and other uploaded files may be stored using services used by the platform.",
+      p6:"Access to some files may be provided through time-limited signed links. This does not guarantee that files are private in every circumstance.",
+      h5:"05. Third-party services",
+      p7:"TalkChat uses third-party technologies for certain features:",
+      s1:"database and file storage.",s2:"push notifications.",s3:"GIF search.",s4:"voice and video call connectivity.",
+      p8:"These services may process information according to their own privacy policies.",
+      h6:"06. Stories and posts",
+      p9:"TalkChat Stories are designed for a 24-hour availability period.",
+      p10:"Expiration does not necessarily mean that all backups and technical records are immediately deleted. Users should take care when sharing information.",
+      h7:"07. Account and data deletion",
+      p11:"The current TalkChat version does not provide an automatic in-app feature for completely deleting a user account.",
+      p12:"For account or personal data deletion requests, users may contact TalkChat Support by email. Requests are reviewed manually. The availability and process of deletion will be clarified following the request.",
+      h8:"08. Data security",
+      p13:"TalkChat uses technical measures to protect accounts and information. However, complete security of information transmitted over the internet cannot be guaranteed.",
+      p14:"Users should not share their passwords and should take care to protect their accounts.",
+      h9:"09. Minors",
+      p15:"TalkChat values user safety and privacy. Minors should use the platform under the supervision of a parent or legal guardian.",
+      h10:"10. Policy changes",
+      p16:"TalkChat may update this Privacy Policy as its features and data processing practices change. Updated documents will be published on the official website.",
+      h11:"Questions about privacy?",
+      p17:"Contact the TalkChat Support team.",
+      rights:"All rights reserved."
+    }
+  };
+
+  let language = "az";
+
+  document.getElementById("languageButton").addEventListener("click", () => {
+    language = language === "az" ? "en" : "az";
+    document.documentElement.lang = language;
+
+    document.querySelectorAll("[data-i18n]").forEach(element => {
+      const key = element.dataset.i18n;
+      if (translations[language][key] !== undefined) {
+        element.innerHTML = translations[language][key];
+      }
+    });
+
+    document.getElementById("languageButton").textContent =
+      language === "az" ? "EN" : "AZ";
+  });
+</script>
+
+</body>
+</html>
